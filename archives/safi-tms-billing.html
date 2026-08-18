@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Safi TMS — Billing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --ground: #DCE0D9;
+      --card: #F7F8F4;
+      --ink: #141E19;
+      --ink-soft: #5A655E;
+      --rule: #B4BBB0;
+      --rule-soft: #CFD4CA;
+      --stamp: #3D2A6B;
+      --settled: #0B6B4F;
+      --alert: #8C2F1E;
+      --waiting: #8A6A12;
+      --mono: 'IBM Plex Mono', ui-monospace, monospace;
+      --sans: 'IBM Plex Sans', system-ui, sans-serif;
+      --cond: 'Archivo Narrow', var(--sans);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    body {
+      background: var(--ground);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased
+    }
+
+    .wrap {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 20px 18px 64px
+    }
+
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 10px;
+      margin-bottom: 18px
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 12px
+    }
+
+    .brand h1 {
+      font-family: var(--cond);
+      font-weight: 700;
+      font-size: 26px;
+      letter-spacing: .06em;
+      text-transform: uppercase
+    }
+
+    .brand .sub {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-soft);
+      letter-spacing: .14em;
+      text-transform: uppercase
+    }
+
+    .who {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--ink-soft);
+      text-align: right
+    }
+
+    .who button {
+      background: none;
+      border: none;
+      color: var(--stamp);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-decoration: underline;
+      padding: 0
+    }
+
+    .strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--rule);
+      border: 1px solid var(--rule);
+      margin-bottom: 18px
+    }
+
+    .strip .cell {
+      background: var(--card);
+      padding: 12px 14px
+    }
+
+    .strip .k {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--ink-soft)
+    }
+
+    .strip .v {
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      margin-top: 3px
+    }
+
+    .strip .v.warn {
+      color: var(--waiting)
+    }
+
+    .strip .v.bad {
+      color: var(--alert)
+    }
+
+    .strip .v.pos {
+      color: var(--settled)
+    }
+
+    .strip .n {
+      font-size: 11px;
+      color: var(--ink-soft);
+      margin-top: 1px
+    }
+
+    @media(max-width:760px) {
+      .strip {
+        grid-template-columns: 1fr 1fr
+      }
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 410px;
+      gap: 20px;
+      align-items: start
+    }
+
+    @media(max-width:1000px) {
+      .grid {
+        grid-template-columns: 1fr
+      }
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 2px
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--rule)
+    }
+
+    .panel-head h2 {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: .16em;
+      text-transform: uppercase
+    }
+
+    .panel-body {
+      padding: 16px
+    }
+
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--rule)
+    }
+
+    .tabs button {
+      flex: 1;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: 11px 8px;
+      cursor: pointer;
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--ink-soft)
+    }
+
+    .tabs button.on {
+      color: var(--stamp);
+      border-bottom-color: var(--stamp)
+    }
+
+    .tabs .c {
+      font-family: var(--mono);
+      font-size: 10px;
+      opacity: .7;
+      margin-left: 4px
+    }
+
+    .chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--rule);
+      background: #F2F3EE
+    }
+
+    .chip {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 5px 10px;
+      border: 1px solid var(--rule);
+      background: #fff;
+      cursor: pointer;
+      border-radius: 2px;
+      color: var(--ink-soft)
+    }
+
+    .chip.on {
+      background: var(--stamp);
+      border-color: var(--stamp);
+      color: #fff
+    }
+
+    .chip .c {
+      opacity: .65;
+      margin-left: 4px
+    }
+
+    ul.list {
+      list-style: none;
+      max-height: 600px;
+      overflow-y: auto
+    }
+
+    ul.list li {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--rule-soft);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      cursor: pointer
+    }
+
+    ul.list li:hover {
+      background: #F2F3EE
+    }
+
+    ul.list li.sel {
+      background: #EFECF5;
+      box-shadow: inset 3px 0 0 var(--stamp)
+    }
+
+    .r-no {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .08em;
+      color: var(--ink-soft)
+    }
+
+    .r-cust {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 16px;
+      margin-top: 1px
+    }
+
+    .r-line {
+      font-size: 12.5px;
+      color: var(--ink-soft);
+      margin-top: 1px
+    }
+
+    .r-tags {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-top: 6px
+    }
+
+    .r-right {
+      text-align: right;
+      white-space: nowrap
+    }
+
+    .r-amt {
+      font-family: var(--mono);
+      font-size: 15px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums
+    }
+
+    .r-sub {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-soft)
+    }
+
+    .pill {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border: 1px solid;
+      border-radius: 2px
+    }
+
+    .pill.grey {
+      color: var(--ink-soft);
+      border-color: var(--rule)
+    }
+
+    .pill.violet {
+      color: var(--stamp);
+      border-color: var(--stamp)
+    }
+
+    .pill.warn {
+      color: var(--waiting);
+      border-color: var(--waiting);
+      background: #FAF6EA
+    }
+
+    .pill.good {
+      color: var(--settled);
+      border-color: var(--settled);
+      background: #EDF4F0
+    }
+
+    .pill.bad {
+      color: var(--alert);
+      border-color: var(--alert);
+      background: #FAEFEC
+    }
+
+    .acts {
+      display: flex;
+      gap: 7px;
+      flex-wrap: wrap
+    }
+
+    .act {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 11.5px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 8px 11px;
+      border: 1px solid var(--stamp);
+      background: none;
+      color: var(--stamp);
+      cursor: pointer;
+      border-radius: 2px;
+      white-space: nowrap
+    }
+
+    .act:hover {
+      background: var(--stamp);
+      color: #fff
+    }
+
+    .act.go {
+      border-color: var(--settled);
+      color: var(--settled)
+    }
+
+    .act.go:hover {
+      background: var(--settled);
+      color: #fff
+    }
+
+    .act:disabled {
+      border-color: var(--rule);
+      color: var(--rule);
+      cursor: not-allowed;
+      background: none
+    }
+
+    .d-head {
+      padding: 16px;
+      background: #F2F3EE;
+      border-bottom: 1px solid var(--rule)
+    }
+
+    .d-figs {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px
+    }
+
+    .d-figs .k {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--ink-soft)
+    }
+
+    .d-figs .v {
+      font-family: var(--mono);
+      font-size: 15px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      margin-top: 2px
+    }
+
+    .d-figs .v.pos {
+      color: var(--settled)
+    }
+
+    .d-figs .v.bad {
+      color: var(--alert)
+    }
+
+    .d-sec {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--rule-soft)
+    }
+
+    .d-sec h3 {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin-bottom: 9px
+    }
+
+    .d-kv {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 13px;
+      padding: 3px 0
+    }
+
+    .d-kv span:first-child {
+      color: var(--ink-soft)
+    }
+
+    .d-kv span:last-child {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      text-align: right
+    }
+
+    .field {
+      margin-bottom: 12px
+    }
+
+    .field label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin-bottom: 5px
+    }
+
+    input,
+    select {
+      width: 100%;
+      font-family: var(--sans);
+      font-size: 15px;
+      color: var(--ink);
+      background: #fff;
+      border: 1px solid var(--rule);
+      border-radius: 2px;
+      padding: 9px 11px
+    }
+
+    input[type=number] {
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums
+    }
+
+    input:focus,
+    select:focus {
+      outline: 2px solid var(--stamp);
+      outline-offset: -1px;
+      border-color: var(--stamp)
+    }
+
+    .row {
+      display: grid;
+      gap: 11px;
+      grid-template-columns: 1fr 1fr
+    }
+
+    button.primary {
+      width: 100%;
+      background: var(--settled);
+      color: #fff;
+      border: none;
+      border-radius: 2px;
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 13.5px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      padding: 12px;
+      cursor: pointer
+    }
+
+    button.primary:hover {
+      background: #085239
+    }
+
+    button.primary:disabled {
+      background: var(--rule);
+      cursor: not-allowed
+    }
+
+    .empty {
+      padding: 40px 18px;
+      text-align: center;
+      color: var(--ink-soft);
+      font-size: 13.5px
+    }
+
+    .note {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      padding: 10px 14px;
+      border-left: 3px solid var(--stamp);
+      background: #F2F3EE;
+      margin-bottom: 14px
+    }
+
+    .note.bad {
+      border-left-color: var(--alert);
+      color: var(--alert)
+    }
+
+    .note.good {
+      border-left-color: var(--settled);
+      color: var(--settled)
+    }
+
+    .gate {
+      max-width: 400px;
+      margin: 70px auto
+    }
+
+    /* ---------- print sheet ---------- */
+    #sheet {
+      display: none
+    }
+
+    @media print {
+      body {
+        background: #fff
+      }
+
+      .wrap>header,
+      #strip,
+      .grid,
+      #gate {
+        display: none !important
+      }
+
+      #sheet {
+        display: block !important;
+        padding: 0;
+        margin: 0
+      }
+
+      @page {
+        size: A4;
+        margin: 16mm
+      }
+    }
+
+    #sheet .inv-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      border-bottom: 2px solid #141E19;
+      padding-bottom: 12px
+    }
+
+    #sheet .co h1 {
+      font-family: var(--cond);
+      font-size: 23px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      font-weight: 700
+    }
+
+    #sheet .co p {
+      font-size: 11px;
+      color: #444;
+      line-height: 1.5
+    }
+
+    #sheet .inv-meta {
+      text-align: right;
+      font-family: var(--mono);
+      font-size: 11px
+    }
+
+    #sheet .inv-meta .big {
+      font-family: var(--cond);
+      font-size: 20px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      margin-bottom: 6px
+    }
+
+    #sheet .parties {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      margin: 20px 0
+    }
+
+    #sheet .parties h4 {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: #666;
+      margin-bottom: 4px
+    }
+
+    #sheet table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px
+    }
+
+    #sheet th {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      text-align: left;
+      border-bottom: 1px solid #141E19;
+      padding: 7px 6px;
+      color: #444
+    }
+
+    #sheet td {
+      padding: 9px 6px;
+      border-bottom: 1px solid #ddd;
+      font-size: 12.5px
+    }
+
+    #sheet td.num,
+    #sheet th.num {
+      text-align: right;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums
+    }
+
+    #sheet .totals {
+      margin-left: auto;
+      width: 265px;
+      margin-top: 14px
+    }
+
+    #sheet .totals div {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 6px;
+      font-size: 12.5px
+    }
+
+    #sheet .totals .due {
+      border-top: 2px solid #141E19;
+      font-weight: 600;
+      font-size: 15px;
+      font-family: var(--mono);
+      padding-top: 8px
+    }
+
+    #sheet .terms {
+      margin-top: 26px;
+      border-top: 1px solid #ddd;
+      padding-top: 12px;
+      font-size: 10.5px;
+      color: #444;
+      line-height: 1.6
+    }
+
+    #sheet .terms b {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: #141E19
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <h1>Billing</h1><span class="sub">Safi TMS</span>
+      </div>
+      <div class="who" id="who"></div>
+    </header>
+
+    <div id="gate" class="gate" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2 id="gateTitle">Sign in</h2>
+        </div>
+        <div class="panel-body">
+          <div id="gateNote"></div>
+          <div id="loginForm">
+            <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="username">
+            </div>
+            <div class="field"><label for="password">Password</label><input id="password" type="password"
+                autocomplete="current-password"></div>
+            <button class="primary" id="loginBtn" style="background:var(--stamp)">Sign in</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="app" style="display:none">
+      <div class="strip" id="strip"></div>
+      <div class="grid">
+        <div class="panel">
+          <div class="tabs">
+            <button id="tabBill" class="on">Ready to bill <span class="c" id="cBill"></span></button>
+            <button id="tabInv">Receivables <span class="c" id="cInv"></span></button>
+          </div>
+          <div id="chips" class="chips" style="display:none"></div>
+          <ul class="list" id="rows"></ul>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <h2 id="sideTitle">Detail</h2>
+          </div>
+          <div id="sideBody">
+            <div class="empty">Pick a trip to bill, or an invoice to settle.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="sheet"></div>
+
+  <script>
+    // =====================================================================
+    // CONFIG
+    // =====================================================================
+    const SUPABASE_URL = "https://shvvpcmcezkfzdvelhpl.supabase.co/";
+    const SUPABASE_KEY = "sb_publishable_mwaEiMwvj8E05ZgDW9Lmhw_yuTZ5fK7";
+
+    // Printed on every invoice. These are the same four details still
+    // outstanding on the business card — fill them in once, here.
+    const COMPANY = {
+      name: "SAFI TRANSPORT AND LOGISTICS LIMITED",
+      reg: "PACRA Reg. No. 120261044060",
+      address: "<<< REPLACE: Plot number, Lusaka, Zambia >>>",
+      phone: "<<< REPLACE: +260 ... >>>",
+      email: "<<< REPLACE: accounts@... >>>",
+      bank: [
+        "<<< REPLACE: Bank name >>>",
+        "Account name: Safi Transport and Logistics Limited",
+        "USD Account: <<< REPLACE >>>",
+        "SWIFT: <<< REPLACE >>>"
+      ]
+    };
+    // =====================================================================
+
+    const $ = id => document.getElementById(id);
+    const configured = !SUPABASE_URL.includes("REPLACE") && !SUPABASE_KEY.includes("REPLACE");
+    let sb = null, orgId = null, orgName = "", tab = "bill", bucket = "open", sel = null;
+    let billable = [], ar = [];
+
+    const m2 = (n, c = "USD") => c + " " + Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const m0 = (n, c = "USD") => c + " " + Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
+    const label = s => String(s || "").replace(/_/g, " ");
+    const esc = s => String(s ?? "").replace(/[&<>"]/g, x => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[x]));
+    function note(el, msg, kind) { if (el) el.innerHTML = msg ? `<div class="note ${kind || ""}">${msg}</div>` : ""; }
+
+    // ---------- boot ----------
+    (async function () {
+      if (!configured) {
+        $("gate").style.display = "block"; $("gateTitle").textContent = "Not configured";
+        $("loginForm").style.display = "none";
+        note($("gateNote"), "Replace SUPABASE_URL and SUPABASE_KEY near the bottom of the script, then reload.", "bad");
+        return;
+      }
+      sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      const { data: { session } } = await sb.auth.getSession();
+      session ? start(session) : ($("gate").style.display = "block");
+    })();
+
+    $("loginBtn").onclick = async () => {
+      const b = $("loginBtn"); b.disabled = true; b.textContent = "Signing in…";
+      const { data, error } = await sb.auth.signInWithPassword({ email: $("email").value.trim(), password: $("password").value });
+      b.disabled = false; b.textContent = "Sign in";
+      if (error) return note($("gateNote"), "That didn't work: " + error.message, "bad");
+      start(data.session);
+    };
+    ["email", "password"].forEach(id => $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("loginBtn").click() }));
+
+    async function start(session) {
+      $("gate").style.display = "none"; $("app").style.display = "block";
+      const { data: mem } = await sb.from("memberships").select("org_id, organizations(name)").limit(1).maybeSingle();
+      if (!mem) { $("app").innerHTML = '<div class="panel"><div class="panel-body"><div class="note bad">This account isn\'t a member of any organisation yet.</div></div></div>'; return; }
+      orgId = mem.org_id; orgName = mem.organizations?.name || "";
+      $("who").innerHTML = `${esc(orgName)} · ${esc(session.user.email)} · <button id="out">sign out</button>`;
+      $("out").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+      await load();
+    }
+
+    async function load() {
+      const [b, a] = await Promise.all([
+        sb.from("billable").select("*").order("trip_no", { ascending: false }),
+        sb.from("invoice_ar").select("*").order("issued_on", { ascending: false })
+      ]);
+      billable = (b.data || []).filter(t => !t.loading_invoiced || (t.pod_in_hand && !t.delivery_invoiced));
+      ar = a.data || [];
+      renderStrip(); renderTabs(); renderRows();
+      if (sel) reselect();
+    }
+
+    function renderStrip() {
+      const out = ar.filter(i => Number(i.outstanding) > 0);
+      const overdue = out.filter(i => i.days_overdue > 0);
+      const totalOut = out.reduce((s, i) => s + Number(i.outstanding), 0);
+      const totalOver = overdue.reduce((s, i) => s + Number(i.outstanding), 0);
+      const raisable = billable.reduce((s, t) => {
+        let v = 0;
+        if (!t.loading_invoiced) v += Number(t.half_usd);
+        if (t.pod_in_hand && !t.delivery_invoiced) v += Number(t.half_usd);
+        return s + v;
+      }, 0);
+      const blocked = billable.filter(t => !t.pod_in_hand && t.loading_invoiced);
+      const blockedVal = blocked.reduce((s, t) => s + Number(t.half_usd), 0);
+
+      $("strip").innerHTML = `
+    <div class="cell"><div class="k">Ready to raise</div><div class="v pos">${m0(raisable)}</div>
+      <div class="n">${billable.length} trip${billable.length === 1 ? "" : "s"}</div></div>
+    <div class="cell"><div class="k">Blocked on POD</div><div class="v ${blocked.length ? "warn" : ""}">${m0(blockedVal)}</div>
+      <div class="n">${blocked.length} delivered, no POD</div></div>
+    <div class="cell"><div class="k">Outstanding</div><div class="v">${m0(totalOut)}</div>
+      <div class="n">${out.length} unpaid invoice${out.length === 1 ? "" : "s"}</div></div>
+    <div class="cell"><div class="k">Overdue</div><div class="v ${overdue.length ? "bad" : ""}">${m0(totalOver)}</div>
+      <div class="n">${overdue.length ? overdue.length + " past due" : "nothing past due"}</div></div>`;
+    }
+
+    function renderTabs() {
+      $("cBill").textContent = billable.length || "";
+      $("cInv").textContent = ar.filter(i => Number(i.outstanding) > 0).length || "";
+      $("tabBill").classList.toggle("on", tab === "bill");
+      $("tabInv").classList.toggle("on", tab === "inv");
+      $("chips").style.display = tab === "inv" ? "flex" : "none";
+      if (tab === "inv") renderChips();
+    }
+    $("tabBill").onclick = () => { tab = "bill"; sel = null; renderTabs(); renderRows(); clearSide() };
+    $("tabInv").onclick = () => { tab = "inv"; sel = null; renderTabs(); renderRows(); clearSide() };
+
+    const BUCKETS = [["open", "Unpaid", i => Number(i.outstanding) > 0], ["current", "Current", i => i.bucket === "current"],
+    ["b1", "1–30", i => i.bucket === "1-30"], ["b2", "31–60", i => i.bucket === "31-60"],
+    ["b3", "60+", i => i.bucket === "60+"], ["settled", "Settled", i => i.bucket === "settled"], ["all", "All", () => true]];
+    function renderChips() {
+      $("chips").innerHTML = BUCKETS.map(([k, l, fn]) =>
+        `<button class="chip ${bucket === k ? "on" : ""}" data-b="${k}">${l}<span class="c">${ar.filter(fn).length}</span></button>`).join("");
+      document.querySelectorAll("[data-b]").forEach(b => b.onclick = () => { bucket = b.dataset.b; renderChips(); renderRows() });
+    }
+
+    function renderRows() {
+      if (tab === "bill") {
+        $("rows").innerHTML = billable.length ? billable.map(t => {
+          const tags = [
+            !t.loading_invoiced ? `<span class="pill violet">loading half due</span>` : "",
+            t.pod_in_hand && !t.delivery_invoiced ? `<span class="pill good">delivery half due</span>` : "",
+            !t.pod_in_hand && t.loading_invoiced ? `<span class="pill warn">waiting on POD</span>` : ""
+          ].filter(Boolean).join("");
+          return `<li data-r="${t.trip_id}" class="${sel === t.trip_id ? "sel" : ""}">
+        <div><div class="r-no">${esc(t.trip_no)}</div>
+          <div class="r-cust">${esc(t.customer)}</div>
+          <div class="r-line">${esc(t.route)}</div>
+          <div class="r-tags">${tags}</div></div>
+        <div class="r-right"><div class="r-amt">${m0(t.revenue_usd)}</div>
+          <div class="r-sub">half ${m0(t.half_usd)}</div></div>
+      </li>`;
+        }).join("") : '<li class="empty">Nothing waiting to be billed.</li>';
+      } else {
+        const fn = BUCKETS.find(b => b[0] === bucket)[2];
+        const rows = ar.filter(fn);
+        $("rows").innerHTML = rows.length ? rows.map(i => {
+          const st = Number(i.outstanding) <= 0 ? "good" : (i.days_overdue > 0 ? "bad" : "violet");
+          return `<li data-r="${i.id}" class="${sel === i.id ? "sel" : ""}">
+        <div><div class="r-no">${esc(i.invoice_no)} · ${esc(i.trips || "")}</div>
+          <div class="r-cust">${esc(i.customer)}</div>
+          <div class="r-line">${label(i.invoice_type)} · issued ${i.issued_on}</div>
+          <div class="r-tags">
+            <span class="pill ${st}">${Number(i.outstanding) <= 0 ? "settled" : label(i.status)}</span>
+            ${i.days_overdue > 0 ? `<span class="pill bad">${i.days_overdue}d overdue</span>` : ""}
+          </div></div>
+        <div class="r-right"><div class="r-amt">${m0(i.outstanding, i.currency)}</div>
+          <div class="r-sub">of ${m0(i.total_due, i.currency)}</div></div>
+      </li>`;
+        }).join("") : '<li class="empty">Nothing here.</li>';
+      }
+      document.querySelectorAll("[data-r]").forEach(li => li.onclick = () => { sel = li.dataset.r; renderRows(); reselect() });
+    }
+
+    function clearSide() { $("sideBody").innerHTML = '<div class="empty">Pick a trip to bill, or an invoice to settle.</div>'; $("sideTitle").textContent = "Detail"; }
+    function reselect() { tab === "bill" ? showTrip(sel) : showInvoice(sel); }
+
+    // ---------- raise ----------
+    function showTrip(id) {
+      const t = billable.find(x => x.trip_id === id); if (return_(t)) return;
+      $("sideTitle").textContent = "Raise invoice";
+      $("sideBody").innerHTML = `
+    <div class="d-head">
+      <div class="r-no">${esc(t.trip_no)}</div>
+      <div class="r-cust" style="font-size:18px">${esc(t.customer)}</div>
+      <div class="r-line">${esc(t.route)}</div>
+      <div class="d-figs">
+        <div><div class="k">Freight</div><div class="v">${m2(t.revenue_usd)}</div></div>
+        <div><div class="k">Each half</div><div class="v">${m2(t.half_usd)}</div></div>
+        <div><div class="k">POD</div><div class="v ${t.pod_in_hand ? "pos" : ""}">${t.pod_in_hand ? "in hand" : "—"}</div></div>
+      </div>
+    </div>
+    <div class="d-sec"><h3>Raise</h3><div id="raiseNote"></div>
+      <div class="acts">
+        <button class="act" data-raise="loading" ${t.loading_invoiced ? "disabled" : ""}>
+          ${t.loading_invoiced ? "Loading half raised" : "Loading half"}</button>
+        <button class="act go" data-raise="delivery" ${(!t.pod_in_hand || t.delivery_invoiced) ? "disabled" : ""}>
+          ${t.delivery_invoiced ? "Delivery half raised" : "Delivery half"}</button>
+        <button class="act" data-raise="full" ${(t.loading_invoiced || t.delivery_invoiced) ? "disabled" : ""}>Full amount</button>
+      </div>
+      ${!t.pod_in_hand ? `<div style="font-size:12.5px;color:var(--ink-soft);margin-top:10px">
+        The delivery half stays locked until the POD is marked received in the Cost Docket.</div>`: ""}
+    </div>`;
+      document.querySelectorAll("[data-raise]").forEach(b => b.onclick = () => raise(id, b.dataset.raise));
+    }
+    function return_(x) { if (!x) { clearSide(); return true; } return false; }
+
+    async function raise(tripId, type) {
+      const { data, error } = await sb.rpc("raise_invoice", { p_trip: tripId, p_type: type });
+      if (error) return note($("raiseNote"), error.message, "bad");
+      await load();
+      tab = "inv"; sel = data; renderTabs(); renderRows(); showInvoice(data);
+    }
+
+    // ---------- invoice detail ----------
+    async function showInvoice(id) {
+      const i = ar.find(x => x.id === id); if (return_(i)) return;
+      $("sideTitle").textContent = "Invoice";
+      const { data: pays } = await sb.from("payments").select("*").eq("invoice_id", id).order("received_on");
+      const settled = Number(i.outstanding) <= 0;
+
+      $("sideBody").innerHTML = `
+    <div class="d-head">
+      <div class="r-no">${esc(i.invoice_no)}</div>
+      <div class="r-cust" style="font-size:18px">${esc(i.customer)}</div>
+      <div class="r-line">${label(i.invoice_type)} · ${esc(i.trips || "")}</div>
+      <div class="d-figs">
+        <div><div class="k">Invoiced</div><div class="v">${m2(i.total_due, i.currency)}</div></div>
+        <div><div class="k">Paid</div><div class="v pos">${m2(i.paid, i.currency)}</div></div>
+        <div><div class="k">Outstanding</div><div class="v ${settled ? "pos" : (i.days_overdue > 0 ? "bad" : "")}">${m2(i.outstanding, i.currency)}</div></div>
+      </div>
+    </div>
+    <div class="d-sec">
+      <div class="acts"><button class="act" id="printBtn">Print / PDF</button></div>
+    </div>
+    <div class="d-sec">
+      <h3>Terms</h3>
+      <div class="d-kv"><span>Issued</span><span>${i.issued_on}</span></div>
+      <div class="d-kv"><span>Due</span><span>${i.due_on}${i.days_overdue > 0 ? ` · ${i.days_overdue}d overdue` : ""}</span></div>
+      <div class="d-kv"><span>Ageing</span><span>${i.bucket}</span></div>
+    </div>
+    <div class="d-sec">
+      <h3>Payments received</h3>
+      ${(pays || []).length ? pays.map(p => `<div class="d-kv"><span>${p.received_on}${p.method ? " · " + esc(p.method) : ""}${p.reference ? " · " + esc(p.reference) : ""}</span><span>${m2(p.amount, p.currency)}</span></div>`).join("")
+          : '<div style="font-size:12.5px;color:var(--ink-soft)">Nothing received yet.</div>'}
+    </div>
+    ${!settled ? `<div class="panel-body">
+      <div id="payNote"></div>
+      <div class="row">
+        <div class="field"><label for="pAmt">Amount</label><input id="pAmt" type="number" step="0.01" min="0" value="${Number(i.outstanding).toFixed(2)}"></div>
+        <div class="field"><label for="pDate">Received on</label><input id="pDate" type="date"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="pMethod">Method</label>
+          <select id="pMethod"><option>Bank transfer</option><option>Cash</option><option>Mobile money</option><option>Cheque</option></select></div>
+        <div class="field"><label for="pRef">Reference</label><input id="pRef" type="text" placeholder="TRF-00123"></div>
+      </div>
+      <button class="primary" id="payBtn">Record payment</button>
+    </div>`: ""}`;
+
+      $("printBtn").onclick = () => printInvoice(id);
+      if (!settled) {
+        $("pDate").valueAsDate = new Date();
+        $("payBtn").onclick = () => pay(id, i.currency);
+      }
+    }
+
+    async function pay(id, currency) {
+      const amt = parseFloat($("pAmt").value);
+      if (isNaN(amt) || amt <= 0) return note($("payNote"), "Enter an amount greater than zero.", "bad");
+      const b = $("payBtn"); b.disabled = true; b.textContent = "Recording…";
+      const { error } = await sb.from("payments").insert({
+        org_id: orgId, invoice_id: id, amount: amt, currency,
+        received_on: $("pDate").value, method: $("pMethod").value,
+        reference: $("pRef").value.trim() || null
+      });
+      b.disabled = false; b.textContent = "Record payment";
+      if (error) return note($("payNote"), "Couldn't record it: " + error.message, "bad");
+      await load(); showInvoice(id);
+    }
+
+    // ---------- print ----------
+    async function printInvoice(id) {
+      const { data: inv } = await sb.from("invoices")
+        .select("*, customers(name,country,tpin,contact_name,contact_email,payment_terms)").eq("id", id).single();
+      const { data: lines } = await sb.from("invoice_lines").select("*").eq("invoice_id", id);
+      const { data: paid } = await sb.from("payments").select("amount").eq("invoice_id", id);
+      const received = (paid || []).reduce((s, p) => s + Number(p.amount), 0);
+      const c = inv.customers || {};
+
+      $("sheet").innerHTML = `
+    <div class="inv-head">
+      <div class="co">
+        <h1>${esc(COMPANY.name)}</h1>
+        <p>${esc(COMPANY.reg)}<br>${esc(COMPANY.address)}<br>${esc(COMPANY.phone)} · ${esc(COMPANY.email)}</p>
+      </div>
+      <div class="inv-meta">
+        <div class="big">Invoice</div>
+        ${esc(inv.invoice_no)}<br>
+        Issued ${inv.issued_on}<br>
+        Due ${inv.due_on}
+      </div>
+    </div>
+    <div class="parties">
+      <div><h4>Invoice to</h4>
+        <div style="font-size:14px;font-weight:600">${esc(c.name || "")}</div>
+        <div style="font-size:11.5px;color:#444">${esc(c.country || "")}${c.tpin ? "<br>TPIN " + esc(c.tpin) : ""}${c.contact_email ? "<br>" + esc(c.contact_email) : ""}</div>
+      </div>
+      <div style="text-align:right"><h4>Stage</h4>
+        <div style="font-size:13px">${label(inv.invoice_type)}</div>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
+      <tbody>${(lines || []).map(l => `<tr>
+        <td>${esc(l.description)}</td>
+        <td class="num">${Number(l.quantity)}</td>
+        <td class="num">${m2(l.unit_price, inv.currency)}</td>
+        <td class="num">${m2(l.line_total, inv.currency)}</td></tr>`).join("")}</tbody>
+    </table>
+    <div class="totals">
+      <div><span>Subtotal</span><span>${m2(inv.subtotal, inv.currency)}</span></div>
+      ${received > 0 ? `<div><span>Received to date</span><span>− ${m2(received, inv.currency)}</span></div>` : ""}
+      <div class="due"><span>Amount due</span><span>${m2(Number(inv.total_due) - received, inv.currency)}</span></div>
+    </div>
+    <div class="terms">
+      <b>Payment terms</b><br>
+      ${esc(c.payment_terms || "50% on loading, 50% on delivery. USD only.")}<br><br>
+      <b>Remit to</b><br>
+      ${COMPANY.bank.map(esc).join("<br>")}
+    </div>`;
+      window.print();
+    }
+  </script>
+</body>
+
+</html>

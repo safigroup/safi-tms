@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Safi TMS — Cost Docket</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --ground: #DCE0D9;
+      --card: #F7F8F4;
+      --ink: #141E19;
+      --ink-soft: #5A655E;
+      --rule: #B4BBB0;
+      --rule-soft: #CFD4CA;
+      --stamp: #3D2A6B;
+      --settled: #0B6B4F;
+      --alert: #8C2F1E;
+      --waiting: #8A6A12;
+      --mono: 'IBM Plex Mono', ui-monospace, monospace;
+      --sans: 'IBM Plex Sans', system-ui, sans-serif;
+      --cond: 'Archivo Narrow', var(--sans);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    body {
+      background: var(--ground);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased
+    }
+
+    .wrap {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 20px 18px 64px
+    }
+
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 10px;
+      margin-bottom: 22px
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 12px
+    }
+
+    .brand h1 {
+      font-family: var(--cond);
+      font-weight: 700;
+      font-size: 26px;
+      letter-spacing: .06em;
+      text-transform: uppercase
+    }
+
+    .brand .sub {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-soft);
+      letter-spacing: .14em;
+      text-transform: uppercase
+    }
+
+    .who {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--ink-soft);
+      text-align: right
+    }
+
+    .who button {
+      background: none;
+      border: none;
+      color: var(--stamp);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-decoration: underline;
+      padding: 0
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      gap: 22px;
+      align-items: start
+    }
+
+    @media(max-width:940px) {
+      .grid {
+        grid-template-columns: 1fr
+      }
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 2px
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--rule)
+    }
+
+    .panel-head h2 {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: .16em;
+      text-transform: uppercase
+    }
+
+    .panel-body {
+      padding: 18px 16px
+    }
+
+    .meta {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .1em;
+      color: var(--ink-soft)
+    }
+
+    .field {
+      margin-bottom: 15px
+    }
+
+    .field label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin-bottom: 5px
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      font-family: var(--sans);
+      font-size: 15px;
+      color: var(--ink);
+      background: #fff;
+      border: 1px solid var(--rule);
+      border-radius: 2px;
+      padding: 9px 11px
+    }
+
+    input[type=number] {
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums
+    }
+
+    input:focus,
+    select:focus {
+      outline: 2px solid var(--stamp);
+      outline-offset: -1px;
+      border-color: var(--stamp)
+    }
+
+    .row {
+      display: grid;
+      gap: 12px
+    }
+
+    .row-3 {
+      grid-template-columns: 1.4fr .8fr .8fr
+    }
+
+    @media(max-width:620px) {
+      .row-3 {
+        grid-template-columns: 1fr
+      }
+    }
+
+    /* conversion stamp */
+    .stamp {
+      margin: 4px 0 18px;
+      border: 1px dashed var(--rule);
+      border-left: 3px solid var(--stamp);
+      background: linear-gradient(180deg, #fff, #F2F3EE);
+      padding: 13px 15px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      transition: border-left-color .18s ease
+    }
+
+    .stamp.live {
+      border-left-color: var(--settled)
+    }
+
+    .stamp .native {
+      font-family: var(--mono);
+      font-size: 15px;
+      color: var(--ink-soft);
+      font-variant-numeric: tabular-nums
+    }
+
+    .stamp .arrow {
+      font-family: var(--mono);
+      color: var(--rule);
+      font-size: 15px
+    }
+
+    .stamp .usd {
+      font-family: var(--mono);
+      font-weight: 600;
+      font-size: 24px;
+      color: var(--settled);
+      font-variant-numeric: tabular-nums
+    }
+
+    .stamp .usd.idle {
+      color: var(--rule)
+    }
+
+    .stamp .rate {
+      width: 100%;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-soft);
+      letter-spacing: .06em;
+      padding-top: 6px;
+      border-top: 1px solid var(--rule-soft);
+      margin-top: 4px
+    }
+
+    .stamp .rate b {
+      font-weight: 500;
+      color: var(--ink)
+    }
+
+    /* file capture */
+    .capture {
+      border: 1px dashed var(--rule);
+      background: #fff;
+      padding: 12px 14px;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap
+    }
+
+    .capture.has {
+      border-style: solid;
+      border-color: var(--settled);
+      background: #F2F7F4
+    }
+
+    .capture input[type=file] {
+      display: none
+    }
+
+    .capture .btn {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--stamp);
+      border: 1px solid var(--stamp);
+      background: none;
+      padding: 7px 12px;
+      cursor: pointer;
+      border-radius: 2px;
+      white-space: nowrap
+    }
+
+    .capture .btn:hover {
+      background: var(--stamp);
+      color: #fff
+    }
+
+    .capture .state {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-soft);
+      flex: 1;
+      min-width: 120px
+    }
+
+    .capture .state b {
+      color: var(--settled);
+      font-weight: 500
+    }
+
+    .capture .clear {
+      background: none;
+      border: none;
+      color: var(--rule);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 13px
+    }
+
+    .capture .clear:hover {
+      color: var(--alert)
+    }
+
+    .thumb {
+      width: 38px;
+      height: 38px;
+      object-fit: cover;
+      border: 1px solid var(--rule)
+    }
+
+    button.primary {
+      width: 100%;
+      background: var(--stamp);
+      color: #fff;
+      border: none;
+      border-radius: 2px;
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      padding: 13px;
+      cursor: pointer
+    }
+
+    button.primary:hover {
+      background: #32215A
+    }
+
+    button.primary:disabled {
+      background: var(--rule);
+      cursor: not-allowed
+    }
+
+    button.primary.settle {
+      background: var(--settled)
+    }
+
+    button.primary.settle:hover {
+      background: #085239
+    }
+
+    /* summary */
+    .summary {
+      padding: 16px;
+      border-bottom: 1px solid var(--rule);
+      background: #F2F3EE
+    }
+
+    .summary .tripno {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: .08em;
+      color: var(--ink-soft)
+    }
+
+    .summary .cust {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 19px;
+      margin-top: 2px
+    }
+
+    .summary .route {
+      font-size: 12.5px;
+      color: var(--ink-soft);
+      margin-top: 1px
+    }
+
+    .figs {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-top: 14px
+    }
+
+    .fig .k {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--ink-soft)
+    }
+
+    .fig .v {
+      font-family: var(--mono);
+      font-size: 16px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      margin-top: 2px
+    }
+
+    .fig .v.pos {
+      color: var(--settled)
+    }
+
+    .fig .v.neg {
+      color: var(--alert)
+    }
+
+    /* tabs */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--rule)
+    }
+
+    .tabs button {
+      flex: 1;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: 10px 8px;
+      cursor: pointer;
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--ink-soft)
+    }
+
+    .tabs button.on {
+      color: var(--stamp);
+      border-bottom-color: var(--stamp)
+    }
+
+    .tabs .badge {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      background: var(--waiting);
+      color: #fff;
+      padding: 1px 5px;
+      margin-left: 5px;
+      border-radius: 8px;
+      letter-spacing: 0
+    }
+
+    ul.list {
+      list-style: none;
+      max-height: 430px;
+      overflow-y: auto
+    }
+
+    ul.list li {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--rule-soft)
+    }
+
+    ul.list li:hover {
+      background: #F2F3EE
+    }
+
+    .lg-cat {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--stamp)
+    }
+
+    .lg-desc {
+      font-size: 13px;
+      margin-top: 1px
+    }
+
+    .lg-meta {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-soft);
+      margin-top: 2px
+    }
+
+    .lg-meta a {
+      color: var(--stamp)
+    }
+
+    .lg-amt {
+      text-align: right;
+      white-space: nowrap
+    }
+
+    .lg-usd {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums
+    }
+
+    .lg-native {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-soft)
+    }
+
+    .lg-del {
+      background: none;
+      border: none;
+      color: var(--rule);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 14px;
+      padding: 0 0 0 8px
+    }
+
+    .lg-del:hover {
+      color: var(--alert)
+    }
+
+    /* documents */
+    .doc-name {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: .04em;
+      text-transform: uppercase
+    }
+
+    .doc-num {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-soft);
+      margin-top: 1px
+    }
+
+    .pill {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border: 1px solid;
+      border-radius: 2px
+    }
+
+    .pill.pending {
+      color: var(--waiting);
+      border-color: var(--waiting)
+    }
+
+    .pill.issued,
+    .pill.lodged {
+      color: var(--stamp);
+      border-color: var(--stamp)
+    }
+
+    .pill.cleared,
+    .pill.received {
+      color: var(--settled);
+      border-color: var(--settled);
+      background: #EDF4F0
+    }
+
+    .pill.rejected {
+      color: var(--alert);
+      border-color: var(--alert)
+    }
+
+    .docup {
+      padding: 14px 16px;
+      border-top: 1px solid var(--rule);
+      background: #F2F3EE
+    }
+
+    .docup .field {
+      margin-bottom: 11px
+    }
+
+    .pod-call {
+      margin: 14px 16px;
+      border-left: 3px solid var(--waiting);
+      background: #FAF6EA;
+      padding: 12px 14px
+    }
+
+    .pod-call p {
+      font-size: 12.5px;
+      color: var(--ink-soft);
+      margin-bottom: 10px
+    }
+
+    .pod-call b {
+      color: var(--ink)
+    }
+
+    .empty {
+      padding: 34px 18px;
+      text-align: center;
+      color: var(--ink-soft);
+      font-size: 13.5px
+    }
+
+    .note {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      padding: 10px 14px;
+      border-left: 3px solid var(--stamp);
+      background: #F2F3EE;
+      margin-bottom: 16px
+    }
+
+    .note.bad {
+      border-left-color: var(--alert);
+      color: var(--alert)
+    }
+
+    .note.good {
+      border-left-color: var(--settled);
+      color: var(--settled)
+    }
+
+    .gate {
+      max-width: 400px;
+      margin: 70px auto
+    }
+
+    @media(prefers-reduced-motion:reduce) {
+      * {
+        transition: none !important
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <h1>Cost Docket</h1><span class="sub">Safi TMS</span>
+      </div>
+      <div class="who" id="who"></div>
+    </header>
+
+    <div id="gate" class="gate" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2 id="gateTitle">Sign in</h2>
+        </div>
+        <div class="panel-body">
+          <div id="gateNote"></div>
+          <div id="loginForm">
+            <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="username">
+            </div>
+            <div class="field"><label for="password">Password</label><input id="password" type="password"
+                autocomplete="current-password"></div>
+            <button class="primary" id="loginBtn">Sign in</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="app" class="grid" style="display:none">
+
+      <!-- ENTRY -->
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Record a cost</h2>
+        </div>
+        <div class="panel-body">
+          <div id="formNote"></div>
+
+          <div class="field"><label for="trip">Trip</label><select id="trip"></select></div>
+
+          <div class="field"><label for="category">Category</label>
+            <select id="category">
+              <option value="fuel">Fuel</option>
+              <option value="driver_advance">Driver advance</option>
+              <option value="driver_allowance">Driver allowance</option>
+              <option value="border_fees">Border fees</option>
+              <option value="customs_duty">Customs duty</option>
+              <option value="clearing_agent">Clearing agent</option>
+              <option value="tolls">Tolls</option>
+              <option value="weighbridge">Weighbridge</option>
+              <option value="permits">Permits</option>
+              <option value="escort">Escort</option>
+              <option value="demurrage">Demurrage</option>
+              <option value="detention">Detention</option>
+              <option value="repairs">Repairs</option>
+              <option value="tyres">Tyres</option>
+              <option value="police">Police</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          <div class="row row-3">
+            <div class="field"><label for="amount">Amount</label><input id="amount" type="number" step="0.01" min="0"
+                placeholder="0.00" inputmode="decimal"></div>
+            <div class="field"><label for="currency">Currency</label><select id="currency"></select></div>
+            <div class="field"><label for="incurred">Date</label><input id="incurred" type="date"></div>
+          </div>
+
+          <div class="stamp" id="stamp">
+            <span class="native" id="stampNative">—</span>
+            <span class="arrow">→</span>
+            <span class="usd idle" id="stampUsd">USD 0.00</span>
+            <span class="rate" id="stampRate">Pick a currency to load its rate.</span>
+          </div>
+
+          <div class="field"><label for="description">Description</label><input id="description" type="text"
+              placeholder="e.g. Tunduma crossing charges"></div>
+
+          <div class="row row-3">
+            <div class="field"><label for="location">Location</label><input id="location" type="text"
+                placeholder="Nakonde"></div>
+            <div class="field"><label for="paidBy">Paid by</label>
+              <select id="paidBy">
+                <option value="driver_float">Driver float</option>
+                <option value="office">Office</option>
+                <option value="agent">Agent</option>
+                <option value="card">Card</option>
+              </select>
+            </div>
+            <div class="field"><label for="receipt">Receipt ref</label><input id="receipt" type="text"
+                placeholder="BR-4417"></div>
+          </div>
+
+          <label
+            style="display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:5px">Receipt
+            photo</label>
+          <div class="capture" id="cap">
+            <input type="file" id="capFile" accept="image/*,application/pdf" capture="environment">
+            <button class="btn" id="capBtn" type="button">Attach</button>
+            <img id="capThumb" class="thumb" style="display:none" alt="">
+            <span class="state" id="capState">Optional — but a float can't be reconciled without one.</span>
+            <button class="clear" id="capClear" style="display:none" type="button" title="Remove">✕</button>
+          </div>
+
+          <button class="primary" id="saveBtn">Save cost</button>
+        </div>
+      </div>
+
+      <!-- LEDGER / DOCS -->
+      <div class="panel">
+        <div id="summary" class="summary"></div>
+        <div class="tabs">
+          <button id="tabLedger" class="on">Ledger <span class="meta" id="ledgerCount"></span></button>
+          <button id="tabDocs">Documents <span id="docBadge"></span></button>
+        </div>
+
+        <div id="viewLedger">
+          <ul class="list" id="ledger"></ul>
+        </div>
+
+        <div id="viewDocs" style="display:none">
+          <div id="podCall"></div>
+          <ul class="list" id="docs"></ul>
+          <div class="docup">
+            <div id="docNote"></div>
+            <div class="field"><label for="docType">Add or replace a document</label>
+              <select id="docType">
+                <option value="pod">Proof of delivery</option>
+                <option value="consignment_note">Consignment note</option>
+                <option value="cmr">CMR</option>
+                <option value="packing_list">Packing list</option>
+                <option value="t1_transit">T1 transit</option>
+                <option value="customs_entry">Customs entry</option>
+                <option value="delivery_note">Delivery note</option>
+                <option value="weighbridge_ticket">Weighbridge ticket</option>
+                <option value="insurance">Insurance</option>
+                <option value="permit">Permit</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="field"><label for="docNum">Document number</label><input id="docNum" type="text"
+                placeholder="CN-2026-0001"></div>
+            <div class="capture" id="dcap">
+              <input type="file" id="dcapFile" accept="image/*,application/pdf" capture="environment">
+              <button class="btn" id="dcapBtn" type="button">Choose file</button>
+              <img id="dcapThumb" class="thumb" style="display:none" alt="">
+              <span class="state" id="dcapState">Photo or PDF.</span>
+              <button class="clear" id="dcapClear" style="display:none" type="button">✕</button>
+            </div>
+            <button class="primary" id="docSave">Upload document</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // =====================================================================
+    // CONFIG — Dashboard > Settings > API Keys.
+    // Use the PUBLISHABLE key (sb_publishable_...). Never the secret key.
+    // =====================================================================
+    const SUPABASE_URL = "https://shvvpcmcezkfzdvelhpl.supabase.co/";
+    const SUPABASE_KEY = "sb_publishable_mwaEiMwvj8E05ZgDW9Lmhw_yuTZ5fK7";
+    // =====================================================================
+
+    const BUCKET = "trip-docs";
+    const $ = id => document.getElementById(id);
+    const configured = !SUPABASE_URL.includes("REPLACE") && !SUPABASE_KEY.includes("REPLACE");
+    let sb = null, orgId = null, rates = {}, currentTrip = null, tripStatus = null;
+    let costFile = null, docFile = null;
+
+    const money = (n, c = "USD") => c + " " + Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const label = s => String(s || "").replace(/_/g, " ");
+    function note(el, msg, kind) { el.innerHTML = msg ? `<div class="note ${kind || ""}">${msg}</div>` : ""; }
+
+    // ---------- image compression ----------
+    // Phone photos of receipts run 4–6 MB. On a corridor connection that's a
+    // failed upload. Resize to 1600px and re-encode before it leaves the device.
+    async function prepare(file) {
+      if (!file.type.startsWith("image/")) return file;
+      const img = await new Promise((res, rej) => {
+        const i = new Image(); i.onload = () => res(i); i.onerror = rej;
+        i.src = URL.createObjectURL(file);
+      });
+      const max = 1600, scale = Math.min(1, max / Math.max(img.width, img.height));
+      if (scale === 1 && file.size < 900000) return file;
+      const cv = document.createElement("canvas");
+      cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
+      cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+      const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.82));
+      URL.revokeObjectURL(img.src);
+      return new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
+    }
+
+    function wireCapture(prefix, onPick) {
+      const f = $(prefix + "File"), btn = $(prefix + "Btn"), box = $(prefix === "cap" ? "cap" : "dcap"),
+        st = $(prefix + "State"), th = $(prefix + "Thumb"), cl = $(prefix + "Clear");
+      btn.onclick = () => f.click();
+      f.onchange = async () => {
+        const raw = f.files[0]; if (!raw) return;
+        st.textContent = "Preparing…";
+        const ready = await prepare(raw);
+        onPick(ready);
+        box.classList.add("has");
+        st.innerHTML = `<b>${ready.name}</b> · ${(ready.size / 1024).toFixed(0)} KB`;
+        cl.style.display = "inline";
+        if (ready.type.startsWith("image/")) { th.src = URL.createObjectURL(ready); th.style.display = "block"; }
+        else th.style.display = "none";
+      };
+      cl.onclick = () => {
+        f.value = ""; onPick(null); box.classList.remove("has");
+        th.style.display = "none"; cl.style.display = "none";
+        st.textContent = prefix === "cap" ? "Optional — but a float can't be reconciled without one." : "Photo or PDF.";
+      };
+    }
+
+    async function upload(file, tripId) {
+      const safe = file.name.replace(/[^\w.\-]/g, "_");
+      const path = `${orgId}/${tripId}/${Date.now()}-${safe}`;
+      const { error } = await sb.storage.from(BUCKET).upload(path, file, { contentType: file.type });
+      if (error) throw error;
+      return path;
+    }
+    async function signed(path) {
+      const { data } = await sb.storage.from(BUCKET).createSignedUrl(path, 3600);
+      return data?.signedUrl;
+    }
+    async function openFile(path) {
+      const url = await signed(path);
+      if (url) window.open(url, "_blank", "noopener");
+    }
+
+    // ---------- boot ----------
+    (async function () {
+      $("incurred").valueAsDate = new Date();
+      wireCapture("cap", f => costFile = f);
+      wireCapture("dcap", f => docFile = f);
+
+      if (!configured) {
+        $("gate").style.display = "block"; $("gateTitle").textContent = "Not configured";
+        $("loginForm").style.display = "none";
+        note($("gateNote"), "Replace SUPABASE_URL and SUPABASE_KEY near the bottom of the script, then reload.", "bad");
+        return;
+      }
+      sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      const { data: { session } } = await sb.auth.getSession();
+      session ? start(session) : ($("gate").style.display = "block");
+    })();
+
+    $("loginBtn").onclick = async () => {
+      const b = $("loginBtn"); b.disabled = true; b.textContent = "Signing in…";
+      const { data, error } = await sb.auth.signInWithPassword({ email: $("email").value.trim(), password: $("password").value });
+      b.disabled = false; b.textContent = "Sign in";
+      if (error) return note($("gateNote"), "That didn't work: " + error.message, "bad");
+      start(data.session);
+    };
+    ["email", "password"].forEach(id => $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("loginBtn").click() }));
+
+    async function start(session) {
+      $("gate").style.display = "none"; $("app").style.display = "grid";
+      const { data: mem } = await sb.from("memberships").select("org_id, organizations(name)").limit(1).maybeSingle();
+      if (!mem) { return note($("formNote"), "This account isn't a member of any organisation yet. Add a row to memberships linking your user to an org, then reload.", "bad"); }
+      orgId = mem.org_id;
+      $("who").innerHTML = `${mem.organizations?.name || ""} · ${session.user.email} · <button id="out">sign out</button>`;
+      $("out").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+      await loadRates(); await loadTrips();
+    }
+
+    // ---------- FX ----------
+    async function loadRates() {
+      const { data } = await sb.from("fx_rates").select("currency, rate_to_usd, effective_on").order("effective_on", { ascending: false });
+      (data || []).forEach(r => { if (!(r.currency in rates)) rates[r.currency] = r; });
+      const sel = $("currency"); sel.innerHTML = "";
+      const order = ["USD", "TZS", "ZMW", "CDF"];
+      Object.keys(rates).sort((a, b) => {
+        const ia = order.indexOf(a), ib = order.indexOf(b);
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+      }).forEach(c => sel.add(new Option(c, c)));
+      if (!sel.options.length) { note($("formNote"), "No exchange rates found. Add rows to fx_rates before recording costs.", "bad"); $("saveBtn").disabled = true; return; }
+      sel.value = rates["TZS"] ? "TZS" : sel.options[0].value;
+      updateStamp();
+    }
+    function updateStamp() {
+      const cur = $("currency").value, amt = parseFloat($("amount").value), r = rates[cur];
+      if (!r) { $("stampRate").textContent = "No rate on file for " + cur + "."; return; }
+      $("stampRate").innerHTML = `Rate on file <b>1 ${cur} = ${Number(r.rate_to_usd).toFixed(8)} USD</b> · dated ${r.effective_on} · frozen onto this entry`;
+      if (isNaN(amt) || amt <= 0) {
+        $("stampNative").textContent = "—"; $("stampUsd").textContent = "USD 0.00";
+        $("stampUsd").classList.add("idle"); $("stamp").classList.remove("live"); return;
+      }
+      $("stampNative").textContent = money(amt, cur);
+      $("stampUsd").textContent = money(amt * r.rate_to_usd);
+      $("stampUsd").classList.remove("idle"); $("stamp").classList.add("live");
+    }
+    $("amount").addEventListener("input", updateStamp);
+    $("currency").addEventListener("change", updateStamp);
+
+    // ---------- trips ----------
+    async function loadTrips() {
+      const { data } = await sb.from("trips")
+        .select("id, trip_no, status, customers(name), routes(name)")
+        .not("status", "in", "(closed,cancelled)")
+        .order("actual_load_date", { ascending: false, nullsFirst: false });
+      const sel = $("trip"); sel.innerHTML = "";
+      if (!data || !data.length) {
+        sel.add(new Option("No open trips", "")); $("saveBtn").disabled = true;
+        $("ledger").innerHTML = '<li class="empty">Create a trip before recording costs.</li>'; return;
+      }
+      data.forEach(t => sel.add(new Option(`${t.trip_no} — ${t.customers?.name || "?"} — ${t.routes?.name || "?"}`, t.id)));
+      currentTrip = sel.value; await refresh();
+    }
+    $("trip").addEventListener("change", async () => { currentTrip = $("trip").value; await refresh(); });
+
+    // ---------- tabs ----------
+    $("tabLedger").onclick = () => swap(true);
+    $("tabDocs").onclick = () => swap(false);
+    function swap(ledger) {
+      $("tabLedger").classList.toggle("on", ledger);
+      $("tabDocs").classList.toggle("on", !ledger);
+      $("viewLedger").style.display = ledger ? "block" : "none";
+      $("viewDocs").style.display = ledger ? "none" : "block";
+    }
+
+    // ---------- refresh ----------
+    async function refresh() {
+      if (!currentTrip) return;
+      const [{ data: m }, { data: costs }, { data: docs }] = await Promise.all([
+        sb.from("trip_margin").select("*").eq("trip_id", currentTrip).maybeSingle(),
+        sb.from("trip_costs").select("id,category,description,amount,currency,amount_usd,incurred_on,location,paid_by,receipt_ref,receipt_path").eq("trip_id", currentTrip).order("incurred_on", { ascending: false }),
+        sb.from("trip_documents").select("id,doc_type,doc_number,status,storage_path,issued_on,received_on").eq("trip_id", currentTrip).order("doc_type")
+      ]);
+
+      if (m) {
+        tripStatus = m.status;
+        const cls = Number(m.margin_usd) >= 0 ? "pos" : "neg";
+        $("summary").innerHTML = `
+      <div class="tripno">${m.trip_no} · ${label(m.status).toUpperCase()}</div>
+      <div class="cust">${m.customer}</div>
+      <div class="route">${m.route}${m.fleet_no ? " · " + m.fleet_no : ""}</div>
+      <div class="figs">
+        <div class="fig"><div class="k">Revenue</div><div class="v">${money(m.revenue_usd)}</div></div>
+        <div class="fig"><div class="k">Costs</div><div class="v">${money(m.cost_usd)}</div></div>
+        <div class="fig"><div class="k">Margin</div><div class="v ${cls}">${money(m.margin_usd)}${m.margin_pct != null ? ` <span style="font-size:11px">(${m.margin_pct}%)</span>` : ""}</div></div>
+      </div>`;
+      }
+
+      // ledger
+      const cl = costs || [];
+      $("ledgerCount").textContent = cl.length ? `(${cl.length})` : "";
+      $("ledger").innerHTML = cl.length ? cl.map(c => `
+    <li>
+      <div>
+        <div class="lg-cat">${label(c.category)}</div>
+        <div class="lg-desc">${c.description || "—"}</div>
+        <div class="lg-meta">${c.incurred_on}${c.location ? " · " + c.location : ""}${c.receipt_ref ? " · " + c.receipt_ref : ""}
+          ${c.receipt_path ? ` · <a href="#" data-open="${c.receipt_path}">receipt</a>` : ""}</div>
+      </div>
+      <div class="lg-amt">
+        <div class="lg-usd">${money(c.amount_usd)}</div>
+        <div class="lg-native">${c.currency !== "USD" ? money(c.amount, c.currency) : "&nbsp;"}</div>
+      </div>
+      <button class="lg-del" data-del="${c.id}" title="Remove">✕</button>
+    </li>`).join("") : '<li class="empty">No costs recorded on this trip yet.</li>';
+
+      // documents
+      const dl = docs || [];
+      const pending = dl.filter(d => d.status === "pending").length;
+      $("docBadge").innerHTML = pending ? `<span class="badge">${pending}</span>` : "";
+      $("docs").innerHTML = dl.length ? dl.map(d => `
+    <li>
+      <div>
+        <div class="doc-name">${label(d.doc_type)}</div>
+        <div class="doc-num">${d.doc_number || "no number"}${d.issued_on ? " · issued " + d.issued_on : ""}${d.received_on ? " · received " + d.received_on : ""}</div>
+        ${d.storage_path ? `<div class="lg-meta"><a href="#" data-open="${d.storage_path}">view file</a></div>` : `<div class="lg-meta">no file attached</div>`}
+      </div>
+      <span class="pill ${d.status}">${d.status}</span>
+    </li>`).join("") : '<li class="empty">No documents on this trip yet.</li>';
+
+      // POD call to action
+      const pod = dl.find(d => d.doc_type === "pod");
+      const podDone = pod && pod.status === "received";
+      $("podCall").innerHTML = (!podDone && ["delivered", "in_transit", "at_border"].includes(tripStatus)) ? `
+    <div class="pod-call">
+      <p>The delivery half of this invoice can't be raised until the POD is in hand.
+         Upload it below, then <b>mark it received</b> to close the trip's paperwork.</p>
+      <button class="primary settle" id="podBtn" ${pod && pod.storage_path ? "" : "disabled"}>Mark POD received</button>
+    </div>`: "";
+      if ($("podBtn")) $("podBtn").onclick = () => markPod(pod.id);
+
+      document.querySelectorAll("[data-open]").forEach(a => a.onclick = e => { e.preventDefault(); openFile(a.dataset.open) });
+      document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => removeCost(b.dataset.del));
+    }
+
+    // ---------- actions ----------
+    async function removeCost(id) {
+      if (!confirm("Remove this cost entry?")) return;
+      const { error } = await sb.from("trip_costs").delete().eq("id", id);
+      if (error) return note($("formNote"), "Couldn't remove it: " + error.message, "bad");
+      await refresh();
+    }
+
+    $("saveBtn").onclick = async () => {
+      const amt = parseFloat($("amount").value), cur = $("currency").value, r = rates[cur];
+      if (!currentTrip) return note($("formNote"), "Pick a trip first.", "bad");
+      if (isNaN(amt) || amt <= 0) return note($("formNote"), "Enter an amount greater than zero.", "bad");
+      if (!r) return note($("formNote"), "No exchange rate on file for " + cur + ".", "bad");
+
+      const b = $("saveBtn"); b.disabled = true; b.textContent = "Saving…";
+      try {
+        let path = null;
+        if (costFile) { b.textContent = "Uploading receipt…"; path = await upload(costFile, currentTrip); }
+        b.textContent = "Saving…";
+        const { error } = await sb.from("trip_costs").insert({
+          org_id: orgId, trip_id: currentTrip, category: $("category").value,
+          description: $("description").value.trim() || null,
+          amount: amt, currency: cur, fx_rate_to_usd: r.rate_to_usd,
+          incurred_on: $("incurred").value, location: $("location").value.trim() || null,
+          paid_by: $("paidBy").value, receipt_ref: $("receipt").value.trim() || null,
+          receipt_path: path
+        });
+        if (error) throw error;
+        note($("formNote"), `Recorded ${money(amt, cur)} → ${money(amt * r.rate_to_usd)}`, "good");
+        $("amount").value = ""; $("description").value = ""; $("receipt").value = "";
+        $("capClear").click(); updateStamp(); $("amount").focus();
+        await refresh();
+        setTimeout(() => note($("formNote"), ""), 4000);
+      } catch (e) {
+        note($("formNote"), "Couldn't save: " + (e.message || e), "bad");
+      } finally { b.disabled = false; b.textContent = "Save cost"; }
+    };
+
+    $("docSave").onclick = async () => {
+      if (!currentTrip) return;
+      if (!docFile) return note($("docNote"), "Choose a file to upload.", "bad");
+      const b = $("docSave"); b.disabled = true; b.textContent = "Uploading…";
+      try {
+        const path = await upload(docFile, currentTrip);
+        const type = $("docType").value;
+        const { data: existing } = await sb.from("trip_documents")
+          .select("id").eq("trip_id", currentTrip).eq("doc_type", type).maybeSingle();
+
+        const payload = {
+          storage_path: path,
+          doc_number: $("docNum").value.trim() || null,
+          status: "issued",
+          issued_on: new Date().toISOString().slice(0, 10)
+        };
+        const { error } = existing
+          ? await sb.from("trip_documents").update(payload).eq("id", existing.id)
+          : await sb.from("trip_documents").insert({ org_id: orgId, trip_id: currentTrip, doc_type: type, ...payload });
+        if (error) throw error;
+
+        note($("docNote"), "Uploaded.", "good");
+        $("docNum").value = ""; $("dcapClear").click();
+        await refresh();
+        setTimeout(() => note($("docNote"), ""), 4000);
+      } catch (e) {
+        note($("docNote"), "Upload failed: " + (e.message || e), "bad");
+      } finally { b.disabled = false; b.textContent = "Upload document"; }
+    };
+
+    // The money moment: POD in hand unlocks the delivery invoice.
+    async function markPod(docId) {
+      const b = $("podBtn"); b.disabled = true; b.textContent = "Recording…";
+      const today = new Date().toISOString().slice(0, 10);
+      const { error: e1 } = await sb.from("trip_documents")
+        .update({ status: "received", received_on: today }).eq("id", docId);
+      const { error: e2 } = await sb.from("trips")
+        .update({ status: "pod_received", pod_received_at: new Date().toISOString() }).eq("id", currentTrip);
+      if (e1 || e2) {
+        b.disabled = false; b.textContent = "Mark POD received";
+        return note($("docNote"), "Couldn't record it: " + ((e1 || e2).message), "bad");
+      }
+      note($("docNote"), "POD received. The delivery invoice can be raised.", "good");
+      await refresh();
+    }
+
+    ["amount", "description", "location", "receipt"].forEach(id =>
+      $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("saveBtn").click() }));
+  </script>
+</body>
+
+</html>

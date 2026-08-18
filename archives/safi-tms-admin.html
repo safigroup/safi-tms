@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Safi TMS — Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --ground: #DCE0D9;
+      --card: #F7F8F4;
+      --ink: #141E19;
+      --ink-soft: #5A655E;
+      --rule: #B4BBB0;
+      --rule-soft: #CFD4CA;
+      --stamp: #3D2A6B;
+      --settled: #0B6B4F;
+      --alert: #8C2F1E;
+      --waiting: #8A6A12;
+      --mono: 'IBM Plex Mono', ui-monospace, monospace;
+      --sans: 'IBM Plex Sans', system-ui, sans-serif;
+      --cond: 'Archivo Narrow', var(--sans);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    body {
+      background: var(--ground);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased
+    }
+
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px 18px 64px
+    }
+
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 10px;
+      margin-bottom: 16px
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 12px
+    }
+
+    .brand h1 {
+      font-family: var(--cond);
+      font-weight: 700;
+      font-size: 26px;
+      letter-spacing: .06em;
+      text-transform: uppercase
+    }
+
+    .brand .sub {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-soft);
+      letter-spacing: .14em;
+      text-transform: uppercase
+    }
+
+    .who {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--ink-soft);
+      text-align: right
+    }
+
+    .who button {
+      background: none;
+      border: none;
+      color: var(--stamp);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-decoration: underline;
+      padding: 0
+    }
+
+    nav {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-bottom: 18px
+    }
+
+    nav button {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 7px 12px;
+      border: 1px solid var(--rule);
+      background: var(--card);
+      cursor: pointer;
+      border-radius: 2px;
+      color: var(--ink-soft)
+    }
+
+    nav button.on {
+      background: var(--stamp);
+      border-color: var(--stamp);
+      color: #fff
+    }
+
+    nav .n {
+      opacity: .6;
+      margin-left: 4px
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      gap: 20px;
+      align-items: start
+    }
+
+    @media(max-width:960px) {
+      .grid {
+        grid-template-columns: 1fr
+      }
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 2px
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--rule)
+    }
+
+    .panel-head h2 {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: .16em;
+      text-transform: uppercase
+    }
+
+    .panel-body {
+      padding: 16px
+    }
+
+    ul.list {
+      list-style: none;
+      max-height: 620px;
+      overflow-y: auto
+    }
+
+    ul.list li {
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--rule-soft);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      cursor: pointer;
+      align-items: center
+    }
+
+    ul.list li:hover {
+      background: #F2F3EE
+    }
+
+    ul.list li.sel {
+      background: #EFECF5;
+      box-shadow: inset 3px 0 0 var(--stamp)
+    }
+
+    ul.list li.off {
+      opacity: .5
+    }
+
+    .r-title {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 15.5px
+    }
+
+    .r-sub {
+      font-size: 12.5px;
+      color: var(--ink-soft);
+      margin-top: 1px
+    }
+
+    .r-mono {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--ink-soft);
+      margin-top: 2px
+    }
+
+    .r-right {
+      text-align: right;
+      white-space: nowrap;
+      font-family: var(--mono);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums
+    }
+
+    .pill {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border: 1px solid;
+      border-radius: 2px
+    }
+
+    .pill.grey {
+      color: var(--ink-soft);
+      border-color: var(--rule)
+    }
+
+    .pill.good {
+      color: var(--settled);
+      border-color: var(--settled);
+      background: #EDF4F0
+    }
+
+    .pill.warn {
+      color: var(--waiting);
+      border-color: var(--waiting);
+      background: #FAF6EA
+    }
+
+    .pill.bad {
+      color: var(--alert);
+      border-color: var(--alert);
+      background: #FAEFEC
+    }
+
+    .field {
+      margin-bottom: 13px
+    }
+
+    .field label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin-bottom: 5px
+    }
+
+    .field .hint {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-soft);
+      margin-top: 4px
+    }
+
+    input,
+    select {
+      width: 100%;
+      font-family: var(--sans);
+      font-size: 15px;
+      color: var(--ink);
+      background: #fff;
+      border: 1px solid var(--rule);
+      border-radius: 2px;
+      padding: 9px 11px
+    }
+
+    input[type=number] {
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums
+    }
+
+    input:focus,
+    select:focus {
+      outline: 2px solid var(--stamp);
+      outline-offset: -1px;
+      border-color: var(--stamp)
+    }
+
+    .row {
+      display: grid;
+      gap: 11px;
+      grid-template-columns: 1fr 1fr
+    }
+
+    @media(max-width:520px) {
+      .row {
+        grid-template-columns: 1fr
+      }
+    }
+
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 13px
+    }
+
+    .check input {
+      width: auto
+    }
+
+    .check label {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin: 0
+    }
+
+    button.primary {
+      width: 100%;
+      background: var(--stamp);
+      color: #fff;
+      border: none;
+      border-radius: 2px;
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 13.5px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      padding: 12px;
+      cursor: pointer
+    }
+
+    button.primary:hover {
+      background: #32215A
+    }
+
+    button.primary:disabled {
+      background: var(--rule);
+      cursor: not-allowed
+    }
+
+    button.ghost {
+      width: 100%;
+      background: none;
+      border: 1px solid var(--rule);
+      color: var(--ink-soft);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 9px;
+      cursor: pointer;
+      margin-top: 8px;
+      border-radius: 2px
+    }
+
+    button.ghost:hover {
+      border-color: var(--ink);
+      color: var(--ink)
+    }
+
+    button.ghost.danger:hover {
+      border-color: var(--alert);
+      color: var(--alert)
+    }
+
+    .act {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 11.5px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 7px 11px;
+      border: 1px solid var(--stamp);
+      background: none;
+      color: var(--stamp);
+      cursor: pointer;
+      border-radius: 2px
+    }
+
+    .act:hover {
+      background: var(--stamp);
+      color: #fff
+    }
+
+    /* FX conversion mirror */
+    .mirror {
+      border: 1px dashed var(--rule);
+      border-left: 3px solid var(--stamp);
+      background: linear-gradient(180deg, #fff, #F2F3EE);
+      padding: 12px 14px;
+      margin-bottom: 14px
+    }
+
+    .mirror.live {
+      border-left-color: var(--settled)
+    }
+
+    .mirror .big {
+      font-family: var(--mono);
+      font-size: 17px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums
+    }
+
+    .mirror .big.on {
+      color: var(--settled)
+    }
+
+    .mirror .small {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-soft);
+      margin-top: 5px;
+      padding-top: 5px;
+      border-top: 1px solid var(--rule-soft)
+    }
+
+    .empty {
+      padding: 38px 18px;
+      text-align: center;
+      color: var(--ink-soft);
+      font-size: 13.5px
+    }
+
+    .note {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      padding: 10px 14px;
+      border-left: 3px solid var(--stamp);
+      background: #F2F3EE;
+      margin-bottom: 14px
+    }
+
+    .note.bad {
+      border-left-color: var(--alert);
+      color: var(--alert)
+    }
+
+    .note.good {
+      border-left-color: var(--settled);
+      color: var(--settled)
+    }
+
+    .note.warn {
+      border-left-color: var(--waiting);
+      color: var(--waiting)
+    }
+
+    .gate {
+      max-width: 400px;
+      margin: 70px auto
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <h1>Admin</h1><span class="sub">Safi TMS</span>
+      </div>
+      <div class="who" id="who"></div>
+    </header>
+
+    <div id="gate" class="gate" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2 id="gateTitle">Sign in</h2>
+        </div>
+        <div class="panel-body">
+          <div id="gateNote"></div>
+          <div id="loginForm">
+            <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="username">
+            </div>
+            <div class="field"><label for="password">Password</label><input id="password" type="password"
+                autocomplete="current-password"></div>
+            <button class="primary" id="loginBtn">Sign in</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="app" style="display:none">
+      <nav id="nav"></nav>
+      <div id="staleWarn"></div>
+      <div class="grid">
+        <div class="panel">
+          <div class="panel-head">
+            <h2 id="listTitle"></h2><button class="act" id="newBtn">+ New</button>
+          </div>
+          <ul class="list" id="list"></ul>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <h2 id="formTitle">Detail</h2>
+          </div>
+          <div class="panel-body" id="form">
+            <div class="empty">Pick a record, or add a new one.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =====================================================================
+    // CONFIG — Dashboard > Settings > API Keys. Use the PUBLISHABLE key.
+    // =====================================================================
+    const SUPABASE_URL = "https://shvvpcmcezkfzdvelhpl.supabase.co/";
+    const SUPABASE_KEY = "sb_publishable_mwaEiMwvj8E05ZgDW9Lmhw_yuTZ5fK7";
+    // =====================================================================
+
+    const $ = id => document.getElementById(id);
+    const configured = !SUPABASE_URL.includes("REPLACE") && !SUPABASE_KEY.includes("REPLACE");
+    let sb = null, orgId = null, view = "fx", sel = null, data = {}, lookups = {};
+
+    const esc = s => String(s ?? "").replace(/[&<>"]/g, x => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[x]));
+    const num = n => Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 2 });
+    function note(el, msg, kind) { if (el) el.innerHTML = msg ? `<div class="note ${kind || ""}">${msg}</div>` : ""; }
+    const today = () => new Date().toISOString().slice(0, 10);
+
+    // ---------------------------------------------------------------------
+    // Entity definitions. Forms are generated from these, so adding a field
+    // means adding one line here — not editing markup in three places.
+    // ---------------------------------------------------------------------
+    const ENTITIES = {
+      fx: {
+        label: "Exchange rates", table: "fx_rates", order: ["effective_on", false], custom: true
+      },
+      customers: {
+        label: "Customers", table: "customers", order: ["name", true],
+        fields: [
+          { k: "name", label: "Name", type: "text", req: true },
+          { k: "country", label: "Country", type: "select", opts: ["ZM", "TZ", "CD", "RW", "Other"] },
+          { k: "tpin", label: "Tax ID / TPIN", type: "text" },
+          { k: "contact_name", label: "Contact", type: "text", half: true },
+          { k: "contact_phone", label: "Phone", type: "text", half: true },
+          { k: "contact_email", label: "Email", type: "text" },
+          {
+            k: "payment_terms", label: "Payment terms", type: "text",
+            hint: "Printed on their invoices.", def: "50% on loading, 50% on delivery. USD only."
+          },
+          {
+            k: "payment_days", label: "Days to pay", type: "number", def: 0,
+            hint: "0 means due on presentation."
+          },
+          { k: "is_active", label: "Active", type: "bool", def: true }
+        ],
+        row: r => ({
+          title: r.name, sub: [r.country, r.tpin].filter(Boolean).join(" · "),
+          mono: r.contact_email || r.contact_phone || "",
+          right: r.payment_days ? `${r.payment_days}d` : "on presentation", off: !r.is_active
+        })
+      },
+      trucks: {
+        label: "Trucks", table: "trucks", order: ["fleet_no", true],
+        fields: [
+          { k: "fleet_no", label: "Fleet number", type: "text", req: true, half: true },
+          { k: "make_model", label: "Make / model", type: "text", half: true, def: "SHACMAN X3000" },
+          { k: "horse_reg", label: "Horse registration", type: "text", req: true, half: true },
+          { k: "trailer_reg", label: "Trailer registration", type: "text", half: true },
+          {
+            k: "tank_capacity_l", label: "Tank capacity (litres)", type: "number",
+            hint: "Used later for fuel reconciliation."
+          },
+          { k: "is_active", label: "Active", type: "bool", def: true }
+        ],
+        row: r => ({
+          title: r.fleet_no, sub: r.make_model || "",
+          mono: [r.horse_reg, r.trailer_reg].filter(Boolean).join(" / "),
+          right: r.tank_capacity_l ? r.tank_capacity_l + " L" : "", off: !r.is_active
+        })
+      },
+      drivers: {
+        label: "Drivers", table: "drivers", order: ["full_name", true],
+        fields: [
+          { k: "full_name", label: "Full name", type: "text", req: true },
+          { k: "phone", label: "Phone", type: "text", half: true },
+          { k: "nationality", label: "Nationality", type: "select", opts: ["TZ", "ZM", "CD", "RW", "Other"], half: true },
+          { k: "licence_no", label: "Licence number", type: "text", half: true },
+          { k: "passport_no", label: "Passport number", type: "text", half: true },
+          { k: "is_active", label: "Active", type: "bool", def: true }
+        ],
+        row: r => ({
+          title: r.full_name, sub: r.phone || "",
+          mono: [r.licence_no && "Lic " + r.licence_no, r.passport_no && "PP " + r.passport_no].filter(Boolean).join(" · "),
+          right: r.nationality || "", off: !r.is_active
+        })
+      },
+      routes: {
+        label: "Routes", table: "routes", order: ["name", true],
+        fields: [
+          { k: "name", label: "Route name", type: "text", req: true },
+          { k: "origin", label: "Origin", type: "text", req: true, half: true },
+          { k: "destination", label: "Destination", type: "text", req: true, half: true },
+          { k: "distance_km", label: "Distance (km)", type: "number", half: true },
+          {
+            k: "target_days", label: "Target days", type: "number", half: true,
+            hint: "Trips past this show as late on the board."
+          },
+          {
+            k: "borders", label: "Borders", type: "tags",
+            hint: "Comma separated, in crossing order. e.g. Tunduma/Nakonde, Kasumbalesa"
+          }
+        ],
+        row: r => ({
+          title: r.name, sub: (r.borders || []).join(" → ") || "no borders listed",
+          mono: `${r.origin} → ${r.destination}`,
+          right: [r.distance_km && r.distance_km + " km", r.target_days && r.target_days + "d"].filter(Boolean).join(" · ")
+        })
+      },
+      rate_cards: {
+        label: "Rate cards", table: "rate_cards", order: ["valid_from", false],
+        fields: [
+          { k: "customer_id", label: "Customer", type: "fk", from: "customers", lab: "name", req: true },
+          { k: "route_id", label: "Route", type: "fk", from: "routes", lab: "name", req: true },
+          { k: "commodity", label: "Commodity", type: "text" },
+          { k: "rate_amount", label: "Rate", type: "number", req: true, half: true },
+          { k: "rate_currency", label: "Currency", type: "select", opts: ["USD"], def: "USD", half: true },
+          { k: "rate_basis", label: "Basis", type: "select", opts: ["per_trip", "per_tonne"], def: "per_trip", half: true },
+          { k: "valid_from", label: "Valid from", type: "date", def: today, half: true },
+          { k: "valid_to", label: "Valid to", type: "date", hint: "Leave blank while it's the current rate." }
+        ],
+        row: r => ({
+          title: (lookups.customers?.find(c => c.id === r.customer_id)?.name) || "—",
+          sub: (lookups.routes?.find(x => x.id === r.route_id)?.name) || "—",
+          mono: [r.commodity, r.rate_basis?.replace("_", " ")].filter(Boolean).join(" · "),
+          right: `${r.rate_currency} ${num(r.rate_amount)}`,
+          tag: r.valid_to && r.valid_to < today() ? ["grey", "expired"] : ["good", "current"]
+        })
+      }
+    };
+
+    // ---------- boot ----------
+    (async function () {
+      if (!configured) {
+        $("gate").style.display = "block"; $("gateTitle").textContent = "Not configured";
+        $("loginForm").style.display = "none";
+        note($("gateNote"), "Replace SUPABASE_URL and SUPABASE_KEY near the bottom of the script, then reload.", "bad");
+        return;
+      }
+      sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      const { data: { session } } = await sb.auth.getSession();
+      session ? start(session) : ($("gate").style.display = "block");
+    })();
+
+    $("loginBtn").onclick = async () => {
+      const b = $("loginBtn"); b.disabled = true; b.textContent = "Signing in…";
+      const { data: d, error } = await sb.auth.signInWithPassword({ email: $("email").value.trim(), password: $("password").value });
+      b.disabled = false; b.textContent = "Sign in";
+      if (error) return note($("gateNote"), "That didn't work: " + error.message, "bad");
+      start(d.session);
+    };
+    ["email", "password"].forEach(id => $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("loginBtn").click() }));
+
+    async function start(session) {
+      $("gate").style.display = "none"; $("app").style.display = "block";
+      const { data: mem } = await sb.from("memberships").select("org_id, role, organizations(name)").limit(1).maybeSingle();
+      if (!mem) { $("app").innerHTML = '<div class="panel"><div class="panel-body"><div class="note bad">This account isn\'t a member of any organisation yet.</div></div></div>'; return; }
+      orgId = mem.org_id;
+      $("who").innerHTML = `${esc(mem.organizations?.name || "")} · ${esc(session.user.email)} · ${esc(mem.role)} · <button id="out">sign out</button>`;
+      $("out").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+      await loadAll();
+    }
+
+    async function loadAll() {
+      const keys = Object.keys(ENTITIES);
+      const res = await Promise.all(keys.map(k => {
+        const e = ENTITIES[k];
+        return sb.from(e.table).select("*").order(e.order[0], { ascending: e.order[1] });
+      }));
+      keys.forEach((k, i) => data[k] = res[i].data || []);
+      lookups.customers = data.customers; lookups.routes = data.routes;
+      renderNav(); renderStale(); render();
+    }
+
+    function renderNav() {
+      $("nav").innerHTML = Object.entries(ENTITIES).map(([k, e]) =>
+        `<button data-v="${k}" class="${view === k ? "on" : ""}">${e.label}<span class="n">${(data[k] || []).length}</span></button>`).join("");
+      document.querySelectorAll("[data-v]").forEach(b => b.onclick = () => { view = b.dataset.v; sel = null; renderNav(); render(); clearForm() });
+    }
+
+    // The FX rates are the one thing here that silently rots. Say so.
+    function renderStale() {
+      const latest = {};
+      (data.fx || []).forEach(r => { if (!latest[r.currency] || r.effective_on > latest[r.currency]) latest[r.currency] = r.effective_on; });
+      const old = Object.entries(latest).filter(([c, d]) => {
+        if (c === "USD") return false;
+        return (new Date(today()) - new Date(d)) / 86400000 > 14;
+      });
+      $("staleWarn").innerHTML = old.length
+        ? `<div class="note warn">Exchange rates for ${old.map(([c]) => c).join(", ")} are more than two weeks old. Every cost entered today is being converted at those rates.</div>`
+        : "";
+    }
+
+    // ---------- list ----------
+    function render() {
+      const e = ENTITIES[view];
+      $("listTitle").textContent = e.label;
+      if (view === "fx") return renderFx();
+      const rows = data[view] || [];
+      $("list").innerHTML = rows.length ? rows.map(r => {
+        const v = e.row(r);
+        return `<li data-id="${r.id}" class="${sel === r.id ? "sel" : ""} ${v.off ? "off" : ""}">
+      <div>
+        <div class="r-title">${esc(v.title)}</div>
+        ${v.sub ? `<div class="r-sub">${esc(v.sub)}</div>` : ""}
+        ${v.mono ? `<div class="r-mono">${esc(v.mono)}</div>` : ""}
+        ${v.off ? `<div style="margin-top:5px"><span class="pill grey">inactive</span></div>` :
+            v.tag ? `<div style="margin-top:5px"><span class="pill ${v.tag[0]}">${v.tag[1]}</span></div>` : ""}
+      </div>
+      <div class="r-right">${esc(v.right || "")}</div>
+    </li>`;
+      }).join("") : `<li class="empty">No ${e.label.toLowerCase()} yet.</li>`;
+      document.querySelectorAll("[data-id]").forEach(li => li.onclick = () => { sel = li.dataset.id; render(); showForm(sel) });
+    }
+
+    function renderFx() {
+      const rows = data.fx || [];
+      const latest = {};
+      rows.forEach(r => { if (!latest[r.currency] || r.effective_on > latest[r.currency].effective_on) latest[r.currency] = r; });
+      $("list").innerHTML = rows.length ? rows.map(r => {
+        const isLatest = latest[r.currency]?.id === r.id;
+        const perUsd = Number(r.rate_to_usd) > 0 ? 1 / Number(r.rate_to_usd) : 0;
+        return `<li>
+      <div>
+        <div class="r-title">${esc(r.currency)}</div>
+        <div class="r-mono">1 ${esc(r.currency)} = ${Number(r.rate_to_usd).toFixed(8)} USD</div>
+        <div style="margin-top:5px">
+          ${isLatest ? '<span class="pill good">in use</span>' : '<span class="pill grey">superseded</span>'}
+        </div>
+      </div>
+      <div class="r-right">${r.currency === "USD" ? "—" : num(perUsd) + " / USD"}<br>
+        <span style="font-size:10.5px;color:var(--ink-soft)">${r.effective_on}</span></div>
+    </li>`;
+      }).join("") : '<li class="empty">No rates yet.</li>';
+    }
+
+    // ---------- form ----------
+    function clearForm() { $("form").innerHTML = '<div class="empty">Pick a record, or add a new one.</div>'; $("formTitle").textContent = "Detail"; }
+
+    $("newBtn").onclick = () => { sel = null; render(); showForm(null); };
+
+    function showForm(id) {
+      if (view === "fx") return showFxForm();
+      const e = ENTITIES[view];
+      const r = id ? (data[view] || []).find(x => x.id === id) : null;
+      $("formTitle").textContent = r ? "Edit" : "New " + e.label.toLowerCase().replace(/s$/, "");
+
+      const val = f => {
+        if (r) return r[f.k];
+        return typeof f.def === "function" ? f.def() : f.def;
+      };
+      const input = f => {
+        const v = val(f);
+        if (f.type === "bool") return `<div class="check"><input type="checkbox" id="f_${f.k}" ${v ? "checked" : ""}><label for="f_${f.k}">${f.label}</label></div>`;
+        let ctl;
+        if (f.type === "select")
+          ctl = `<select id="f_${f.k}">${f.opts.map(o => `<option ${v === o ? "selected" : ""}>${o}</option>`).join("")}</select>`;
+        else if (f.type === "fk") {
+          const src = (data[f.from] || []).filter(x => x.is_active !== false);
+          ctl = `<select id="f_${f.k}"><option value="">—</option>${src.map(o => `<option value="${o.id}" ${v === o.id ? "selected" : ""}>${esc(o[f.lab])}</option>`).join("")}</select>`;
+        }
+        else if (f.type === "tags")
+          ctl = `<input id="f_${f.k}" type="text" value="${esc((v || []).join(", "))}">`;
+        else
+          ctl = `<input id="f_${f.k}" type="${f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}" ${f.type === "number" ? 'step="any"' : ""} value="${esc(v ?? "")}">`;
+        return `<div class="field"><label for="f_${f.k}">${f.label}${f.req ? " *" : ""}</label>${ctl}${f.hint ? `<div class="hint">${f.hint}</div>` : ""}</div>`;
+      };
+
+      // Pair adjacent half-width fields into rows.
+      let html = "", i = 0;
+      while (i < e.fields.length) {
+        const f = e.fields[i];
+        if (f.half && e.fields[i + 1]?.half) { html += `<div class="row">${input(f)}${input(e.fields[i + 1])}</div>`; i += 2; }
+        else { html += input(f); i++; }
+      }
+
+      $("form").innerHTML = `<div id="fNote"></div>${html}
+    <button class="primary" id="fSave">${r ? "Save changes" : "Create"}</button>
+    ${r && e.fields.some(f => f.k === "is_active") ? `<button class="ghost danger" id="fToggle">${r.is_active ? "Deactivate" : "Reactivate"}</button>` : ""}
+    <button class="ghost" id="fCancel">Cancel</button>`;
+
+      $("fSave").onclick = () => save(id);
+      $("fCancel").onclick = () => { sel = null; render(); clearForm(); };
+      if ($("fToggle")) $("fToggle").onclick = () => toggle(id, !r.is_active);
+    }
+
+    async function save(id) {
+      const e = ENTITIES[view], payload = {};
+      for (const f of e.fields) {
+        const el = $("f_" + f.k); if (!el) continue;
+        let v;
+        if (f.type === "bool") v = el.checked;
+        else if (f.type === "number") v = el.value === "" ? null : Number(el.value);
+        else if (f.type === "tags") v = el.value.split(",").map(s => s.trim()).filter(Boolean);
+        else v = el.value.trim() === "" ? null : el.value.trim();
+        if (f.req && (v === null || v === "")) return note($("fNote"), `${f.label} is required.`, "bad");
+        payload[f.k] = v;
+      }
+      const b = $("fSave"); b.disabled = true; b.textContent = "Saving…";
+      const { error } = id
+        ? await sb.from(e.table).update(payload).eq("id", id)
+        : await sb.from(e.table).insert({ org_id: orgId, ...payload });
+      b.disabled = false; b.textContent = id ? "Save changes" : "Create";
+      if (error) return note($("fNote"), error.message, "bad");
+      await loadAll(); clearForm(); sel = null; render();
+    }
+
+    async function toggle(id, active) {
+      const e = ENTITIES[view];
+      const { error } = await sb.from(e.table).update({ is_active: active }).eq("id", id);
+      if (error) return note($("fNote"), error.message, "bad");
+      await loadAll(); showForm(id);
+    }
+
+    // ---------- FX: enter it the way people say it ----------
+    // Nobody quotes "1 TZS = 0.00038 USD". They say "2,600 to the dollar".
+    // Take it that way, invert it here, and show both before saving.
+    function showFxForm() {
+      $("formTitle").textContent = "Add a rate";
+      const cur = ["TZS", "ZMW", "CDF", "USD", "RWF", "ZAR"];
+      $("form").innerHTML = `
+    <div id="fNote"></div>
+    <div class="field"><label for="xCur">Currency</label>
+      <select id="xCur">${cur.map(c => `<option>${c}</option>`).join("")}</select></div>
+    <div class="field"><label for="xPer">Units per 1 USD</label>
+      <input id="xPer" type="number" step="any" min="0" placeholder="2600">
+      <div class="hint">Enter it the way it's quoted — how many of this currency buy one dollar.</div></div>
+    <div class="mirror" id="xMirror">
+      <div class="big" id="xBig">—</div>
+      <div class="small" id="xSmall">This is what gets stored and frozen onto every cost entered at this rate.</div>
+    </div>
+    <div class="field"><label for="xDate">Effective from</label><input id="xDate" type="date" value="${today()}"></div>
+    <div class="field"><label for="xSrc">Source</label><input id="xSrc" type="text" placeholder="BoZ / bureau / bank"></div>
+    <button class="primary" id="xSave">Add rate</button>
+    <div class="hint" style="margin-top:9px">Rates are never edited — a new row supersedes the old one, and past costs keep the rate they were entered at.</div>`;
+
+      const upd = () => {
+        const per = parseFloat($("xPer").value), c = $("xCur").value;
+        if (isNaN(per) || per <= 0) {
+          $("xBig").textContent = "—"; $("xBig").classList.remove("on"); $("xMirror").classList.remove("live"); return;
+        }
+        $("xBig").textContent = `1 ${c} = ${(1 / per).toFixed(8)} USD`;
+        $("xBig").classList.add("on"); $("xMirror").classList.add("live");
+        $("xSmall").textContent = `${num(per)} ${c} to the dollar. A ${num(10000)} ${c} border fee would post as USD ${(10000 / per).toFixed(2)}.`;
+      };
+      $("xPer").oninput = upd; $("xCur").onchange = upd;
+      $("xCur").onchange = () => { if ($("xCur").value === "USD") $("xPer").value = 1; upd(); };
+      $("xSave").onclick = saveFx;
+    }
+
+    async function saveFx() {
+      const per = parseFloat($("xPer").value), c = $("xCur").value, d = $("xDate").value;
+      if (isNaN(per) || per <= 0) return note($("fNote"), "Enter how many units buy one dollar.", "bad");
+      if (!d) return note($("fNote"), "Pick an effective date.", "bad");
+      const b = $("xSave"); b.disabled = true; b.textContent = "Saving…";
+      const { error } = await sb.from("fx_rates").upsert({
+        org_id: orgId, currency: c, rate_to_usd: 1 / per, effective_on: d,
+        source: $("xSrc").value.trim() || null
+      }, { onConflict: "org_id,currency,effective_on" });
+      b.disabled = false; b.textContent = "Add rate";
+      if (error) return note($("fNote"), error.message, "bad");
+      note($("fNote"), `${c} set at ${num(per)} to the dollar.`, "good");
+      await loadAll();
+      $("xPer").value = ""; showFxForm();
+    }
+  </script>
+</body>
+
+</html>

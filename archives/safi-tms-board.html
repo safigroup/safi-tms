@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Safi TMS — Dispatch Board</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --ground: #DCE0D9;
+      --card: #F7F8F4;
+      --ink: #141E19;
+      --ink-soft: #5A655E;
+      --rule: #B4BBB0;
+      --rule-soft: #CFD4CA;
+      --stamp: #3D2A6B;
+      --settled: #0B6B4F;
+      --alert: #8C2F1E;
+      --waiting: #8A6A12;
+      --mono: 'IBM Plex Mono', ui-monospace, monospace;
+      --sans: 'IBM Plex Sans', system-ui, sans-serif;
+      --cond: 'Archivo Narrow', var(--sans);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    body {
+      background: var(--ground);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased
+    }
+
+    .wrap {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 20px 18px 64px
+    }
+
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 10px;
+      margin-bottom: 18px
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 12px
+    }
+
+    .brand h1 {
+      font-family: var(--cond);
+      font-weight: 700;
+      font-size: 26px;
+      letter-spacing: .06em;
+      text-transform: uppercase
+    }
+
+    .brand .sub {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-soft);
+      letter-spacing: .14em;
+      text-transform: uppercase
+    }
+
+    .who {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--ink-soft);
+      text-align: right
+    }
+
+    .who button {
+      background: none;
+      border: none;
+      color: var(--stamp);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-decoration: underline;
+      padding: 0
+    }
+
+    /* fleet strip — the one-glance answer */
+    .strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--rule);
+      border: 1px solid var(--rule);
+      margin-bottom: 18px
+    }
+
+    .strip .cell {
+      background: var(--card);
+      padding: 12px 14px
+    }
+
+    .strip .k {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--ink-soft)
+    }
+
+    .strip .v {
+      font-family: var(--mono);
+      font-size: 21px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      margin-top: 3px
+    }
+
+    .strip .v.warn {
+      color: var(--waiting)
+    }
+
+    .strip .v.pos {
+      color: var(--settled)
+    }
+
+    .strip .n {
+      font-size: 11px;
+      color: var(--ink-soft);
+      margin-top: 1px
+    }
+
+    @media(max-width:760px) {
+      .strip {
+        grid-template-columns: 1fr 1fr
+      }
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      gap: 20px;
+      align-items: start
+    }
+
+    @media(max-width:1000px) {
+      .grid {
+        grid-template-columns: 1fr
+      }
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 2px
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--rule)
+    }
+
+    .panel-head h2 {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: .16em;
+      text-transform: uppercase
+    }
+
+    .panel-body {
+      padding: 16px
+    }
+
+    /* filters */
+    .chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--rule);
+      background: #F2F3EE
+    }
+
+    .chip {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 5px 10px;
+      border: 1px solid var(--rule);
+      background: #fff;
+      cursor: pointer;
+      border-radius: 2px;
+      color: var(--ink-soft)
+    }
+
+    .chip.on {
+      background: var(--stamp);
+      border-color: var(--stamp);
+      color: #fff
+    }
+
+    .chip .c {
+      opacity: .65;
+      margin-left: 4px
+    }
+
+    /* trip rows */
+    ul.trips {
+      list-style: none;
+      max-height: 620px;
+      overflow-y: auto
+    }
+
+    ul.trips li {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--rule-soft);
+      cursor: pointer;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px
+    }
+
+    ul.trips li:hover {
+      background: #F2F3EE
+    }
+
+    ul.trips li.sel {
+      background: #EFECF5;
+      box-shadow: inset 3px 0 0 var(--stamp)
+    }
+
+    .t-no {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .08em;
+      color: var(--ink-soft)
+    }
+
+    .t-cust {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 16px;
+      margin-top: 1px
+    }
+
+    .t-line {
+      font-size: 12.5px;
+      color: var(--ink-soft);
+      margin-top: 1px
+    }
+
+    .t-tags {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-top: 6px
+    }
+
+    .t-right {
+      text-align: right;
+      white-space: nowrap
+    }
+
+    .t-margin {
+      font-family: var(--mono);
+      font-size: 15px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums
+    }
+
+    .t-margin.pos {
+      color: var(--settled)
+    }
+
+    .t-margin.neg {
+      color: var(--alert)
+    }
+
+    .t-pct {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-soft)
+    }
+
+    .pill {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border: 1px solid;
+      border-radius: 2px
+    }
+
+    .pill.grey {
+      color: var(--ink-soft);
+      border-color: var(--rule)
+    }
+
+    .pill.violet {
+      color: var(--stamp);
+      border-color: var(--stamp)
+    }
+
+    .pill.warn {
+      color: var(--waiting);
+      border-color: var(--waiting);
+      background: #FAF6EA
+    }
+
+    .pill.good {
+      color: var(--settled);
+      border-color: var(--settled);
+      background: #EDF4F0
+    }
+
+    .pill.bad {
+      color: var(--alert);
+      border-color: var(--alert);
+      background: #FAEFEC
+    }
+
+    /* detail */
+    .d-head {
+      padding: 16px;
+      background: #F2F3EE;
+      border-bottom: 1px solid var(--rule)
+    }
+
+    .d-figs {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px
+    }
+
+    .d-figs .k {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--ink-soft)
+    }
+
+    .d-figs .v {
+      font-family: var(--mono);
+      font-size: 15px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      margin-top: 2px
+    }
+
+    .d-figs .v.pos {
+      color: var(--settled)
+    }
+
+    .d-figs .v.neg {
+      color: var(--alert)
+    }
+
+    .d-sec {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--rule-soft)
+    }
+
+    .d-sec h3 {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin-bottom: 9px
+    }
+
+    .d-kv {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 13px;
+      padding: 3px 0
+    }
+
+    .d-kv span:first-child {
+      color: var(--ink-soft)
+    }
+
+    .d-kv span:last-child {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      text-align: right
+    }
+
+    .acts {
+      display: flex;
+      gap: 7px;
+      flex-wrap: wrap
+    }
+
+    .act {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 9px 12px;
+      border: 1px solid var(--stamp);
+      background: none;
+      color: var(--stamp);
+      cursor: pointer;
+      border-radius: 2px
+    }
+
+    .act:hover {
+      background: var(--stamp);
+      color: #fff
+    }
+
+    .act.go {
+      border-color: var(--settled);
+      color: var(--settled)
+    }
+
+    .act.go:hover {
+      background: var(--settled);
+      color: #fff
+    }
+
+    .act:disabled {
+      border-color: var(--rule);
+      color: var(--rule);
+      cursor: not-allowed
+    }
+
+    .field {
+      margin-bottom: 13px
+    }
+
+    .field label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin-bottom: 5px
+    }
+
+    input,
+    select {
+      width: 100%;
+      font-family: var(--sans);
+      font-size: 15px;
+      color: var(--ink);
+      background: #fff;
+      border: 1px solid var(--rule);
+      border-radius: 2px;
+      padding: 9px 11px
+    }
+
+    input[type=number] {
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums
+    }
+
+    input:focus,
+    select:focus {
+      outline: 2px solid var(--stamp);
+      outline-offset: -1px;
+      border-color: var(--stamp)
+    }
+
+    .row {
+      display: grid;
+      gap: 11px;
+      grid-template-columns: 1fr 1fr
+    }
+
+    @media(max-width:520px) {
+      .row {
+        grid-template-columns: 1fr
+      }
+    }
+
+    button.primary {
+      width: 100%;
+      background: var(--stamp);
+      color: #fff;
+      border: none;
+      border-radius: 2px;
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      padding: 13px;
+      cursor: pointer
+    }
+
+    button.primary:hover {
+      background: #32215A
+    }
+
+    button.primary:disabled {
+      background: var(--rule);
+      cursor: not-allowed
+    }
+
+    button.ghost {
+      width: 100%;
+      background: none;
+      border: 1px solid var(--rule);
+      color: var(--ink-soft);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 9px;
+      cursor: pointer;
+      margin-top: 8px;
+      border-radius: 2px
+    }
+
+    button.ghost:hover {
+      border-color: var(--ink);
+      color: var(--ink)
+    }
+
+    .rate-hint {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--settled);
+      margin-top: -8px;
+      margin-bottom: 13px
+    }
+
+    .empty {
+      padding: 40px 18px;
+      text-align: center;
+      color: var(--ink-soft);
+      font-size: 13.5px
+    }
+
+    .note {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      padding: 10px 14px;
+      border-left: 3px solid var(--stamp);
+      background: #F2F3EE;
+      margin-bottom: 14px
+    }
+
+    .note.bad {
+      border-left-color: var(--alert);
+      color: var(--alert)
+    }
+
+    .note.good {
+      border-left-color: var(--settled);
+      color: var(--settled)
+    }
+
+    .gate {
+      max-width: 400px;
+      margin: 70px auto
+    }
+
+    @media(prefers-reduced-motion:reduce) {
+      * {
+        transition: none !important
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <h1>Dispatch Board</h1><span class="sub">Safi TMS</span>
+      </div>
+      <div class="who" id="who"></div>
+    </header>
+
+    <div id="gate" class="gate" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2 id="gateTitle">Sign in</h2>
+        </div>
+        <div class="panel-body">
+          <div id="gateNote"></div>
+          <div id="loginForm">
+            <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="username">
+            </div>
+            <div class="field"><label for="password">Password</label><input id="password" type="password"
+                autocomplete="current-password"></div>
+            <button class="primary" id="loginBtn">Sign in</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="app" style="display:none">
+      <div class="strip" id="strip"></div>
+
+      <div class="grid">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Trips</h2>
+            <button class="act" id="newBtn">+ New trip</button>
+          </div>
+          <div class="chips" id="chips"></div>
+          <ul class="trips" id="trips"></ul>
+        </div>
+
+        <div class="panel" id="side">
+          <div class="panel-head">
+            <h2 id="sideTitle">Trip detail</h2>
+          </div>
+          <div id="sideBody">
+            <div class="empty">Select a trip, or start a new one.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =====================================================================
+    // CONFIG — Dashboard > Settings > API Keys. Use the PUBLISHABLE key.
+    // =====================================================================
+    const SUPABASE_URL = "https://shvvpcmcezkfzdvelhpl.supabase.co/";
+    const SUPABASE_KEY = "sb_publishable_mwaEiMwvj8E05ZgDW9Lmhw_yuTZ5fK7";
+    // =====================================================================
+
+    const $ = id => document.getElementById(id);
+    const configured = !SUPABASE_URL.includes("REPLACE") && !SUPABASE_KEY.includes("REPLACE");
+    let sb = null, orgId = null, board = [], filter = "active", sel = null, master = {};
+
+    const money = (n, c = "USD") => c + " " + Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    const money2 = (n, c = "USD") => c + " " + Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const label = s => String(s || "").replace(/_/g, " ");
+    const esc = s => String(s ?? "").replace(/[&<>"]/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
+    function note(el, msg, kind) { el.innerHTML = msg ? `<div class="note ${kind || ""}">${msg}</div>` : ""; }
+
+    // status → what can happen next
+    const NEXT = {
+      draft: [["allocated", "Allocate truck"]],
+      allocated: [["loading", "Start loading"]],
+      loading: [["in_transit", "Depart"]],
+      in_transit: [["delivered", "Mark delivered"]],
+      at_border: [],
+      delivered: [],
+      pod_received: [["invoiced", "Mark invoiced"]],
+      invoiced: [["closed", "Close trip"]]
+    };
+    const PILL = {
+      draft: "grey", allocated: "grey", loading: "violet", in_transit: "violet",
+      at_border: "warn", delivered: "warn", pod_received: "good",
+      invoiced: "good", closed: "grey"
+    };
+
+    // ---------- boot ----------
+    (async function () {
+      if (!configured) {
+        $("gate").style.display = "block"; $("gateTitle").textContent = "Not configured";
+        $("loginForm").style.display = "none";
+        note($("gateNote"), "Replace SUPABASE_URL and SUPABASE_KEY near the bottom of the script, then reload.", "bad");
+        return;
+      }
+      sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      const { data: { session } } = await sb.auth.getSession();
+      session ? start(session) : ($("gate").style.display = "block");
+    })();
+
+    $("loginBtn").onclick = async () => {
+      const b = $("loginBtn"); b.disabled = true; b.textContent = "Signing in…";
+      const { data, error } = await sb.auth.signInWithPassword({ email: $("email").value.trim(), password: $("password").value });
+      b.disabled = false; b.textContent = "Sign in";
+      if (error) return note($("gateNote"), "That didn't work: " + error.message, "bad");
+      start(data.session);
+    };
+    ["email", "password"].forEach(id => $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("loginBtn").click() }));
+
+    async function start(session) {
+      $("gate").style.display = "none"; $("app").style.display = "block";
+      const { data: mem } = await sb.from("memberships").select("org_id, organizations(name)").limit(1).maybeSingle();
+      if (!mem) { $("app").innerHTML = '<div class="panel"><div class="panel-body"><div class="note bad">This account isn\'t a member of any organisation yet.</div></div></div>'; return; }
+      orgId = mem.org_id;
+      $("who").innerHTML = `${esc(mem.organizations?.name || "")} · ${esc(session.user.email)} · <button id="out">sign out</button>`;
+      $("out").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+      await loadMaster();
+      await loadBoard();
+    }
+
+    async function loadMaster() {
+      const [c, r, t, d, rc] = await Promise.all([
+        sb.from("customers").select("id,name").eq("is_active", true).order("name"),
+        sb.from("routes").select("id,name,borders,target_days").order("name"),
+        sb.from("trucks").select("id,fleet_no,horse_reg").eq("is_active", true).order("fleet_no"),
+        sb.from("drivers").select("id,full_name").eq("is_active", true).order("full_name"),
+        sb.from("rate_cards").select("customer_id,route_id,rate_amount,rate_currency,commodity")
+      ]);
+      master = { customers: c.data || [], routes: r.data || [], trucks: t.data || [], drivers: d.data || [], rates: rc.data || [] };
+    }
+
+    // ---------- board ----------
+    async function loadBoard() {
+      const { data, error } = await sb.from("trip_board").select("*")
+        .order("actual_load_date", { ascending: false, nullsFirst: true });
+      if (error) { $("trips").innerHTML = `<li class="empty">${esc(error.message)}</li>`; return; }
+      board = data || [];
+      renderStrip(); renderChips(); renderTrips();
+      if (sel && !board.find(t => t.trip_id === sel)) sel = null;
+      if (sel) showDetail(sel);
+    }
+
+    function renderStrip() {
+      const open = board.filter(t => !["closed"].includes(t.status));
+      const rolling = board.filter(t => ["loading", "in_transit", "at_border"].includes(t.status));
+      const late = rolling.filter(t => t.over_target);
+      const awaitingPod = board.filter(t => t.status === "delivered" && !t.pod_in_hand);
+      const unbilled = awaitingPod.reduce((s, t) => s + Number(t.revenue_usd || 0) * 0.5, 0);
+      const closedMargin = board.filter(t => ["pod_received", "invoiced", "closed"].includes(t.status));
+      const avg = closedMargin.length
+        ? closedMargin.reduce((s, t) => s + Number(t.margin_pct || 0), 0) / closedMargin.length : null;
+
+      $("strip").innerHTML = `
+    <div class="cell"><div class="k">On the road</div><div class="v">${rolling.length}</div>
+      <div class="n">${open.length} open trips</div></div>
+    <div class="cell"><div class="k">Over corridor target</div>
+      <div class="v ${late.length ? "warn" : ""}">${late.length}</div>
+      <div class="n">${late.length ? esc(late.map(t => t.trip_no).join(", ")) : "all on schedule"}</div></div>
+    <div class="cell"><div class="k">Awaiting POD</div>
+      <div class="v ${awaitingPod.length ? "warn" : ""}">${awaitingPod.length}</div>
+      <div class="n">${money(unbilled)} not yet billable</div></div>
+    <div class="cell"><div class="k">Avg margin, delivered</div>
+      <div class="v ${avg != null && avg >= 0 ? "pos" : ""}">${avg != null ? avg.toFixed(1) + "%" : "—"}</div>
+      <div class="n">${closedMargin.length} trips</div></div>`;
+    }
+
+    const FILTERS = [
+      ["active", "Active", t => !["closed", "invoiced"].includes(t.status)],
+      ["rolling", "Rolling", t => ["loading", "in_transit", "at_border"].includes(t.status)],
+      ["border", "At border", t => t.status === "at_border"],
+      ["pod", "Awaiting POD", t => t.status === "delivered" && !t.pod_in_hand],
+      ["billable", "Billable", t => t.status === "pod_received"],
+      ["late", "Late", t => t.over_target],
+      ["all", "All", () => true]
+    ];
+    function renderChips() {
+      $("chips").innerHTML = FILTERS.map(([k, lab, fn]) => {
+        const n = board.filter(fn).length;
+        return `<button class="chip ${filter === k ? "on" : ""}" data-f="${k}">${lab}<span class="c">${n}</span></button>`;
+      }).join("");
+      document.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { filter = b.dataset.f; renderChips(); renderTrips() });
+    }
+
+    function renderTrips() {
+      const fn = FILTERS.find(f => f[0] === filter)[2];
+      const rows = board.filter(fn);
+      $("trips").innerHTML = rows.length ? rows.map(t => {
+        const m = Number(t.margin_usd || 0);
+        const tags = [
+          `<span class="pill ${PILL[t.status] || "grey"}">${label(t.status)}</span>`,
+          t.over_target ? `<span class="pill bad">day ${t.days_running} of ${t.target_days}</span>`
+            : (t.days_running != null ? `<span class="pill grey">day ${t.days_running}</span>` : ""),
+          t.last_border && ["in_transit", "at_border"].includes(t.status) ? `<span class="pill violet">${esc(t.last_border)}</span>` : "",
+          t.docs_pending ? `<span class="pill warn">${t.docs_pending} doc${t.docs_pending > 1 ? "s" : ""} pending</span>` : "",
+          t.status === "delivered" && !t.pod_in_hand ? `<span class="pill warn">no POD</span>` : ""
+        ].filter(Boolean).join("");
+        return `<li data-t="${t.trip_id}" class="${sel === t.trip_id ? "sel" : ""}">
+      <div>
+        <div class="t-no">${esc(t.trip_no)}</div>
+        <div class="t-cust">${esc(t.customer)}</div>
+        <div class="t-line">${esc(t.route)}${t.fleet_no ? " · " + esc(t.fleet_no) : ""}${t.driver ? " · " + esc(t.driver) : ""}</div>
+        <div class="t-tags">${tags}</div>
+      </div>
+      <div class="t-right">
+        <div class="t-margin ${m >= 0 ? "pos" : "neg"}">${money(m)}</div>
+        <div class="t-pct">${t.margin_pct != null ? t.margin_pct + "%" : "—"}</div>
+        <div class="t-pct">${t.cost_entries} costs</div>
+      </div>
+    </li>`;
+      }).join("") : '<li class="empty">Nothing here.</li>';
+      document.querySelectorAll("[data-t]").forEach(li => li.onclick = () => { sel = li.dataset.t; renderTrips(); showDetail(sel) });
+    }
+
+    // ---------- detail ----------
+    function showDetail(id) {
+      const t = board.find(x => x.trip_id === id); if (!t) return;
+      $("sideTitle").textContent = "Trip detail";
+      const m = Number(t.margin_usd || 0);
+      const borders = t.borders || [];
+      const canBorder = ["in_transit", "at_border"].includes(t.status);
+
+      const nexts = (NEXT[t.status] || []).map(([s, lab]) =>
+        `<button class="act ${s === "delivered" ? "go" : ""}" data-adv="${s}">${lab}</button>`).join("");
+
+      const borderBtns = canBorder ? `
+    <div class="d-sec">
+      <h3>Border</h3>
+      <div class="acts">
+        ${t.status === "in_transit" ? borders.map(b =>
+        `<button class="act" data-border="arrival" data-loc="${esc(b)}">Arrived ${esc(b.split("/")[0])}</button>`).join("")
+          : `<button class="act go" data-border="cleared" data-loc="${esc(t.last_border || borders[0] || "")}">Cleared ${esc((t.last_border || borders[0] || "border").split("/")[0])}</button>`}
+      </div>
+    </div>`: "";
+
+      const podHint = t.status === "delivered" && !t.pod_in_hand ?
+        `<div class="d-sec"><h3>Blocked on</h3>
+      <div style="font-size:13px;color:var(--ink-soft)">POD not received. Upload it in the Cost Docket to unlock the delivery invoice —
+      ${money2(Number(t.revenue_usd || 0) * 0.5)} is sitting unbillable.</div></div>` : "";
+
+      $("sideBody").innerHTML = `
+    <div class="d-head">
+      <div class="t-no">${esc(t.trip_no)} · <span class="pill ${PILL[t.status] || "grey"}">${label(t.status)}</span></div>
+      <div class="t-cust" style="font-size:18px">${esc(t.customer)}</div>
+      <div class="t-line">${esc(t.route)}</div>
+      <div class="d-figs">
+        <div><div class="k">Revenue</div><div class="v">${money2(t.revenue_usd)}</div></div>
+        <div><div class="k">Costs</div><div class="v">${money2(t.cost_usd)}</div></div>
+        <div><div class="k">Margin</div><div class="v ${m >= 0 ? "pos" : "neg"}">${money2(m)}</div></div>
+      </div>
+    </div>
+    ${nexts ? `<div class="d-sec"><h3>Next step</h3><div class="acts">${nexts}</div></div>` : ""}
+    ${borderBtns}
+    ${podHint}
+    <div class="d-sec">
+      <h3>Assignment</h3>
+      <div class="d-kv"><span>Truck</span><span>${esc(t.fleet_no || "—")}${t.horse_reg ? " · " + esc(t.horse_reg) : ""}</span></div>
+      <div class="d-kv"><span>Driver</span><span>${esc(t.driver || "—")}</span></div>
+      <div class="d-kv"><span>Cargo</span><span>${esc(t.commodity || "—")}${t.tonnage ? " · " + t.tonnage + " t" : ""}</span></div>
+      <div class="d-kv"><span>Container</span><span>${esc(t.container_no || "—")}</span></div>
+    </div>
+    <div class="d-sec">
+      <h3>Timing</h3>
+      <div class="d-kv"><span>Loaded</span><span>${t.actual_load_date || "—"}</span></div>
+      <div class="d-kv"><span>Planned ETA</span><span>${t.planned_eta || "—"}</span></div>
+      <div class="d-kv"><span>Delivered</span><span>${t.actual_delivery_at ? t.actual_delivery_at.slice(0, 10) : "—"}</span></div>
+      <div class="d-kv"><span>Days running</span><span>${t.days_running != null ? t.days_running + " of " + (t.target_days ?? "?") : "—"}</span></div>
+      <div class="d-kv"><span>Last border</span><span>${esc(t.last_border || "—")}</span></div>
+    </div>
+    <div class="panel-body" style="padding-top:0"><div id="actNote"></div></div>`;
+
+      document.querySelectorAll("[data-adv]").forEach(b => b.onclick = () => advance(id, b.dataset.adv));
+      document.querySelectorAll("[data-border]").forEach(b => b.onclick = () => border(id, b.dataset.border, b.dataset.loc));
+    }
+
+    async function advance(id, status) {
+      const patch = { status };
+      if (status === "delivered") patch.actual_delivery_at = new Date().toISOString();
+      if (status === "closed") patch.closed_at = new Date().toISOString();
+      const { error } = await sb.from("trips").update(patch).eq("id", id);
+      if (error) return note($("actNote"), "Couldn't update: " + error.message, "bad");
+      await loadBoard();
+    }
+
+    async function border(id, kind, loc) {
+      const { error } = await sb.rpc("log_border_event", { p_trip: id, p_kind: kind, p_location: loc });
+      if (error) return note($("actNote"), "Couldn't log it: " + error.message, "bad");
+      await loadBoard();
+    }
+
+    // ---------- new trip ----------
+    $("newBtn").onclick = () => {
+      sel = null; renderTrips();
+      $("sideTitle").textContent = "New trip";
+      const opts = (arr, v, l) => arr.map(o => `<option value="${o[v]}">${esc(o[l])}</option>`).join("");
+      $("sideBody").innerHTML = `
+    <div class="panel-body">
+      <div id="newNote"></div>
+      <div class="field"><label for="nCust">Customer</label><select id="nCust"><option value="">—</option>${opts(master.customers, "id", "name")}</select></div>
+      <div class="field"><label for="nRoute">Route</label><select id="nRoute"><option value="">—</option>${opts(master.routes, "id", "name")}</select></div>
+      <div class="field"><label for="nRev">Revenue (USD)</label><input id="nRev" type="number" step="0.01" min="0" placeholder="0.00"></div>
+      <div id="rateHint"></div>
+      <div class="row">
+        <div class="field"><label for="nTruck">Truck</label><select id="nTruck"><option value="">—</option>${opts(master.trucks, "id", "fleet_no")}</select></div>
+        <div class="field"><label for="nDriver">Driver</label><select id="nDriver"><option value="">—</option>${opts(master.drivers, "id", "full_name")}</select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="nComm">Commodity</label><input id="nComm" type="text" placeholder="General cargo"></div>
+        <div class="field"><label for="nTon">Tonnage</label><input id="nTon" type="number" step="0.001" min="0" placeholder="28.500"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="nCont">Container</label><input id="nCont" type="text" placeholder="MSKU1234567"></div>
+        <div class="field"><label for="nSeal">Seal</label><input id="nSeal" type="text" placeholder="SL-889231"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="nLoad">Load date</label><input id="nLoad" type="date"></div>
+        <div class="field"><label for="nEta">Planned ETA</label><input id="nEta" type="date"></div>
+      </div>
+      <button class="primary" id="nSave">Create trip</button>
+      <button class="ghost" id="nCancel">Cancel</button>
+    </div>`;
+      $("nLoad").valueAsDate = new Date();
+      ["nCust", "nRoute"].forEach(id => $(id).onchange = applyRate);
+      $("nRoute").onchange = () => { applyRate(); applyEta(); };
+      $("nSave").onclick = createTrip;
+      $("nCancel").onclick = () => { $("sideBody").innerHTML = '<div class="empty">Select a trip, or start a new one.</div>'; $("sideTitle").textContent = "Trip detail"; };
+    };
+
+    function applyRate() {
+      const c = $("nCust").value, r = $("nRoute").value;
+      const hit = master.rates.find(x => x.route_id === r && (x.customer_id === c || !x.customer_id));
+      if (hit) {
+        $("nRev").value = Number(hit.rate_amount).toFixed(2);
+        $("rateHint").innerHTML = `<div class="rate-hint">Filled from the rate card${hit.commodity ? " · " + esc(hit.commodity) : ""}. Override if this trip was agreed differently.</div>`;
+        if (hit.commodity && !$("nComm").value) $("nComm").value = hit.commodity;
+      } else {
+        $("rateHint").innerHTML = c && r ? `<div class="rate-hint" style="color:var(--waiting)">No rate card for this customer and route. Enter the agreed price.</div>` : "";
+      }
+    }
+    function applyEta() {
+      const r = master.routes.find(x => x.id === $("nRoute").value);
+      if (r?.target_days && $("nLoad").value) {
+        const d = new Date($("nLoad").value); d.setDate(d.getDate() + r.target_days);
+        $("nEta").valueAsDate = d;
+      }
+    }
+
+    async function createTrip() {
+      const cust = $("nCust").value, route = $("nRoute").value, rev = parseFloat($("nRev").value);
+      if (!cust || !route) return note($("newNote"), "Customer and route are both required.", "bad");
+      if (isNaN(rev) || rev <= 0) return note($("newNote"), "Enter the agreed revenue for this trip.", "bad");
+
+      const b = $("nSave"); b.disabled = true; b.textContent = "Creating…";
+      try {
+        const { data: tripNo, error: e0 } = await sb.rpc("next_trip_no", { p_org: orgId });
+        if (e0) throw e0;
+
+        const truck = $("nTruck").value, driver = $("nDriver").value;
+        const { data: created, error } = await sb.from("trips").insert({
+          org_id: orgId, trip_no: tripNo,
+          status: truck && driver ? "allocated" : "draft",
+          customer_id: cust, route_id: route,
+          truck_id: truck || null, driver_id: driver || null,
+          commodity: $("nComm").value.trim() || null,
+          tonnage: parseFloat($("nTon").value) || null,
+          container_no: $("nCont").value.trim() || null,
+          seal_no: $("nSeal").value.trim() || null,
+          revenue_amount: rev, revenue_currency: "USD",
+          planned_load_date: $("nLoad").value || null,
+          actual_load_date: $("nLoad").value || null,
+          planned_eta: $("nEta").value || null
+        }).select("id").single();
+        if (error) throw error;
+
+        // Seed the expected paperwork so nothing is silently forgotten.
+        const expected = ["consignment_note", "packing_list", "t1_transit", "pod"];
+        await sb.from("trip_documents").insert(
+          expected.map(d => ({ org_id: orgId, trip_id: created.id, doc_type: d, status: "pending" })));
+
+        sel = created.id;
+        await loadBoard();
+        showDetail(created.id);
+      } catch (e) {
+        note($("newNote"), "Couldn't create it: " + (e.message || e), "bad");
+      } finally { b.disabled = false; b.textContent = "Create trip"; }
+    }
+  </script>
+</body>
+
+</html>

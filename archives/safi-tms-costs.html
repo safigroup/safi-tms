@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Safi TMS — Cost Docket</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --ground: #DCE0D9;
+      --card: #F7F8F4;
+      --ink: #141E19;
+      --ink-soft: #5A655E;
+      --rule: #B4BBB0;
+      --rule-soft: #CFD4CA;
+      --stamp: #3D2A6B;
+      --settled: #0B6B4F;
+      --alert: #8C2F1E;
+      --mono: 'IBM Plex Mono', ui-monospace, monospace;
+      --sans: 'IBM Plex Sans', system-ui, sans-serif;
+      --cond: 'Archivo Narrow', var(--sans);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    html,
+    body {
+      height: 100%
+    }
+
+    body {
+      background: var(--ground);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .wrap {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 20px 18px 64px
+    }
+
+    /* ---------- masthead ---------- */
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 10px;
+      margin-bottom: 22px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 12px
+    }
+
+    .brand h1 {
+      font-family: var(--cond);
+      font-weight: 700;
+      font-size: 26px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .brand .sub {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-soft);
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    .who {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--ink-soft);
+      text-align: right
+    }
+
+    .who button {
+      background: none;
+      border: none;
+      color: var(--stamp);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-decoration: underline;
+      padding: 0;
+    }
+
+    /* ---------- layout ---------- */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      gap: 22px;
+      align-items: start
+    }
+
+    @media(max-width:940px) {
+      .grid {
+        grid-template-columns: 1fr
+      }
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 2px;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--rule);
+    }
+
+    .panel-head h2 {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    .panel-body {
+      padding: 18px 16px
+    }
+
+    /* ---------- form ---------- */
+    .field {
+      margin-bottom: 15px
+    }
+
+    .field label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin-bottom: 5px;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      font-family: var(--sans);
+      font-size: 15px;
+      color: var(--ink);
+      background: #fff;
+      border: 1px solid var(--rule);
+      border-radius: 2px;
+      padding: 9px 11px;
+    }
+
+    input[type=number] {
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      outline: 2px solid var(--stamp);
+      outline-offset: -1px;
+      border-color: var(--stamp);
+    }
+
+    .row {
+      display: grid;
+      gap: 12px
+    }
+
+    .row-2 {
+      grid-template-columns: 1fr 1fr
+    }
+
+    .row-3 {
+      grid-template-columns: 1.4fr .8fr .8fr
+    }
+
+    @media(max-width:620px) {
+
+      .row-2,
+      .row-3 {
+        grid-template-columns: 1fr
+      }
+    }
+
+    /* ---------- signature: the conversion stamp ---------- */
+    .stamp {
+      margin: 4px 0 18px;
+      border: 1px dashed var(--rule);
+      border-left: 3px solid var(--stamp);
+      background: linear-gradient(180deg, #fff, #F2F3EE);
+      padding: 13px 15px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      transition: border-left-color .18s ease;
+    }
+
+    .stamp.live {
+      border-left-color: var(--settled)
+    }
+
+    .stamp .native {
+      font-family: var(--mono);
+      font-size: 15px;
+      color: var(--ink-soft);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stamp .arrow {
+      font-family: var(--mono);
+      color: var(--rule);
+      font-size: 15px
+    }
+
+    .stamp .usd {
+      font-family: var(--mono);
+      font-weight: 600;
+      font-size: 24px;
+      color: var(--settled);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -.01em;
+    }
+
+    .stamp .usd.idle {
+      color: var(--rule)
+    }
+
+    .stamp .rate {
+      width: 100%;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-soft);
+      letter-spacing: .06em;
+      padding-top: 6px;
+      border-top: 1px solid var(--rule-soft);
+      margin-top: 4px;
+    }
+
+    .stamp .rate b {
+      font-weight: 500;
+      color: var(--ink)
+    }
+
+    button.primary {
+      width: 100%;
+      background: var(--stamp);
+      color: #fff;
+      border: none;
+      border-radius: 2px;
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      padding: 13px;
+      cursor: pointer;
+    }
+
+    button.primary:hover {
+      background: #32215A
+    }
+
+    button.primary:disabled {
+      background: var(--rule);
+      cursor: not-allowed
+    }
+
+    /* ---------- ledger ---------- */
+    .summary {
+      padding: 16px;
+      border-bottom: 1px solid var(--rule);
+      background: #F2F3EE
+    }
+
+    .summary .tripno {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: .08em;
+      color: var(--ink-soft);
+    }
+
+    .summary .cust {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 19px;
+      margin-top: 2px
+    }
+
+    .summary .route {
+      font-size: 12.5px;
+      color: var(--ink-soft);
+      margin-top: 1px
+    }
+
+    .figs {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-top: 14px
+    }
+
+    .fig .k {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+    }
+
+    .fig .v {
+      font-family: var(--mono);
+      font-size: 16px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      margin-top: 2px;
+    }
+
+    .fig .v.pos {
+      color: var(--settled)
+    }
+
+    .fig .v.neg {
+      color: var(--alert)
+    }
+
+    ul.ledger {
+      list-style: none;
+      max-height: 420px;
+      overflow-y: auto
+    }
+
+    ul.ledger li {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--rule-soft);
+    }
+
+    ul.ledger li:hover {
+      background: #F2F3EE
+    }
+
+    .lg-cat {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--stamp);
+    }
+
+    .lg-desc {
+      font-size: 13px;
+      margin-top: 1px
+    }
+
+    .lg-meta {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-soft);
+      margin-top: 2px
+    }
+
+    .lg-amt {
+      text-align: right;
+      white-space: nowrap
+    }
+
+    .lg-usd {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums
+    }
+
+    .lg-native {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-soft)
+    }
+
+    .lg-del {
+      background: none;
+      border: none;
+      color: var(--rule);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 14px;
+      padding: 0 0 0 8px;
+    }
+
+    .lg-del:hover {
+      color: var(--alert)
+    }
+
+    /* ---------- states ---------- */
+    .empty {
+      padding: 34px 18px;
+      text-align: center;
+      color: var(--ink-soft);
+      font-size: 13.5px
+    }
+
+    .note {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      padding: 10px 14px;
+      border-left: 3px solid var(--stamp);
+      background: #F2F3EE;
+      margin-bottom: 16px;
+    }
+
+    .note.bad {
+      border-left-color: var(--alert);
+      color: var(--alert)
+    }
+
+    .note.good {
+      border-left-color: var(--settled);
+      color: var(--settled)
+    }
+
+    .gate {
+      max-width: 400px;
+      margin: 70px auto
+    }
+
+    .gate .panel-body {
+      padding: 22px 20px
+    }
+
+    @media(prefers-reduced-motion:reduce) {
+      * {
+        transition: none !important
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <h1>Cost Docket</h1>
+        <span class="sub">Safi TMS</span>
+      </div>
+      <div class="who" id="who"></div>
+    </header>
+
+    <!-- setup / login -->
+    <div id="gate" class="gate" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2 id="gateTitle">Sign in</h2>
+        </div>
+        <div class="panel-body">
+          <div id="gateNote"></div>
+          <div id="loginForm">
+            <div class="field">
+              <label for="email">Email</label>
+              <input id="email" type="email" autocomplete="username">
+            </div>
+            <div class="field">
+              <label for="password">Password</label>
+              <input id="password" type="password" autocomplete="current-password">
+            </div>
+            <button class="primary" id="loginBtn">Sign in</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- main -->
+    <div id="app" class="grid" style="display:none">
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Record a cost</h2>
+        </div>
+        <div class="panel-body">
+          <div id="formNote"></div>
+
+          <div class="field">
+            <label for="trip">Trip</label>
+            <select id="trip"></select>
+          </div>
+
+          <div class="field">
+            <label for="category">Category</label>
+            <select id="category">
+              <option value="fuel">Fuel</option>
+              <option value="driver_advance">Driver advance</option>
+              <option value="driver_allowance">Driver allowance</option>
+              <option value="border_fees">Border fees</option>
+              <option value="customs_duty">Customs duty</option>
+              <option value="clearing_agent">Clearing agent</option>
+              <option value="tolls">Tolls</option>
+              <option value="weighbridge">Weighbridge</option>
+              <option value="permits">Permits</option>
+              <option value="escort">Escort</option>
+              <option value="demurrage">Demurrage</option>
+              <option value="detention">Detention</option>
+              <option value="repairs">Repairs</option>
+              <option value="tyres">Tyres</option>
+              <option value="police">Police</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          <div class="row row-3">
+            <div class="field">
+              <label for="amount">Amount</label>
+              <input id="amount" type="number" step="0.01" min="0" placeholder="0.00" inputmode="decimal">
+            </div>
+            <div class="field">
+              <label for="currency">Currency</label>
+              <select id="currency"></select>
+            </div>
+            <div class="field">
+              <label for="incurred">Date</label>
+              <input id="incurred" type="date">
+            </div>
+          </div>
+
+          <div class="stamp" id="stamp">
+            <span class="native" id="stampNative">—</span>
+            <span class="arrow">→</span>
+            <span class="usd idle" id="stampUsd">USD 0.00</span>
+            <span class="rate" id="stampRate">Pick a currency to load its rate.</span>
+          </div>
+
+          <div class="field">
+            <label for="description">Description</label>
+            <input id="description" type="text" placeholder="e.g. Tunduma crossing charges">
+          </div>
+
+          <div class="row row-3">
+            <div class="field">
+              <label for="location">Location</label>
+              <input id="location" type="text" placeholder="Nakonde">
+            </div>
+            <div class="field">
+              <label for="paidBy">Paid by</label>
+              <select id="paidBy">
+                <option value="driver_float">Driver float</option>
+                <option value="office">Office</option>
+                <option value="agent">Agent</option>
+                <option value="card">Card</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="receipt">Receipt ref</label>
+              <input id="receipt" type="text" placeholder="BR-4417">
+            </div>
+          </div>
+
+          <button class="primary" id="saveBtn">Save cost</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Trip ledger</h2>
+          <span class="sub" style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--ink-soft)"
+            id="ledgerCount"></span>
+        </div>
+        <div id="summary" class="summary"></div>
+        <ul class="ledger" id="ledger"></ul>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // =====================================================================
+    // CONFIG — replace both values, then deploy.
+    //
+    // Dashboard > Settings > API Keys > "Publishable and secret API keys".
+    // Use the PUBLISHABLE key (sb_publishable_...). It is safe in client
+    // code — it carries the same low privileges as the old anon key, and
+    // Row Level Security is what actually protects the data.
+    //
+    // NEVER put the secret key (sb_secret_...) in this file. It bypasses
+    // RLS entirely and would expose every org's data to anyone who reads
+    // the page source.
+    //
+    // Older projects may still show a legacy anon key (eyJ...) instead.
+    // That works too, but it's deprecated — Supabase is retiring legacy
+    // keys at the end of 2026, and they can no longer be rotated.
+    // =====================================================================
+    const SUPABASE_URL = "https://shvvpcmcezkfzdvelhpl.supabase.co/";
+    const SUPABASE_KEY = "sb_publishable_mwaEiMwvj8E05ZgDW9Lmhw_yuTZ5fK7";
+    // =====================================================================
+
+    const $ = id => document.getElementById(id);
+    const configured = !SUPABASE_URL.includes("REPLACE") && !SUPABASE_KEY.includes("REPLACE");
+    let sb = null, orgId = null, rates = {}, currentTrip = null;
+
+    const money = (n, cur = "USD") =>
+      cur + " " + Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    function note(el, msg, kind) {
+      el.innerHTML = msg ? `<div class="note ${kind || ""}">${msg}</div>` : "";
+    }
+
+    // ---------- boot ----------
+    (async function boot() {
+      $("incurred").valueAsDate = new Date();
+
+      if (!configured) {
+        $("gate").style.display = "block";
+        $("gateTitle").textContent = "Not configured";
+        $("loginForm").style.display = "none";
+        note($("gateNote"),
+          "Open this file in an editor and replace SUPABASE_URL and SUPABASE_KEY near the bottom of the script, then reload.", "bad");
+        return;
+      }
+
+      sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      const { data: { session } } = await sb.auth.getSession();
+      session ? start(session) : showLogin();
+    })();
+
+    function showLogin() {
+      $("gate").style.display = "block";
+      $("app").style.display = "none";
+    }
+
+    $("loginBtn").onclick = async () => {
+      const btn = $("loginBtn");
+      btn.disabled = true; btn.textContent = "Signing in…";
+      const { data, error } = await sb.auth.signInWithPassword({
+        email: $("email").value.trim(),
+        password: $("password").value
+      });
+      btn.disabled = false; btn.textContent = "Sign in";
+      if (error) return note($("gateNote"), "That didn't work: " + error.message, "bad");
+      start(data.session);
+    };
+
+    ["email", "password"].forEach(id =>
+      $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("loginBtn").click(); }));
+
+    async function start(session) {
+      $("gate").style.display = "none";
+      $("app").style.display = "grid";
+      $("who").innerHTML = `${session.user.email} · <button id="out">sign out</button>`;
+      $("out").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+
+      const { data: mem, error } = await sb
+        .from("memberships").select("org_id, organizations(name)").limit(1).maybeSingle();
+
+      if (error || !mem) {
+        return note($("formNote"),
+          "This account isn't a member of any organisation yet. Add a row to memberships linking your user to an org, then reload.", "bad");
+      }
+      orgId = mem.org_id;
+      $("who").innerHTML = `${mem.organizations?.name || ""} · ${session.user.email} · <button id="out2">sign out</button>`;
+      $("out2").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+
+      await loadRates();
+      await loadTrips();
+    }
+
+    // ---------- FX ----------
+    async function loadRates() {
+      const { data } = await sb.from("fx_rates")
+        .select("currency, rate_to_usd, effective_on")
+        .order("effective_on", { ascending: false });
+
+      (data || []).forEach(r => { if (!(r.currency in rates)) rates[r.currency] = r; });
+
+      const sel = $("currency");
+      sel.innerHTML = "";
+      const order = ["USD", "TZS", "ZMW", "CDF"];
+      Object.keys(rates)
+        .sort((a, b) => (order.indexOf(a) + 99) % 99 - (order.indexOf(b) + 99) % 99 || a.localeCompare(b))
+        .forEach(c => sel.add(new Option(c, c)));
+
+      if (!sel.options.length) {
+        note($("formNote"), "No exchange rates found. Add rows to fx_rates before recording costs.", "bad");
+        $("saveBtn").disabled = true;
+        return;
+      }
+      sel.value = rates["TZS"] ? "TZS" : sel.options[0].value;
+      updateStamp();
+    }
+
+    function updateStamp() {
+      const cur = $("currency").value;
+      const amt = parseFloat($("amount").value);
+      const r = rates[cur];
+
+      if (!r) { $("stampRate").textContent = "No rate on file for " + cur + "."; return; }
+
+      $("stampRate").innerHTML =
+        `Rate on file <b>1 ${cur} = ${Number(r.rate_to_usd).toFixed(8)} USD</b> · dated ${r.effective_on} · frozen onto this entry`;
+
+      if (isNaN(amt) || amt <= 0) {
+        $("stampNative").textContent = "—";
+        $("stampUsd").textContent = "USD 0.00";
+        $("stampUsd").classList.add("idle");
+        $("stamp").classList.remove("live");
+        return;
+      }
+      $("stampNative").textContent = money(amt, cur);
+      $("stampUsd").textContent = money(amt * r.rate_to_usd);
+      $("stampUsd").classList.remove("idle");
+      $("stamp").classList.add("live");
+    }
+    $("amount").addEventListener("input", updateStamp);
+    $("currency").addEventListener("change", updateStamp);
+
+    // ---------- trips ----------
+    async function loadTrips() {
+      const { data } = await sb.from("trips")
+        .select("id, trip_no, status, customers(name), routes(name)")
+        .not("status", "in", "(closed,cancelled)")
+        .order("actual_load_date", { ascending: false, nullsFirst: false });
+
+      const sel = $("trip");
+      sel.innerHTML = "";
+      if (!data || !data.length) {
+        sel.add(new Option("No open trips", ""));
+        $("saveBtn").disabled = true;
+        $("summary").innerHTML = "";
+        $("ledger").innerHTML = '<li class="empty">Create a trip before recording costs.</li>';
+        return;
+      }
+      data.forEach(t => sel.add(new Option(
+        `${t.trip_no} — ${t.customers?.name || "?"} — ${t.routes?.name || "?"}`, t.id)));
+      currentTrip = sel.value;
+      await refreshLedger();
+    }
+
+    $("trip").addEventListener("change", async () => {
+      currentTrip = $("trip").value;
+      await refreshLedger();
+    });
+
+    // ---------- ledger ----------
+    async function refreshLedger() {
+      if (!currentTrip) return;
+
+      const [{ data: m }, { data: costs }] = await Promise.all([
+        sb.from("trip_margin").select("*").eq("trip_id", currentTrip).maybeSingle(),
+        sb.from("trip_costs")
+          .select("id, category, description, amount, currency, amount_usd, incurred_on, location, paid_by, receipt_ref")
+          .eq("trip_id", currentTrip)
+          .order("incurred_on", { ascending: false })
+      ]);
+
+      if (m) {
+        const marginClass = Number(m.margin_usd) >= 0 ? "pos" : "neg";
+        $("summary").innerHTML = `
+      <div class="tripno">${m.trip_no} · ${String(m.status).replace(/_/g, " ").toUpperCase()}</div>
+      <div class="cust">${m.customer}</div>
+      <div class="route">${m.route}${m.fleet_no ? " · " + m.fleet_no : ""}</div>
+      <div class="figs">
+        <div class="fig"><div class="k">Revenue</div><div class="v">${money(m.revenue_usd)}</div></div>
+        <div class="fig"><div class="k">Costs</div><div class="v">${money(m.cost_usd)}</div></div>
+        <div class="fig"><div class="k">Margin</div>
+          <div class="v ${marginClass}">${money(m.margin_usd)}${m.margin_pct != null ? ` <span style="font-size:11px">(${m.margin_pct}%)</span>` : ""}</div>
+        </div>
+      </div>`;
+      }
+
+      const list = costs || [];
+      $("ledgerCount").textContent = list.length ? list.length + " entries" : "";
+      $("ledger").innerHTML = list.length ? list.map(c => `
+    <li>
+      <div>
+        <div class="lg-cat">${c.category.replace(/_/g, " ")}</div>
+        <div class="lg-desc">${c.description || "—"}</div>
+        <div class="lg-meta">${c.incurred_on}${c.location ? " · " + c.location : ""}${c.receipt_ref ? " · " + c.receipt_ref : ""}</div>
+      </div>
+      <div class="lg-amt">
+        <div class="lg-usd">${money(c.amount_usd)}</div>
+        <div class="lg-native">${c.currency !== "USD" ? money(c.amount, c.currency) : "&nbsp;"}</div>
+      </div>
+      <button class="lg-del" data-id="${c.id}" title="Remove this entry">✕</button>
+    </li>`).join("")
+        : '<li class="empty">No costs recorded on this trip yet.</li>';
+
+      document.querySelectorAll(".lg-del").forEach(b => b.onclick = () => removeCost(b.dataset.id));
+    }
+
+    async function removeCost(id) {
+      if (!confirm("Remove this cost entry?")) return;
+      const { error } = await sb.from("trip_costs").delete().eq("id", id);
+      if (error) return note($("formNote"), "Couldn't remove it: " + error.message, "bad");
+      await refreshLedger();
+    }
+
+    // ---------- save ----------
+    $("saveBtn").onclick = async () => {
+      const amt = parseFloat($("amount").value);
+      const cur = $("currency").value;
+      const r = rates[cur];
+
+      if (!currentTrip) return note($("formNote"), "Pick a trip first.", "bad");
+      if (isNaN(amt) || amt <= 0) return note($("formNote"), "Enter an amount greater than zero.", "bad");
+      if (!r) return note($("formNote"), "No exchange rate on file for " + cur + ".", "bad");
+
+      const btn = $("saveBtn");
+      btn.disabled = true; btn.textContent = "Saving…";
+
+      const { error } = await sb.from("trip_costs").insert({
+        org_id: orgId,
+        trip_id: currentTrip,
+        category: $("category").value,
+        description: $("description").value.trim() || null,
+        amount: amt,
+        currency: cur,
+        fx_rate_to_usd: r.rate_to_usd,
+        incurred_on: $("incurred").value,
+        location: $("location").value.trim() || null,
+        paid_by: $("paidBy").value,
+        receipt_ref: $("receipt").value.trim() || null
+      });
+
+      btn.disabled = false; btn.textContent = "Save cost";
+      if (error) return note($("formNote"), "Couldn't save: " + error.message, "bad");
+
+      note($("formNote"), `Recorded ${money(amt, cur)} → ${money(amt * r.rate_to_usd)}`, "good");
+      $("amount").value = ""; $("description").value = ""; $("receipt").value = "";
+      updateStamp();
+      $("amount").focus();
+      await refreshLedger();
+      setTimeout(() => note($("formNote"), ""), 4000);
+    };
+
+    ["amount", "description", "location", "receipt"].forEach(id =>
+      $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("saveBtn").click(); }));
+  </script>
+</body>
+
+</html>

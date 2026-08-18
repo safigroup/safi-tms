@@ -1,0 +1,2312 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Safi TMS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <!-- Vendored locally (was cdn.jsdelivr.net) so the app still boots on networks that
+       block third-party CDNs — border posts and corporate wifi being the two that matter
+       here. Currently v2.112.3. To update: re-download from
+       https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2 and replace vendor/supabase-js.min.js -->
+  <script src="vendor/supabase-js.min.js"></script>
+  <style>
+    :root {
+      --ground: #DCE0D9;
+      --card: #F7F8F4;
+      --ink: #141E19;
+      --ink-soft: #5A655E;
+      --rule: #B4BBB0;
+      --rule-soft: #CFD4CA;
+      --stamp: #3D2A6B;
+      --settled: #0B6B4F;
+      --alert: #8C2F1E;
+      --waiting: #8A6A12;
+      --mono: 'IBM Plex Mono', ui-monospace, monospace;
+      --sans: 'IBM Plex Sans', system-ui, sans-serif;
+      --cond: 'Archivo Narrow', var(--sans);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    body {
+      background: var(--ground);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased
+    }
+
+    .wrap {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 18px 18px 64px
+    }
+
+    /* masthead + nav */
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 9px;
+      margin-bottom: 14px
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 11px
+    }
+
+    .brand h1 {
+      font-family: var(--cond);
+      font-weight: 700;
+      font-size: 25px;
+      letter-spacing: .07em;
+      text-transform: uppercase
+    }
+
+    .brand .sub {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-soft);
+      letter-spacing: .14em;
+      text-transform: uppercase
+    }
+
+    .who {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-soft);
+      text-align: right
+    }
+
+    .who button {
+      background: none;
+      border: none;
+      color: var(--stamp);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 11px;
+      text-decoration: underline;
+      padding: 0
+    }
+
+    nav {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      margin-bottom: 16px
+    }
+
+    nav button {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 12.5px;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+      padding: 9px 15px;
+      border: 1px solid var(--rule);
+      background: var(--card);
+      cursor: pointer;
+      border-radius: 2px;
+      color: var(--ink-soft)
+    }
+
+    nav button.on {
+      background: var(--stamp);
+      border-color: var(--stamp);
+      color: #fff
+    }
+
+    nav .n {
+      font-family: var(--mono);
+      font-size: 10px;
+      opacity: .65;
+      margin-left: 5px
+    }
+
+    nav .n.alert {
+      opacity: 1;
+      color: var(--waiting)
+    }
+
+    nav button.on .n {
+      opacity: .75;
+      color: #fff
+    }
+
+    /* strip */
+    .strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--rule);
+      border: 1px solid var(--rule);
+      margin-bottom: 16px
+    }
+
+    .strip .cell {
+      background: var(--card);
+      padding: 11px 14px
+    }
+
+    .strip .k {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--ink-soft)
+    }
+
+    .strip .v {
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      margin-top: 3px
+    }
+
+    .strip .v.warn {
+      color: var(--waiting)
+    }
+
+    .strip .v.bad {
+      color: var(--alert)
+    }
+
+    .strip .v.pos {
+      color: var(--settled)
+    }
+
+    .strip .n {
+      font-size: 11px;
+      color: var(--ink-soft);
+      margin-top: 1px
+    }
+
+    @media(max-width:780px) {
+      .strip {
+        grid-template-columns: 1fr 1fr
+      }
+    }
+
+    /* layout */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 406px;
+      gap: 18px;
+      align-items: start
+    }
+
+    @media(max-width:1000px) {
+      .grid {
+        grid-template-columns: 1fr
+      }
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 2px
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--rule)
+    }
+
+    .panel-head h2 {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: .16em;
+      text-transform: uppercase
+    }
+
+    .panel-body {
+      padding: 16px
+    }
+
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--rule)
+    }
+
+    .tabs button {
+      flex: 1;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: 11px 8px;
+      cursor: pointer;
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+      color: var(--ink-soft)
+    }
+
+    .tabs button.on {
+      color: var(--stamp);
+      border-bottom-color: var(--stamp)
+    }
+
+    .tabs .c {
+      font-family: var(--mono);
+      font-size: 10px;
+      opacity: .7;
+      margin-left: 4px
+    }
+
+    .badge {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      background: var(--waiting);
+      color: #fff;
+      padding: 1px 5px;
+      margin-left: 5px;
+      border-radius: 8px;
+      letter-spacing: 0
+    }
+
+    .chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--rule);
+      background: #F2F3EE
+    }
+
+    .chip {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 5px 10px;
+      border: 1px solid var(--rule);
+      background: #fff;
+      cursor: pointer;
+      border-radius: 2px;
+      color: var(--ink-soft)
+    }
+
+    .chip.on {
+      background: var(--stamp);
+      border-color: var(--stamp);
+      color: #fff
+    }
+
+    .chip .c {
+      opacity: .65;
+      margin-left: 4px
+    }
+
+    /* lists */
+    ul.list {
+      list-style: none;
+      max-height: 600px;
+      overflow-y: auto
+    }
+
+    ul.list li {
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--rule-soft);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 11px;
+      align-items: flex-start
+    }
+
+    ul.list li.tap {
+      cursor: pointer
+    }
+
+    ul.list li.tap:hover {
+      background: #F2F3EE
+    }
+
+    ul.list li.sel {
+      background: #EFECF5;
+      box-shadow: inset 3px 0 0 var(--stamp)
+    }
+
+    ul.list li.off {
+      opacity: .5
+    }
+
+    .r-no {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .08em;
+      color: var(--ink-soft)
+    }
+
+    .r-title {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 16px;
+      margin-top: 1px
+    }
+
+    .r-sub {
+      font-size: 12.5px;
+      color: var(--ink-soft);
+      margin-top: 1px
+    }
+
+    .r-mono {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-soft);
+      margin-top: 2px
+    }
+
+    .r-mono a {
+      color: var(--stamp)
+    }
+
+    .r-tags {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-top: 6px
+    }
+
+    .r-right {
+      text-align: right;
+      white-space: nowrap
+    }
+
+    .r-amt {
+      font-family: var(--mono);
+      font-size: 15px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums
+    }
+
+    .r-amt.pos {
+      color: var(--settled)
+    }
+
+    .r-amt.neg {
+      color: var(--alert)
+    }
+
+    .r-min {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-soft)
+    }
+
+    .x {
+      background: none;
+      border: none;
+      color: var(--rule);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 14px;
+      padding: 0 0 0 8px
+    }
+
+    .x:hover {
+      color: var(--alert)
+    }
+
+    .pill {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border: 1px solid;
+      border-radius: 2px
+    }
+
+    .pill.grey {
+      color: var(--ink-soft);
+      border-color: var(--rule)
+    }
+
+    .pill.violet {
+      color: var(--stamp);
+      border-color: var(--stamp)
+    }
+
+    .pill.warn {
+      color: var(--waiting);
+      border-color: var(--waiting);
+      background: #FAF6EA
+    }
+
+    .pill.good {
+      color: var(--settled);
+      border-color: var(--settled);
+      background: #EDF4F0
+    }
+
+    .pill.bad {
+      color: var(--alert);
+      border-color: var(--alert);
+      background: #FAEFEC
+    }
+
+    /* detail */
+    .d-head {
+      padding: 15px 16px;
+      background: #F2F3EE;
+      border-bottom: 1px solid var(--rule)
+    }
+
+    .d-figs {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px
+    }
+
+    .d-figs .k {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--ink-soft)
+    }
+
+    .d-figs .v {
+      font-family: var(--mono);
+      font-size: 15px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      margin-top: 2px
+    }
+
+    .d-figs .v.pos {
+      color: var(--settled)
+    }
+
+    .d-figs .v.neg,
+    .d-figs .v.bad {
+      color: var(--alert)
+    }
+
+    .d-sec {
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--rule-soft)
+    }
+
+    .d-sec h3 {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin-bottom: 9px
+    }
+
+    .d-kv {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 13px;
+      padding: 3px 0
+    }
+
+    .d-kv span:first-child {
+      color: var(--ink-soft)
+    }
+
+    .d-kv span:last-child {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      text-align: right
+    }
+
+    .d-hint {
+      font-size: 12.5px;
+      color: var(--ink-soft)
+    }
+
+    .acts {
+      display: flex;
+      gap: 7px;
+      flex-wrap: wrap
+    }
+
+    .act {
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 11.5px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 8px 11px;
+      border: 1px solid var(--stamp);
+      background: none;
+      color: var(--stamp);
+      cursor: pointer;
+      border-radius: 2px;
+      white-space: nowrap
+    }
+
+    .act:hover {
+      background: var(--stamp);
+      color: #fff
+    }
+
+    .act.go {
+      border-color: var(--settled);
+      color: var(--settled)
+    }
+
+    .act.go:hover {
+      background: var(--settled);
+      color: #fff
+    }
+
+    .act:disabled {
+      border-color: var(--rule);
+      color: var(--rule);
+      cursor: not-allowed;
+      background: none
+    }
+
+    /* forms */
+    .field {
+      margin-bottom: 13px
+    }
+
+    .field label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin-bottom: 5px
+    }
+
+    .field .hint {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-soft);
+      margin-top: 4px
+    }
+
+    input,
+    select {
+      width: 100%;
+      font-family: var(--sans);
+      font-size: 15px;
+      color: var(--ink);
+      background: #fff;
+      border: 1px solid var(--rule);
+      border-radius: 2px;
+      padding: 9px 11px
+    }
+
+    input[type=number] {
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums
+    }
+
+    input:focus,
+    select:focus {
+      outline: 2px solid var(--stamp);
+      outline-offset: -1px;
+      border-color: var(--stamp)
+    }
+
+    .row {
+      display: grid;
+      gap: 11px;
+      grid-template-columns: 1fr 1fr
+    }
+
+    .row3 {
+      display: grid;
+      gap: 11px;
+      grid-template-columns: 1.4fr .8fr .8fr
+    }
+
+    @media(max-width:560px) {
+
+      .row,
+      .row3 {
+        grid-template-columns: 1fr
+      }
+    }
+
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 13px
+    }
+
+    .check input {
+      width: auto
+    }
+
+    .check label {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin: 0
+    }
+
+    button.primary {
+      width: 100%;
+      background: var(--stamp);
+      color: #fff;
+      border: none;
+      border-radius: 2px;
+      font-family: var(--cond);
+      font-weight: 600;
+      font-size: 13.5px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      padding: 12px;
+      cursor: pointer
+    }
+
+    button.primary:hover {
+      background: #32215A
+    }
+
+    button.primary.settle {
+      background: var(--settled)
+    }
+
+    button.primary.settle:hover {
+      background: #085239
+    }
+
+    button.primary:disabled {
+      background: var(--rule);
+      cursor: not-allowed
+    }
+
+    button.ghost {
+      width: 100%;
+      background: none;
+      border: 1px solid var(--rule);
+      color: var(--ink-soft);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 9px;
+      cursor: pointer;
+      margin-top: 8px;
+      border-radius: 2px
+    }
+
+    button.ghost:hover {
+      border-color: var(--ink);
+      color: var(--ink)
+    }
+
+    button.ghost.danger:hover {
+      border-color: var(--alert);
+      color: var(--alert)
+    }
+
+    /* conversion stamp + fx mirror */
+    .stamp {
+      margin: 2px 0 16px;
+      border: 1px dashed var(--rule);
+      border-left: 3px solid var(--stamp);
+      background: linear-gradient(180deg, #fff, #F2F3EE);
+      padding: 12px 14px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      transition: border-left-color .18s ease
+    }
+
+    .stamp.live {
+      border-left-color: var(--settled)
+    }
+
+    .stamp .native {
+      font-family: var(--mono);
+      font-size: 15px;
+      color: var(--ink-soft);
+      font-variant-numeric: tabular-nums
+    }
+
+    .stamp .arrow {
+      font-family: var(--mono);
+      color: var(--rule);
+      font-size: 15px
+    }
+
+    .stamp .usd {
+      font-family: var(--mono);
+      font-weight: 600;
+      font-size: 23px;
+      color: var(--settled);
+      font-variant-numeric: tabular-nums
+    }
+
+    .stamp .usd.idle {
+      color: var(--rule)
+    }
+
+    .stamp .rate {
+      width: 100%;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-soft);
+      letter-spacing: .05em;
+      padding-top: 6px;
+      border-top: 1px solid var(--rule-soft);
+      margin-top: 4px
+    }
+
+    .stamp .rate b {
+      font-weight: 500;
+      color: var(--ink)
+    }
+
+    /* file capture */
+    .capture {
+      border: 1px dashed var(--rule);
+      background: #fff;
+      padding: 11px 13px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      flex-wrap: wrap
+    }
+
+    .capture.has {
+      border-style: solid;
+      border-color: var(--settled);
+      background: #F2F7F4
+    }
+
+    .capture input[type=file] {
+      display: none
+    }
+
+    .capture .btn {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--stamp);
+      border: 1px solid var(--stamp);
+      background: none;
+      padding: 7px 12px;
+      cursor: pointer;
+      border-radius: 2px;
+      white-space: nowrap
+    }
+
+    .capture .btn:hover {
+      background: var(--stamp);
+      color: #fff
+    }
+
+    .capture .state {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-soft);
+      flex: 1;
+      min-width: 110px
+    }
+
+    .capture .state b {
+      color: var(--settled);
+      font-weight: 500
+    }
+
+    .capture .clear {
+      background: none;
+      border: none;
+      color: var(--rule);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 13px
+    }
+
+    .thumb {
+      width: 36px;
+      height: 36px;
+      object-fit: cover;
+      border: 1px solid var(--rule)
+    }
+
+    .pod-call {
+      margin: 13px 16px;
+      border-left: 3px solid var(--waiting);
+      background: #FAF6EA;
+      padding: 12px 14px
+    }
+
+    .pod-call p {
+      font-size: 12.5px;
+      color: var(--ink-soft);
+      margin-bottom: 10px
+    }
+
+    .pod-call b {
+      color: var(--ink)
+    }
+
+    .mirror {
+      border: 1px dashed var(--rule);
+      border-left: 3px solid var(--stamp);
+      background: linear-gradient(180deg, #fff, #F2F3EE);
+      padding: 12px 14px;
+      margin-bottom: 14px
+    }
+
+    .mirror.live {
+      border-left-color: var(--settled)
+    }
+
+    .mirror .big {
+      font-family: var(--mono);
+      font-size: 17px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums
+    }
+
+    .mirror .big.on {
+      color: var(--settled)
+    }
+
+    .mirror .small {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-soft);
+      margin-top: 5px;
+      padding-top: 5px;
+      border-top: 1px solid var(--rule-soft)
+    }
+
+    .empty {
+      padding: 36px 18px;
+      text-align: center;
+      color: var(--ink-soft);
+      font-size: 13.5px
+    }
+
+    .note {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      padding: 10px 14px;
+      border-left: 3px solid var(--stamp);
+      background: #F2F3EE;
+      margin-bottom: 14px
+    }
+
+    .note.bad {
+      border-left-color: var(--alert);
+      color: var(--alert)
+    }
+
+    .note.good {
+      border-left-color: var(--settled);
+      color: var(--settled)
+    }
+
+    .note.warn {
+      border-left-color: var(--waiting);
+      color: var(--waiting)
+    }
+
+    .gate {
+      max-width: 400px;
+      margin: 70px auto
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 22px;
+      transform: translateX(-50%);
+      background: var(--ink);
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 11px 18px;
+      border-radius: 2px;
+      z-index: 99;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, .22)
+    }
+
+    /* print sheet */
+    #sheet {
+      display: none
+    }
+
+    @media print {
+      body {
+        background: #fff
+      }
+
+      .wrap {
+        display: none !important
+      }
+
+      #sheet {
+        display: block !important
+      }
+
+      @page {
+        size: A4;
+        margin: 16mm
+      }
+    }
+
+    #sheet .ih {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      border-bottom: 2px solid #141E19;
+      padding-bottom: 12px
+    }
+
+    #sheet .co h1 {
+      font-family: var(--cond);
+      font-size: 22px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      font-weight: 700
+    }
+
+    #sheet .co p {
+      font-size: 11px;
+      color: #444;
+      line-height: 1.5
+    }
+
+    #sheet .im {
+      text-align: right;
+      font-family: var(--mono);
+      font-size: 11px
+    }
+
+    #sheet .im .big {
+      font-family: var(--cond);
+      font-size: 20px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      margin-bottom: 6px
+    }
+
+    #sheet .parties {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      margin: 20px 0
+    }
+
+    #sheet .parties h4 {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: #666;
+      margin-bottom: 4px
+    }
+
+    #sheet table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px
+    }
+
+    #sheet th {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      text-align: left;
+      border-bottom: 1px solid #141E19;
+      padding: 7px 6px;
+      color: #444
+    }
+
+    #sheet td {
+      padding: 9px 6px;
+      border-bottom: 1px solid #ddd;
+      font-size: 12.5px
+    }
+
+    #sheet td.num,
+    #sheet th.num {
+      text-align: right;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums
+    }
+
+    #sheet .totals {
+      margin-left: auto;
+      width: 265px;
+      margin-top: 14px
+    }
+
+    #sheet .totals div {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 6px;
+      font-size: 12.5px
+    }
+
+    #sheet .totals .due {
+      border-top: 2px solid #141E19;
+      font-weight: 600;
+      font-size: 15px;
+      font-family: var(--mono);
+      padding-top: 8px
+    }
+
+    #sheet .terms {
+      margin-top: 26px;
+      border-top: 1px solid #ddd;
+      padding-top: 12px;
+      font-size: 10.5px;
+      color: #444;
+      line-height: 1.6
+    }
+
+    #sheet .terms b {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: #141E19
+    }
+
+    @media(prefers-reduced-motion:reduce) {
+      * {
+        transition: none !important
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <h1 id="orgTitle">Safi TMS</h1><span class="sub" id="viewName"></span>
+      </div>
+      <div class="who" id="who"></div>
+    </header>
+
+    <div id="gate" class="gate" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2 id="gateTitle">Sign in</h2>
+        </div>
+        <div class="panel-body">
+          <div id="gateNote"></div>
+          <div id="loginForm">
+            <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="username">
+            </div>
+            <div class="field"><label for="password">Password</label><input id="password" type="password"
+                autocomplete="current-password"></div>
+            <button class="primary" id="loginBtn">Sign in</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="app" style="display:none">
+      <nav id="nav"></nav>
+      <div id="warn"></div>
+      <div id="main"></div>
+    </div>
+  </div>
+  <div id="sheet"></div>
+
+  <script>
+    // =====================================================================
+    // CONFIG — Dashboard > Settings > API Keys. Use the PUBLISHABLE key.
+    // =====================================================================
+    const SUPABASE_URL = "https://shvvpcmcezkfzdvelhpl.supabase.co/";
+    const SUPABASE_KEY = "sb_publishable_mwaEiMwvj8E05ZgDW9Lmhw_yuTZ5fK7";
+
+    // Printed on every invoice.
+    const COMPANY = {
+      name: "SAFI TRANSPORT AND LOGISTICS LIMITED",
+      reg: "PACRA Reg. No. 120261044060",
+      address: "<<< REPLACE: Plot number, Lusaka, Zambia >>>",
+      phone: "<<< REPLACE: +260 ... >>>",
+      email: "<<< REPLACE: accounts@... >>>",
+      bank: ["<<< REPLACE: Bank name >>>",
+        "Account name: Safi Transport and Logistics Limited",
+        "USD Account: <<< REPLACE >>>", "SWIFT: <<< REPLACE >>>"]
+    };
+    // =====================================================================
+
+    const BUCKET = "trip-docs";
+    const $ = id => document.getElementById(id);
+    const cfgOk = !SUPABASE_URL.includes("REPLACE") && !SUPABASE_KEY.includes("REPLACE");
+
+    // ---------------------------------------------------------------------
+    // One shared state object. Every view reads from this; nothing refetches
+    // what another view already loaded.
+    // ---------------------------------------------------------------------
+    const S = {
+      sb: null, org: null, orgName: "", role: "", email: "",
+      view: "board", trip: null,          // active trip carries across views
+      rates: {}, master: {}, board: [], billable: [], ar: [], fetchErrors: [],
+      costs: [], docs: [], tripFetchError: null, // for the active trip
+      filter: "active", bucket: "open", adminView: "fx", adminSel: null,
+      docTab: "ledger", billTab: "bill", billSel: null,
+      costFile: null, docFile: null
+    };
+
+    // ---------- helpers ----------
+    const esc = s => String(s ?? "").replace(/[&<>"]/g, x => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[x]));
+    const m2 = (n, c = "USD") => c + " " + Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const m0 = (n, c = "USD") => c + " " + Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
+    const num = n => Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 2 });
+    const lab = s => String(s || "").replace(/_/g, " ");
+    const today = () => new Date().toISOString().slice(0, 10);
+    const el = (id, html) => { const e = $(id); if (e) e.innerHTML = html; };
+    function note(id, msg, kind) { el(id, msg ? `<div class="note ${kind || ""}">${msg}</div>` : ""); }
+    // note() trusts its caller's markup (several call sites embed an <a> link on purpose) —
+    // this escapes just the untrusted part, a Postgres/Supabase error string, before it's spliced in.
+    const errMsg = e => esc(e?.message || e || "");
+    function toast(msg) {
+      const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
+      document.body.appendChild(t); setTimeout(() => t.remove(), 3200);
+    }
+    // Disables a button (or group of related buttons) for the life of an in-flight
+    // request, so a slow connection can't turn one tap into a double-submit.
+    // Returns a restore() that puts each button back to its OWN prior disabled
+    // state — needed because some buttons in a group (e.g. an already-raised
+    // invoice half) are meant to stay disabled even after the request settles.
+    function busyGroup(btns) {
+      const arr = Array.isArray(btns) ? btns : [btns];
+      const prev = arr.map(b => b.disabled);
+      arr.forEach(b => b.disabled = true);
+      return () => arr.forEach((b, i) => b.disabled = prev[i]);
+    }
+    const PILL = {
+      draft: "grey", allocated: "grey", loading: "violet", in_transit: "violet",
+      at_border: "warn", delivered: "warn", pod_received: "good", invoiced: "good", closed: "grey"
+    };
+
+    // ---------- boot ----------
+    (async function () {
+      if (!cfgOk) {
+        $("gate").style.display = "block"; $("gateTitle").textContent = "Not configured";
+        $("loginForm").style.display = "none";
+        note("gateNote", "Replace SUPABASE_URL and SUPABASE_KEY near the bottom of the script, then reload.", "bad");
+        return;
+      }
+      if (typeof supabase === "undefined") {
+        $("gate").style.display = "block"; $("gateTitle").textContent = "Couldn't load";
+        $("loginForm").style.display = "none";
+        note("gateNote", "vendor/supabase-js.min.js didn't load — check it was deployed alongside this file, then reload.", "bad");
+        return;
+      }
+      S.sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      const { data: { session } } = await S.sb.auth.getSession();
+      session ? boot(session) : ($("gate").style.display = "block");
+    })();
+
+    $("loginBtn").onclick = async () => {
+      const b = $("loginBtn"); b.disabled = true; b.textContent = "Signing in…";
+      const { data, error } = await S.sb.auth.signInWithPassword({ email: $("email").value.trim(), password: $("password").value });
+      b.disabled = false; b.textContent = "Sign in";
+      if (error) return note("gateNote", "That didn't work: " + errMsg(error), "bad");
+      boot(data.session);
+    };
+    ["email", "password"].forEach(id => $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("loginBtn").click() }));
+
+    async function boot(session) {
+      $("gate").style.display = "none"; $("app").style.display = "block";
+      S.email = session.user.email;
+      const { data: mem } = await S.sb.from("memberships").select("org_id, role, organizations(name, trip_prefix)").limit(1).maybeSingle();
+      if (!mem) {
+        el("main", '<div class="panel"><div class="panel-body"><div class="note bad">This account isn\'t a member of any organisation yet. Add a row to memberships linking your user to an org, then reload.</div></div></div>');
+        return;
+      }
+      S.org = mem.org_id; S.orgName = mem.organizations?.name || "Safi TMS"; S.role = mem.role;
+      $("orgTitle").textContent = S.orgName.replace(/ Limited$/, "");
+      $("who").innerHTML = `${esc(S.email)} · ${esc(S.role)} · <button id="out">sign out</button>`;
+      $("out").onclick = async () => { await S.sb.auth.signOut(); location.reload(); };
+      await refreshAll();
+      go("board");
+    }
+
+    // ---------------------------------------------------------------------
+    // Data. One refresh loads everything every view needs.
+    // ---------------------------------------------------------------------
+    async function refreshAll() {
+      const [board, billable, ar, fx, cust, rt, tk, dr, rc] = await Promise.all([
+        S.sb.from("trip_board").select("*").order("actual_load_date", { ascending: false, nullsFirst: true }),
+        S.sb.from("billable").select("*").order("trip_no", { ascending: false }),
+        S.sb.from("invoice_ar").select("*").order("issued_on", { ascending: false }),
+        S.sb.from("fx_rates").select("*").order("effective_on", { ascending: false }),
+        S.sb.from("customers").select("*").order("name"),
+        S.sb.from("routes").select("*").order("name"),
+        S.sb.from("trucks").select("*").order("fleet_no"),
+        S.sb.from("drivers").select("*").order("full_name"),
+        S.sb.from("rate_cards").select("*").order("valid_from", { ascending: false })
+      ]);
+      const sources = {
+        trips: board, billable, invoices: ar, "exchange rates": fx,
+        customers: cust, routes: rt, trucks: tk, drivers: dr, "rate cards": rc
+      };
+      S.fetchErrors = Object.entries(sources).filter(([, r]) => r.error).map(([name]) => name);
+
+      S.board = board.data || [];
+      S.billable = (billable.data || []).filter(t => !t.loading_invoiced || (t.pod_in_hand && !t.delivery_invoiced));
+      S.ar = ar.data || [];
+      S.master = {
+        fx: fx.data || [], customers: cust.data || [], routes: rt.data || [],
+        trucks: tk.data || [], drivers: dr.data || [], rate_cards: rc.data || []
+      };
+      S.rates = {}; (fx.data || []).forEach(r => { if (!(r.currency in S.rates)) S.rates[r.currency] = r; });
+      if (S.trip && !S.board.find(t => t.trip_id === S.trip)) S.trip = null;
+      renderNav(); renderWarn();
+    }
+
+    async function loadTrip(id) {
+      if (!id) { S.costs = []; S.docs = []; S.tripFetchError = null; return; }
+      const [c, d] = await Promise.all([
+        S.sb.from("trip_costs").select("*").eq("trip_id", id).order("incurred_on", { ascending: false }),
+        S.sb.from("trip_documents").select("*").eq("trip_id", id).order("doc_type")
+      ]);
+      const failed = [c.error && "costs", d.error && "documents"].filter(Boolean);
+      S.tripFetchError = failed.length ? failed.join(" and ") : null;
+      S.costs = c.data || []; S.docs = d.data || [];
+    }
+
+    // ---------- nav ----------
+    const VIEWS = [["board", "Board"], ["docket", "Cost docket"], ["billing", "Billing"], ["admin", "Admin"]];
+    function renderNav() {
+      const rolling = S.board.filter(t => ["loading", "in_transit", "at_border"].includes(t.status)).length;
+      const pod = S.board.filter(t => t.status === "delivered" && !t.pod_in_hand).length;
+      const overdue = S.ar.filter(i => i.days_overdue > 0).length;
+      const counts = { board: [rolling, false], docket: [pod, pod > 0], billing: [S.billable.length + overdue, overdue > 0], admin: ["", false] };
+      $("nav").innerHTML = VIEWS.map(([k, l]) => {
+        const [c, alert] = counts[k];
+        return `<button data-go="${k}" class="${S.view === k ? "on" : ""}">${l}${c !== "" && c > 0 ? `<span class="n ${alert ? "alert" : ""}">${c}</span>` : ""}</button>`;
+      }).join("");
+      document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => go(b.dataset.go));
+    }
+
+    function renderWarn() {
+      const latest = {};
+      (S.master.fx || []).forEach(r => { if (!latest[r.currency] || r.effective_on > latest[r.currency]) latest[r.currency] = r.effective_on; });
+      const old = Object.entries(latest).filter(([c, d]) => c !== "USD" && (new Date(today()) - new Date(d)) / 86400000 > 14);
+
+      const parts = [];
+      if (S.fetchErrors.length) parts.push(`<div class="note bad">Couldn't load ${esc(S.fetchErrors.join(", "))} — figures below may be missing or out of date. <a href="#" id="retryFetch" style="color:inherit">Retry</a>.</div>`);
+      if (old.length) parts.push(`<div class="note warn">Exchange rates for ${old.map(([c]) => c).join(", ")} are more than two weeks old. Every cost entered today converts at those rates. <a href="#" id="fixFx" style="color:inherit">Update them</a>.</div>`);
+      el("warn", parts.join(""));
+
+      if ($("fixFx")) $("fixFx").onclick = e => { e.preventDefault(); S.adminView = "fx"; go("admin"); };
+      if ($("retryFetch")) $("retryFetch").onclick = async e => { e.preventDefault(); await refreshAll(); go(S.view); };
+    }
+
+    function go(view) {
+      S.view = view;
+      $("viewName").textContent = VIEWS.find(v => v[0] === view)?.[1] || "";
+      renderNav();
+      ({ board: viewBoard, docket: viewDocket, billing: viewBilling, admin: viewAdmin })[view]();
+    }
+
+    // =====================================================================
+    // BOARD
+    // =====================================================================
+    const FILTERS = [
+      ["active", "Active", t => !["closed", "invoiced"].includes(t.status)],
+      ["rolling", "Rolling", t => ["loading", "in_transit", "at_border"].includes(t.status)],
+      ["border", "At border", t => t.status === "at_border"],
+      ["pod", "Awaiting POD", t => t.status === "delivered" && !t.pod_in_hand],
+      ["billable", "Billable", t => t.status === "pod_received"],
+      ["late", "Late", t => t.over_target],
+      ["all", "All", () => true]
+    ];
+    const NEXT = {
+      draft: [["allocated", "Allocate truck"]], allocated: [["loading", "Start loading"]],
+      loading: [["in_transit", "Depart"]], in_transit: [["delivered", "Mark delivered"]],
+      at_border: [], delivered: [], pod_received: [["invoiced", "Mark invoiced"]], invoiced: [["closed", "Close trip"]]
+    };
+
+    function viewBoard() {
+      const rolling = S.board.filter(t => ["loading", "in_transit", "at_border"].includes(t.status));
+      const late = rolling.filter(t => t.over_target);
+      const pod = S.board.filter(t => t.status === "delivered" && !t.pod_in_hand);
+      const unbilled = pod.reduce((s, t) => s + Number(t.revenue_usd || 0) * 0.5, 0);
+      const done = S.board.filter(t => ["pod_received", "invoiced", "closed"].includes(t.status));
+      const avg = done.length ? done.reduce((s, t) => s + Number(t.margin_pct || 0), 0) / done.length : null;
+
+      el("main", `
+    <div class="strip">
+      <div class="cell"><div class="k">On the road</div><div class="v">${rolling.length}</div>
+        <div class="n">${S.board.filter(t => t.status !== "closed").length} open trips</div></div>
+      <div class="cell"><div class="k">Over corridor target</div><div class="v ${late.length ? "warn" : ""}">${late.length}</div>
+        <div class="n">${late.length ? esc(late.map(t => t.trip_no).join(", ")) : "all on schedule"}</div></div>
+      <div class="cell"><div class="k">Awaiting POD</div><div class="v ${pod.length ? "warn" : ""}">${pod.length}</div>
+        <div class="n">${m0(unbilled)} not yet billable</div></div>
+      <div class="cell"><div class="k">Avg margin, delivered</div><div class="v ${avg >= 0 ? "pos" : ""}">${avg != null ? avg.toFixed(1) + "%" : "—"}</div>
+        <div class="n">${done.length} trips</div></div>
+    </div>
+    <div class="grid">
+      <div class="panel">
+        <div class="panel-head"><h2>Trips</h2><button class="act" id="newTrip">+ New trip</button></div>
+        <div class="chips" id="chips"></div>
+        <ul class="list" id="trips"></ul>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2 id="sideT">Trip detail</h2></div>
+        <div id="side"><div class="empty">Select a trip, or start a new one.</div></div>
+      </div>
+    </div>`);
+      $("newTrip").onclick = newTripForm;
+      boardChips(); boardList();
+      if (S.trip) boardDetail(S.trip);
+    }
+
+    function boardChips() {
+      el("chips", FILTERS.map(([k, l, fn]) =>
+        `<button class="chip ${S.filter === k ? "on" : ""}" data-f="${k}">${l}<span class="c">${S.board.filter(fn).length}</span></button>`).join(""));
+      document.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { S.filter = b.dataset.f; boardChips(); boardList() });
+    }
+
+    function boardList() {
+      const fn = FILTERS.find(f => f[0] === S.filter)[2];
+      const rows = S.board.filter(fn);
+      el("trips", rows.length ? rows.map(t => {
+        const m = Number(t.margin_usd || 0);
+        const tags = [
+          `<span class="pill ${PILL[t.status] || "grey"}">${lab(t.status)}</span>`,
+          t.over_target ? `<span class="pill bad">day ${t.days_running} of ${t.target_days}</span>`
+            : (t.days_running != null ? `<span class="pill grey">day ${t.days_running}</span>` : ""),
+          t.last_border && ["in_transit", "at_border"].includes(t.status) ? `<span class="pill violet">${esc(t.last_border)}</span>` : "",
+          t.docs_pending ? `<span class="pill warn">${t.docs_pending} doc${t.docs_pending > 1 ? "s" : ""}</span>` : "",
+          t.status === "delivered" && !t.pod_in_hand ? `<span class="pill warn">no POD</span>` : ""
+        ].filter(Boolean).join("");
+        return `<li class="tap ${S.trip === t.trip_id ? "sel" : ""}" data-t="${t.trip_id}">
+      <div><div class="r-no">${esc(t.trip_no)}</div>
+        <div class="r-title">${esc(t.customer)}</div>
+        <div class="r-sub">${esc(t.route)}${t.fleet_no ? " · " + esc(t.fleet_no) : ""}${t.driver ? " · " + esc(t.driver) : ""}</div>
+        <div class="r-tags">${tags}</div></div>
+      <div class="r-right"><div class="r-amt ${m >= 0 ? "pos" : "neg"}">${m0(m)}</div>
+        <div class="r-min">${t.margin_pct != null ? t.margin_pct + "%" : "—"}</div>
+        <div class="r-min">${t.cost_entries} costs</div></div>
+    </li>`;
+      }).join("") : '<li class="empty">Nothing here.</li>');
+      document.querySelectorAll("[data-t]").forEach(li => li.onclick = () => { S.trip = li.dataset.t; boardList(); boardDetail(S.trip) });
+    }
+
+    function boardDetail(id) {
+      const t = S.board.find(x => x.trip_id === id); if (!t) return;
+      const m = Number(t.margin_usd || 0), borders = t.borders || [];
+      const canBorder = ["in_transit", "at_border"].includes(t.status);
+      const nexts = (NEXT[t.status] || []).map(([s, l]) => `<button class="act ${s === "delivered" ? "go" : ""}" data-adv="${s}">${l}</button>`).join("");
+
+      el("side", `
+    <div class="d-head">
+      <div class="r-no">${esc(t.trip_no)} · <span class="pill ${PILL[t.status] || "grey"}">${lab(t.status)}</span></div>
+      <div class="r-title" style="font-size:18px">${esc(t.customer)}</div>
+      <div class="r-sub">${esc(t.route)}</div>
+      <div class="d-figs">
+        <div><div class="k">Revenue</div><div class="v">${m2(t.revenue_usd)}</div></div>
+        <div><div class="k">Costs</div><div class="v">${m2(t.cost_usd)}</div></div>
+        <div><div class="k">Margin</div><div class="v ${m >= 0 ? "pos" : "neg"}">${m2(m)}</div></div>
+      </div>
+    </div>
+    <div class="d-sec"><h3>Go to</h3><div class="acts">
+      <button class="act" id="toDocket">Costs &amp; documents</button>
+      ${(!t.pod_in_hand && t.status === "delivered") || ["pod_received", "in_transit", "at_border", "loading"].includes(t.status)
+          ? `<button class="act" id="toBilling">Billing</button>` : ""}
+    </div></div>
+    ${nexts ? `<div class="d-sec"><h3>Next step</h3><div class="acts">${nexts}</div></div>` : ""}
+    ${canBorder ? `<div class="d-sec"><h3>Border</h3><div class="acts">
+      ${t.status === "in_transit" ? borders.map(b => `<button class="act" data-bd="arrival" data-loc="${esc(b)}">Arrived ${esc(b.split("/")[0])}</button>`).join("")
+            : `<button class="act go" data-bd="cleared" data-loc="${esc(t.last_border || borders[0] || "")}">Cleared ${esc((t.last_border || borders[0] || "border").split("/")[0])}</button>`}
+    </div></div>`: ""}
+    ${t.status === "delivered" && !t.pod_in_hand ? `<div class="d-sec"><h3>Blocked on</h3>
+      <div class="d-hint">POD not received. ${m2(Number(t.revenue_usd || 0) * 0.5)} can't be invoiced until it's in hand.</div></div>` : ""}
+    <div class="d-sec"><h3>Assignment</h3>
+      <div class="d-kv"><span>Truck</span><span>${esc(t.fleet_no || "—")}${t.horse_reg ? " · " + esc(t.horse_reg) : ""}</span></div>
+      <div class="d-kv"><span>Driver</span><span>${esc(t.driver || "—")}</span></div>
+      <div class="d-kv"><span>Cargo</span><span>${esc(t.commodity || "—")}${t.tonnage ? " · " + t.tonnage + " t" : ""}</span></div>
+      <div class="d-kv"><span>Container</span><span>${esc(t.container_no || "—")}</span></div>
+    </div>
+    <div class="d-sec"><h3>Timing</h3>
+      <div class="d-kv"><span>Loaded</span><span>${t.actual_load_date || "—"}</span></div>
+      <div class="d-kv"><span>Planned ETA</span><span>${t.planned_eta || "—"}</span></div>
+      <div class="d-kv"><span>Delivered</span><span>${t.actual_delivery_at ? t.actual_delivery_at.slice(0, 10) : "—"}</span></div>
+      <div class="d-kv"><span>Days running</span><span>${t.days_running != null ? t.days_running + " of " + (t.target_days ?? "?") : "—"}</span></div>
+      <div class="d-kv"><span>Last border</span><span>${esc(t.last_border || "—")}</span></div>
+    </div>
+    <div class="panel-body" style="padding-top:0"><div id="actNote"></div></div>`);
+
+      $("toDocket").onclick = () => go("docket");
+      if ($("toBilling")) $("toBilling").onclick = () => go("billing");
+      document.querySelectorAll("[data-adv]").forEach(b => b.onclick = () => advance(id, b.dataset.adv, [...document.querySelectorAll("[data-adv]")]));
+      document.querySelectorAll("[data-bd]").forEach(b => b.onclick = () => borderEvent(id, b.dataset.bd, b.dataset.loc, [...document.querySelectorAll("[data-bd]")]));
+    }
+
+    async function advance(id, status, btns) {
+      const restore = busyGroup(btns);
+      const patch = { status };
+      if (status === "delivered") patch.actual_delivery_at = new Date().toISOString();
+      if (status === "closed") patch.closed_at = new Date().toISOString();
+      const { error } = await S.sb.from("trips").update(patch).eq("id", id);
+      if (error) { restore(); return note("actNote", "Couldn't update: " + errMsg(error), "bad"); }
+      await refreshAll(); viewBoard();
+    }
+    async function borderEvent(id, kind, loc, btns) {
+      const restore = busyGroup(btns);
+      const { error } = await S.sb.rpc("log_border_event", { p_trip: id, p_kind: kind, p_location: loc });
+      if (error) { restore(); return note("actNote", "Couldn't log it: " + errMsg(error), "bad"); }
+      await refreshAll(); viewBoard();
+    }
+
+    // ---------- new trip ----------
+    function newTripForm() {
+      S.trip = null; boardList();
+      const opts = (arr, v, l) => arr.filter(x => x.is_active !== false).map(o => `<option value="${o[v]}">${esc(o[l])}</option>`).join("");
+      $("sideT").textContent = "New trip";
+      el("side", `<div class="panel-body">
+    <div id="newNote"></div>
+    <div class="field"><label for="nCust">Customer</label><select id="nCust"><option value="">—</option>${opts(S.master.customers, "id", "name")}</select></div>
+    <div class="field"><label for="nRoute">Route</label><select id="nRoute"><option value="">—</option>${opts(S.master.routes, "id", "name")}</select></div>
+    <div class="field"><label for="nRev">Revenue (USD)</label><input id="nRev" type="number" step="0.01" min="0" placeholder="0.00"></div>
+    <div id="rateHint"></div>
+    <div class="row">
+      <div class="field"><label for="nTruck">Truck</label><select id="nTruck"><option value="">—</option>${opts(S.master.trucks, "id", "fleet_no")}</select></div>
+      <div class="field"><label for="nDriver">Driver</label><select id="nDriver"><option value="">—</option>${opts(S.master.drivers, "id", "full_name")}</select></div>
+    </div>
+    <div class="row">
+      <div class="field"><label for="nComm">Commodity</label><input id="nComm" type="text" placeholder="General cargo"></div>
+      <div class="field"><label for="nTon">Tonnage</label><input id="nTon" type="number" step="0.001" min="0" placeholder="28.500"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label for="nCont">Container</label><input id="nCont" type="text"></div>
+      <div class="field"><label for="nSeal">Seal</label><input id="nSeal" type="text"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label for="nLoad">Load date</label><input id="nLoad" type="date" value="${today()}"></div>
+      <div class="field"><label for="nEta">Planned ETA</label><input id="nEta" type="date"></div>
+    </div>
+    <button class="primary" id="nSave">Create trip</button>
+    <button class="ghost" id="nCancel">Cancel</button>
+  </div>`);
+      $("nCust").onchange = applyRate;
+      $("nRoute").onchange = () => { applyRate(); applyEta() };
+      $("nSave").onclick = createTrip;
+      $("nCancel").onclick = () => { $("sideT").textContent = "Trip detail"; el("side", '<div class="empty">Select a trip, or start a new one.</div>') };
+    }
+    function applyRate() {
+      const c = $("nCust").value, r = $("nRoute").value;
+      const hit = S.master.rate_cards.find(x => x.route_id === r && (x.customer_id === c || !x.customer_id));
+      if (hit) {
+        $("nRev").value = Number(hit.rate_amount).toFixed(2);
+        el("rateHint", `<div class="hint" style="color:var(--settled);margin:-8px 0 13px">Filled from the rate card${hit.commodity ? " · " + esc(hit.commodity) : ""}. Override if agreed differently.</div>`);
+        if (hit.commodity && !$("nComm").value) $("nComm").value = hit.commodity;
+      } else el("rateHint", c && r ? `<div class="hint" style="color:var(--waiting);margin:-8px 0 13px">No rate card for this pairing. Enter the agreed price.</div>` : "");
+    }
+    function applyEta() {
+      const r = S.master.routes.find(x => x.id === $("nRoute").value);
+      if (r?.target_days && $("nLoad").value) {
+        const d = new Date($("nLoad").value); d.setDate(d.getDate() + r.target_days);
+        $("nEta").valueAsDate = d;
+      }
+    }
+    async function createTrip() {
+      const cust = $("nCust").value, route = $("nRoute").value, rev = parseFloat($("nRev").value);
+      if (!cust || !route) return note("newNote", "Customer and route are both required.", "bad");
+      if (isNaN(rev) || rev <= 0) return note("newNote", "Enter the agreed revenue.", "bad");
+      const b = $("nSave"); b.disabled = true; b.textContent = "Creating…";
+      try {
+        const { data: tripNo, error: e0 } = await S.sb.rpc("next_trip_no", { p_org: S.org });
+        if (e0) throw e0;
+        const truck = $("nTruck").value, driver = $("nDriver").value;
+        const { data: c, error } = await S.sb.from("trips").insert({
+          org_id: S.org, trip_no: tripNo, status: truck && driver ? "allocated" : "draft",
+          customer_id: cust, route_id: route, truck_id: truck || null, driver_id: driver || null,
+          commodity: $("nComm").value.trim() || null, tonnage: parseFloat($("nTon").value) || null,
+          container_no: $("nCont").value.trim() || null, seal_no: $("nSeal").value.trim() || null,
+          revenue_amount: rev, revenue_currency: "USD",
+          planned_load_date: $("nLoad").value || null, actual_load_date: $("nLoad").value || null,
+          planned_eta: $("nEta").value || null
+        }).select("id").single();
+        if (error) throw error;
+        await S.sb.from("trip_documents").insert(
+          ["consignment_note", "packing_list", "t1_transit", "pod"].map(d =>
+            ({ org_id: S.org, trip_id: c.id, doc_type: d, status: "pending" })));
+        S.trip = c.id; await refreshAll(); viewBoard(); toast(tripNo + " created");
+      } catch (e) { note("newNote", "Couldn't create it: " + errMsg(e), "bad"); }
+      finally { b.disabled = false; b.textContent = "Create trip"; }
+    }
+
+    // =====================================================================
+    // COST DOCKET
+    // =====================================================================
+    const CATS = ["fuel", "driver_advance", "driver_allowance", "border_fees", "customs_duty",
+      "clearing_agent", "tolls", "weighbridge", "permits", "escort", "demurrage", "detention",
+      "repairs", "tyres", "police", "other"];
+    const DOCTYPES = ["pod", "consignment_note", "cmr", "packing_list", "t1_transit", "customs_entry",
+      "delivery_note", "weighbridge_ticket", "insurance", "permit", "other"];
+
+    // Unsent cost-form drafts. Border-post connectivity is unreliable and a
+    // killed/reloaded tab shouldn't cost someone a re-typed entry. The receipt
+    // photo itself isn't persisted here (needs IndexedDB, not localStorage) —
+    // only the text fields, restored per trip_id.
+    const draftKey = id => `safi:costDraft:${id}`;
+    function saveDraft() {
+      if (!S.trip) return;
+      const draft = {
+        cat: $("cat")?.value, amt: $("amt")?.value, cur: $("cur")?.value, when: $("when")?.value,
+        desc: $("desc")?.value, loc: $("loc")?.value, paid: $("paid")?.value, ref: $("ref")?.value
+      };
+      try {
+        Object.values(draft).some(Boolean)
+          ? localStorage.setItem(draftKey(S.trip), JSON.stringify(draft))
+          : localStorage.removeItem(draftKey(S.trip));
+      } catch { /* storage unavailable or full — draft just won't survive a reload */ }
+    }
+    function clearDraft(id) { try { localStorage.removeItem(draftKey(id)); } catch { } }
+    function restoreDraft() {
+      let draft = null;
+      try { draft = S.trip && JSON.parse(localStorage.getItem(draftKey(S.trip)) || "null"); } catch { }
+      $("cat").value = draft?.cat || CATS[0];
+      $("amt").value = draft?.amt || "";
+      $("cur").value = draft?.cur || (S.rates["TZS"] ? "TZS" : "");
+      $("when").value = draft?.when || today();
+      $("desc").value = draft?.desc || "";
+      $("loc").value = draft?.loc || "";
+      $("paid").value = draft?.paid || "driver_float";
+      $("ref").value = draft?.ref || "";
+      note("formNote", draft ? "Restored an unsaved draft from earlier — the receipt photo wasn't kept, re-attach it if needed." : "");
+      stamp();
+    }
+
+    async function viewDocket() {
+      const open = S.board.filter(t => !["closed", "cancelled"].includes(t.status));
+      if (!S.trip && open.length) S.trip = open[0].trip_id;
+      await loadTrip(S.trip);
+
+      const curOpts = Object.keys(S.rates).sort((a, b) => {
+        const o = ["USD", "TZS", "ZMW", "CDF"], ia = o.indexOf(a), ib = o.indexOf(b);
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+      });
+
+      el("main", `<div class="grid">
+    <div class="panel">
+      <div class="panel-head"><h2>Record a cost</h2></div>
+      <div class="panel-body">
+        <div id="formNote"></div>
+        <div class="field"><label for="trip">Trip</label>
+          <select id="trip">${open.map(t => `<option value="${t.trip_id}" ${S.trip === t.trip_id ? "selected" : ""}>${esc(t.trip_no)} — ${esc(t.customer)} — ${esc(t.route)}</option>`).join("")}</select></div>
+        <div class="field"><label for="cat">Category</label>
+          <select id="cat">${CATS.map(c => `<option value="${c}">${lab(c).replace(/^./, x => x.toUpperCase())}</option>`).join("")}</select></div>
+        <div class="row3">
+          <div class="field"><label for="amt">Amount</label><input id="amt" type="number" step="0.01" min="0" placeholder="0.00" inputmode="decimal"></div>
+          <div class="field"><label for="cur">Currency</label><select id="cur">${curOpts.map(c => `<option>${c}</option>`).join("")}</select></div>
+          <div class="field"><label for="when">Date</label><input id="when" type="date" value="${today()}"></div>
+        </div>
+        <div class="stamp" id="stamp">
+          <span class="native" id="sNative">—</span><span class="arrow">→</span>
+          <span class="usd idle" id="sUsd">USD 0.00</span>
+          <span class="rate" id="sRate"></span>
+        </div>
+        <div class="field"><label for="desc">Description</label><input id="desc" type="text" placeholder="e.g. Tunduma crossing charges"></div>
+        <div class="row3">
+          <div class="field"><label for="loc">Location</label><input id="loc" type="text" placeholder="Nakonde"></div>
+          <div class="field"><label for="paid">Paid by</label><select id="paid">
+            <option value="driver_float">Driver float</option><option value="office">Office</option>
+            <option value="agent">Agent</option><option value="card">Card</option></select></div>
+          <div class="field"><label for="ref">Receipt ref</label><input id="ref" type="text"></div>
+        </div>
+        <label style="display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:5px">Receipt photo</label>
+        <div class="capture" id="cap">
+          <input type="file" id="capFile" accept="image/*,application/pdf" capture="environment">
+          <button class="btn" id="capBtn" type="button">Attach</button>
+          <img id="capThumb" class="thumb" style="display:none" alt="">
+          <span class="state" id="capState">Optional — but a float can't be reconciled without one.</span>
+          <button class="clear" id="capClear" style="display:none" type="button">✕</button>
+        </div>
+        <button class="primary" id="saveCost">Save cost</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div id="dSummary" class="d-head"></div>
+      <div class="tabs">
+        <button id="tabL" class="${S.docTab === "ledger" ? "on" : ""}">Ledger <span class="c" id="cL"></span></button>
+        <button id="tabD" class="${S.docTab === "docs" ? "on" : ""}">Documents <span id="dBadge"></span></button>
+      </div>
+      <div id="paneL" style="display:${S.docTab === "ledger" ? "block" : "none"}"><ul class="list" id="ledger"></ul></div>
+      <div id="paneD" style="display:${S.docTab === "docs" ? "block" : "none"}">
+        <div id="podCall"></div>
+        <ul class="list" id="docs"></ul>
+        <div class="panel-body" style="background:#F2F3EE;border-top:1px solid var(--rule)">
+          <div id="docNote"></div>
+          <div class="field"><label for="dType">Add or replace a document</label>
+            <select id="dType">${DOCTYPES.map(d => `<option value="${d}">${lab(d).replace(/^./, x => x.toUpperCase())}</option>`).join("")}</select></div>
+          <div class="field"><label for="dNum">Document number</label><input id="dNum" type="text"></div>
+          <div class="capture" id="dcap">
+            <input type="file" id="dcapFile" accept="image/*,application/pdf" capture="environment">
+            <button class="btn" id="dcapBtn" type="button">Choose file</button>
+            <img id="dcapThumb" class="thumb" style="display:none" alt="">
+            <span class="state" id="dcapState">Photo or PDF.</span>
+            <button class="clear" id="dcapClear" style="display:none" type="button">✕</button>
+          </div>
+          <button class="primary" id="docSave">Upload document</button>
+        </div>
+      </div>
+    </div>
+  </div>`);
+
+      wireCapture("cap", f => S.costFile = f, "Optional — but a float can't be reconciled without one.");
+      wireCapture("dcap", f => S.docFile = f, "Photo or PDF.");
+      $("trip").onchange = async () => { S.trip = $("trip").value; await loadTrip(S.trip); renderDocket(); restoreDraft(); };
+      $("amt").oninput = () => { stamp(); saveDraft(); }; $("cur").onchange = () => { stamp(); saveDraft(); };
+      ["cat", "when", "paid"].forEach(id => $(id).onchange = saveDraft);
+      ["desc", "loc", "ref"].forEach(id => $(id).oninput = saveDraft);
+      $("saveCost").onclick = saveCost; $("docSave").onclick = saveDoc;
+      $("tabL").onclick = () => { S.docTab = "ledger"; $("paneL").style.display = "block"; $("paneD").style.display = "none"; $("tabL").classList.add("on"); $("tabD").classList.remove("on") };
+      $("tabD").onclick = () => { S.docTab = "docs"; $("paneD").style.display = "block"; $("paneL").style.display = "none"; $("tabD").classList.add("on"); $("tabL").classList.remove("on") };
+      restoreDraft(); renderDocket();
+    }
+
+    function stamp() {
+      const cur = $("cur")?.value, amt = parseFloat($("amt")?.value), r = S.rates[cur];
+      if (!r) { el("sRate", "No rate on file for " + cur + "."); return; }
+      el("sRate", `Rate on file <b>1 ${cur} = ${Number(r.rate_to_usd).toFixed(8)} USD</b> · dated ${r.effective_on} · frozen onto this entry`);
+      if (isNaN(amt) || amt <= 0) {
+        $("sNative").textContent = "—"; $("sUsd").textContent = "USD 0.00";
+        $("sUsd").classList.add("idle"); $("stamp").classList.remove("live"); return;
+      }
+      $("sNative").textContent = m2(amt, cur);
+      $("sUsd").textContent = m2(amt * r.rate_to_usd);
+      $("sUsd").classList.remove("idle"); $("stamp").classList.add("live");
+    }
+
+    function renderDocket() {
+      const t = S.board.find(x => x.trip_id === S.trip);
+      const errNote = S.tripFetchError
+        ? `<div class="note bad" style="margin:0 0 12px">Couldn't load ${esc(S.tripFetchError)} for this trip — the ledger and documents below may be incomplete. <a href="#" id="retryTrip" style="color:inherit">Retry</a>.</div>` : "";
+      if (t) {
+        const m = Number(t.margin_usd || 0);
+        el("dSummary", `${errNote}
+      <div class="r-no">${esc(t.trip_no)} · <span class="pill ${PILL[t.status] || "grey"}">${lab(t.status)}</span></div>
+      <div class="r-title" style="font-size:18px">${esc(t.customer)}</div>
+      <div class="r-sub">${esc(t.route)}${t.fleet_no ? " · " + esc(t.fleet_no) : ""}</div>
+      <div class="d-figs">
+        <div><div class="k">Revenue</div><div class="v">${m2(t.revenue_usd)}</div></div>
+        <div><div class="k">Costs</div><div class="v">${m2(t.cost_usd)}</div></div>
+        <div><div class="k">Margin</div><div class="v ${m >= 0 ? "pos" : "neg"}">${m2(m)}</div></div>
+      </div>`);
+      } else {
+        el("dSummary", errNote);
+      }
+      if ($("retryTrip")) $("retryTrip").onclick = async e => { e.preventDefault(); await loadTrip(S.trip); renderDocket(); };
+      el("cL", S.costs.length ? `(${S.costs.length})` : "");
+      el("ledger", S.costs.length ? S.costs.map(c => `
+    <li><div>
+      <div class="r-no" style="color:var(--stamp)">${lab(c.category)}</div>
+      <div style="font-size:13px;margin-top:1px">${esc(c.description || "—")}</div>
+      <div class="r-mono">${c.incurred_on}${c.location ? " · " + esc(c.location) : ""}${c.receipt_ref ? " · " + esc(c.receipt_ref) : ""}
+        ${c.receipt_path ? ` · <a href="#" data-open="${esc(c.receipt_path)}">receipt</a>` : ""}</div>
+    </div>
+    <div class="r-right"><div class="r-amt">${m2(c.amount_usd)}</div>
+      <div class="r-min">${c.currency !== "USD" ? m2(c.amount, c.currency) : "&nbsp;"}</div></div>
+    <button class="x" data-del="${c.id}">✕</button></li>`).join("")
+        : '<li class="empty">No costs recorded on this trip yet.</li>');
+
+      const pending = S.docs.filter(d => d.status === "pending").length;
+      el("dBadge", pending ? `<span class="badge">${pending}</span>` : "");
+      el("docs", S.docs.length ? S.docs.map(d => `
+    <li><div>
+      <div style="font-family:var(--cond);font-weight:600;font-size:14px;letter-spacing:.04em;text-transform:uppercase">${lab(d.doc_type)}</div>
+      <div class="r-mono">${esc(d.doc_number || "no number")}${d.issued_on ? " · issued " + d.issued_on : ""}${d.received_on ? " · received " + d.received_on : ""}</div>
+      <div class="r-mono">${d.storage_path ? `<a href="#" data-open="${esc(d.storage_path)}">view file</a>` : "no file attached"}</div>
+    </div><span class="pill ${{ pending: "warn", issued: "violet", lodged: "violet", cleared: "good", received: "good", rejected: "bad" }[d.status] || "grey"}">${d.status}</span></li>`).join("")
+        : '<li class="empty">No documents on this trip yet.</li>');
+
+      const pod = S.docs.find(d => d.doc_type === "pod");
+      const done = pod && pod.status === "received";
+      el("podCall", (!done && t && ["delivered", "in_transit", "at_border"].includes(t.status)) ? `
+    <div class="pod-call"><p>The delivery half can't be invoiced until the POD is in hand.
+      Upload it below, then <b>mark it received</b>.</p>
+      <button class="primary settle" id="podBtn" ${pod && pod.storage_path ? "" : "disabled"}>Mark POD received</button></div>` : "");
+      if ($("podBtn")) $("podBtn").onclick = () => markPod(pod.id);
+
+      document.querySelectorAll("[data-open]").forEach(a => a.onclick = async e => {
+        e.preventDefault();
+        const { data } = await S.sb.storage.from(BUCKET).createSignedUrl(a.dataset.open, 3600);
+        if (data?.signedUrl) window.open(data.signedUrl, "_blank", "noopener");
+      });
+      document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => delCost(b.dataset.del));
+    }
+
+    async function prepare(file) {
+      if (!file.type.startsWith("image/")) return file;
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file) });
+      const max = 1600, scale = Math.min(1, max / Math.max(img.width, img.height));
+      if (scale === 1 && file.size < 900000) return file;
+      const cv = document.createElement("canvas");
+      cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
+      cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+      const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.82));
+      URL.revokeObjectURL(img.src);
+      return new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
+    }
+    function wireCapture(p, onPick, idle) {
+      const f = $(p + "File"), btn = $(p + "Btn"), box = $(p), st = $(p + "State"), th = $(p + "Thumb"), cl = $(p + "Clear");
+      btn.onclick = () => f.click();
+      f.onchange = async () => {
+        const raw = f.files[0]; if (!raw) return;
+        st.textContent = "Preparing…";
+        const ready = await prepare(raw); onPick(ready);
+        box.classList.add("has");
+        st.innerHTML = `<b>${esc(ready.name)}</b> · ${(ready.size / 1024).toFixed(0)} KB`;
+        cl.style.display = "inline";
+        if (ready.type.startsWith("image/")) { th.src = URL.createObjectURL(ready); th.style.display = "block" } else th.style.display = "none";
+      };
+      cl.onclick = () => { f.value = ""; onPick(null); box.classList.remove("has"); th.style.display = "none"; cl.style.display = "none"; st.textContent = idle };
+    }
+    async function upload(file) {
+      const safe = file.name.replace(/[^\w.\-]/g, "_");
+      const path = `${S.org}/${S.trip}/${Date.now()}-${safe}`;
+      const { error } = await S.sb.storage.from(BUCKET).upload(path, file, { contentType: file.type });
+      if (error) throw error;
+      return path;
+    }
+
+    async function saveCost() {
+      const amt = parseFloat($("amt").value), cur = $("cur").value, r = S.rates[cur];
+      if (!S.trip) return note("formNote", "Pick a trip first.", "bad");
+      if (isNaN(amt) || amt <= 0) return note("formNote", "Enter an amount greater than zero.", "bad");
+      if (!r) return note("formNote", "No exchange rate on file for " + cur + ".", "bad");
+      const b = $("saveCost"); b.disabled = true; b.textContent = "Saving…";
+      try {
+        let path = null;
+        if (S.costFile) { b.textContent = "Uploading receipt…"; path = await upload(S.costFile); }
+        b.textContent = "Saving…";
+        const { error } = await S.sb.from("trip_costs").insert({
+          org_id: S.org, trip_id: S.trip, category: $("cat").value,
+          description: $("desc").value.trim() || null, amount: amt, currency: cur,
+          fx_rate_to_usd: r.rate_to_usd, incurred_on: $("when").value,
+          location: $("loc").value.trim() || null, paid_by: $("paid").value,
+          receipt_ref: $("ref").value.trim() || null, receipt_path: path
+        });
+        if (error) throw error;
+        toast(`${m2(amt, cur)} → ${m2(amt * r.rate_to_usd)}`);
+        clearDraft(S.trip);
+        $("amt").value = ""; $("desc").value = ""; $("ref").value = "";
+        $("capClear").click(); stamp(); $("amt").focus();
+        await refreshAll(); await loadTrip(S.trip); renderDocket();
+      } catch (e) { note("formNote", "Couldn't save: " + errMsg(e), "bad"); }
+      finally { b.disabled = false; b.textContent = "Save cost"; }
+    }
+    async function delCost(id) {
+      if (!confirm("Remove this cost entry?")) return;
+      const { error } = await S.sb.from("trip_costs").delete().eq("id", id);
+      if (error) return note("formNote", "Couldn't remove it: " + errMsg(error), "bad");
+      await refreshAll(); await loadTrip(S.trip); renderDocket();
+    }
+    async function saveDoc() {
+      if (!S.docFile) return note("docNote", "Choose a file to upload.", "bad");
+      const b = $("docSave"); b.disabled = true; b.textContent = "Uploading…";
+      try {
+        const path = await upload(S.docFile), type = $("dType").value;
+        const { data: ex } = await S.sb.from("trip_documents").select("id").eq("trip_id", S.trip).eq("doc_type", type).maybeSingle();
+        const payload = { storage_path: path, doc_number: $("dNum").value.trim() || null, status: "issued", issued_on: today() };
+        const { error } = ex
+          ? await S.sb.from("trip_documents").update(payload).eq("id", ex.id)
+          : await S.sb.from("trip_documents").insert({ org_id: S.org, trip_id: S.trip, doc_type: type, ...payload });
+        if (error) throw error;
+        toast("Uploaded"); $("dNum").value = ""; $("dcapClear").click();
+        await refreshAll(); await loadTrip(S.trip); renderDocket();
+      } catch (e) { note("docNote", "Upload failed: " + errMsg(e), "bad"); }
+      finally { b.disabled = false; b.textContent = "Upload document"; }
+    }
+    async function markPod(docId) {
+      const b = $("podBtn"); b.disabled = true; b.textContent = "Recording…";
+      const { error: e1 } = await S.sb.from("trip_documents").update({ status: "received", received_on: today() }).eq("id", docId);
+      const { error: e2 } = await S.sb.from("trips").update({ status: "pod_received", pod_received_at: new Date().toISOString() }).eq("id", S.trip);
+      if (e1 || e2) { b.disabled = false; b.textContent = "Mark POD received"; return note("docNote", "Couldn't record it: " + errMsg(e1 || e2), "bad"); }
+      toast("POD received — delivery invoice unlocked");
+      await refreshAll(); await loadTrip(S.trip); renderDocket();
+    }
+
+    // =====================================================================
+    // BILLING
+    // =====================================================================
+    const BUCKETS = [["open", "Unpaid", i => Number(i.outstanding) > 0], ["current", "Current", i => i.bucket === "current"],
+    ["b1", "1–30", i => i.bucket === "1-30"], ["b2", "31–60", i => i.bucket === "31-60"],
+    ["b3", "60+", i => i.bucket === "60+"], ["settled", "Settled", i => i.bucket === "settled"],
+    ["cancelled", "Cancelled", i => i.bucket === "cancelled"], ["all", "All", () => true]];
+
+    function viewBilling() {
+      const out = S.ar.filter(i => Number(i.outstanding) > 0);
+      const overdue = out.filter(i => i.days_overdue > 0);
+      const totalOut = out.reduce((s, i) => s + Number(i.outstanding), 0);
+      const totalOver = overdue.reduce((s, i) => s + Number(i.outstanding), 0);
+      const raisable = S.billable.reduce((s, t) => s + (!t.loading_invoiced ? Number(t.half_usd) : 0) + ((t.pod_in_hand && !t.delivery_invoiced) ? Number(t.half_usd) : 0), 0);
+      const blocked = S.billable.filter(t => !t.pod_in_hand && t.loading_invoiced);
+      const blockedVal = blocked.reduce((s, t) => s + Number(t.half_usd), 0);
+
+      el("main", `
+    <div class="strip">
+      <div class="cell"><div class="k">Ready to raise</div><div class="v pos">${m0(raisable)}</div><div class="n">${S.billable.length} trip${S.billable.length === 1 ? "" : "s"}</div></div>
+      <div class="cell"><div class="k">Blocked on POD</div><div class="v ${blocked.length ? "warn" : ""}">${m0(blockedVal)}</div><div class="n">${blocked.length} delivered, no POD</div></div>
+      <div class="cell"><div class="k">Outstanding</div><div class="v">${m0(totalOut)}</div><div class="n">${out.length} unpaid</div></div>
+      <div class="cell"><div class="k">Overdue</div><div class="v ${overdue.length ? "bad" : ""}">${m0(totalOver)}</div><div class="n">${overdue.length ? overdue.length + " past due" : "nothing past due"}</div></div>
+    </div>
+    <div class="grid">
+      <div class="panel">
+        <div class="tabs">
+          <button id="bTab1" class="${S.billTab === "bill" ? "on" : ""}">Ready to bill <span class="c">${S.billable.length || ""}</span></button>
+          <button id="bTab2" class="${S.billTab === "inv" ? "on" : ""}">Receivables <span class="c">${out.length || ""}</span></button>
+        </div>
+        <div class="chips" id="bChips" style="display:${S.billTab === "inv" ? "flex" : "none"}"></div>
+        <ul class="list" id="bRows"></ul>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2 id="bSideT">Detail</h2></div>
+        <div id="bSide"><div class="empty">Pick a trip to bill, or an invoice to settle.</div></div>
+      </div>
+    </div>`);
+      $("bTab1").onclick = () => { S.billTab = "bill"; S.billSel = null; viewBilling() };
+      $("bTab2").onclick = () => { S.billTab = "inv"; S.billSel = null; viewBilling() };
+      if (S.billTab === "inv") billChips();
+      billRows();
+      if (S.billTab === "bill" && S.trip && S.billable.find(t => t.trip_id === S.trip)) { S.billSel = S.trip; billTrip(S.trip); }
+      else if (S.billSel) S.billTab === "bill" ? billTrip(S.billSel) : billInvoice(S.billSel);
+    }
+    function billChips() {
+      el("bChips", BUCKETS.map(([k, l, fn]) => `<button class="chip ${S.bucket === k ? "on" : ""}" data-bk="${k}">${l}<span class="c">${S.ar.filter(fn).length}</span></button>`).join(""));
+      document.querySelectorAll("[data-bk]").forEach(b => b.onclick = () => { S.bucket = b.dataset.bk; billChips(); billRows() });
+    }
+    function billRows() {
+      if (S.billTab === "bill") {
+        el("bRows", S.billable.length ? S.billable.map(t => {
+          const tags = [!t.loading_invoiced ? '<span class="pill violet">loading half due</span>' : "",
+          t.pod_in_hand && !t.delivery_invoiced ? '<span class="pill good">delivery half due</span>' : "",
+          !t.pod_in_hand && t.loading_invoiced ? '<span class="pill warn">waiting on POD</span>' : ""].filter(Boolean).join("");
+          return `<li class="tap ${S.billSel === t.trip_id ? "sel" : ""}" data-br="${t.trip_id}">
+        <div><div class="r-no">${esc(t.trip_no)}</div><div class="r-title">${esc(t.customer)}</div>
+          <div class="r-sub">${esc(t.route)}</div><div class="r-tags">${tags}</div></div>
+        <div class="r-right"><div class="r-amt">${m0(t.revenue_usd)}</div><div class="r-min">half ${m0(t.half_usd)}</div></div></li>`;
+        }).join("") : '<li class="empty">Nothing waiting to be billed.</li>');
+      } else {
+        const fn = BUCKETS.find(b => b[0] === S.bucket)[2], rows = S.ar.filter(fn);
+        el("bRows", rows.length ? rows.map(i => {
+          const st = Number(i.outstanding) <= 0 ? "good" : (i.days_overdue > 0 ? "bad" : "violet");
+          return `<li class="tap ${S.billSel === i.id ? "sel" : ""}" data-br="${i.id}">
+        <div><div class="r-no">${esc(i.invoice_no)} · ${esc(i.trips || "")}</div>
+          <div class="r-title">${esc(i.customer)}</div>
+          <div class="r-sub">${lab(i.invoice_type)} · issued ${i.issued_on}</div>
+          <div class="r-tags"><span class="pill ${st}">${Number(i.outstanding) <= 0 ? "settled" : lab(i.status)}</span>
+            ${i.days_overdue > 0 ? `<span class="pill bad">${i.days_overdue}d overdue</span>` : ""}</div></div>
+        <div class="r-right"><div class="r-amt">${m0(i.outstanding, i.currency)}</div>
+          <div class="r-min">of ${m0(i.total_due, i.currency)}</div></div></li>`;
+        }).join("") : '<li class="empty">Nothing here.</li>');
+      }
+      document.querySelectorAll("[data-br]").forEach(li => li.onclick = () => {
+        S.billSel = li.dataset.br; billRows();
+        S.billTab === "bill" ? billTrip(S.billSel) : billInvoice(S.billSel);
+      });
+    }
+    function billTrip(id) {
+      const t = S.billable.find(x => x.trip_id === id); if (!t) return;
+      $("bSideT").textContent = "Raise invoice";
+      el("bSide", `
+    <div class="d-head"><div class="r-no">${esc(t.trip_no)}</div>
+      <div class="r-title" style="font-size:18px">${esc(t.customer)}</div>
+      <div class="r-sub">${esc(t.route)}</div>
+      <div class="d-figs">
+        <div><div class="k">Freight</div><div class="v">${m2(t.revenue_usd)}</div></div>
+        <div><div class="k">Each half</div><div class="v">${m2(t.half_usd)}</div></div>
+        <div><div class="k">POD</div><div class="v ${t.pod_in_hand ? "pos" : ""}">${t.pod_in_hand ? "in hand" : "—"}</div></div>
+      </div></div>
+    <div class="d-sec"><h3>Raise</h3><div id="raiseNote"></div>
+      <div class="acts">
+        <button class="act" data-raise="loading" ${t.loading_invoiced ? "disabled" : ""}>${t.loading_invoiced ? "Loading half raised" : "Loading half"}</button>
+        <button class="act go" data-raise="delivery" ${(!t.pod_in_hand || t.delivery_invoiced) ? "disabled" : ""}>${t.delivery_invoiced ? "Delivery half raised" : "Delivery half"}</button>
+        <button class="act" data-raise="full" ${(t.loading_invoiced || t.delivery_invoiced) ? "disabled" : ""}>Full amount</button>
+      </div>
+      ${!t.pod_in_hand ? `<div class="d-hint" style="margin-top:10px">The delivery half stays locked until the POD is marked received.
+        <a href="#" id="goDocket" style="color:var(--stamp)">Open the docket</a>.</div>`: ""}
+    </div>`);
+      document.querySelectorAll("[data-raise]").forEach(b => b.onclick = () => raise(id, b.dataset.raise, [...document.querySelectorAll("[data-raise]")]));
+      if ($("goDocket")) $("goDocket").onclick = e => { e.preventDefault(); S.trip = id; S.docTab = "docs"; go("docket") };
+    }
+    async function raise(tripId, type, btns) {
+      const restore = busyGroup(btns);
+      const { data, error } = await S.sb.rpc("raise_invoice", { p_trip: tripId, p_type: type });
+      if (error) { restore(); return note("raiseNote", errMsg(error), "bad"); }
+      await refreshAll(); toast("Invoice raised");
+      S.billTab = "inv"; S.billSel = data; viewBilling(); billInvoice(data);
+    }
+    async function billInvoice(id) {
+      const i = S.ar.find(x => x.id === id); if (!i) return;
+      $("bSideT").textContent = "Invoice";
+      const { data: pays } = await S.sb.from("payments").select("*").eq("invoice_id", id).order("received_on");
+      const cancelled = i.status === "cancelled";
+      const settled = Number(i.outstanding) <= 0;
+      const paid = Number(i.paid) || 0;
+      el("bSide", `
+    <div class="d-head"><div class="r-no">${esc(i.invoice_no)}${cancelled ? ' · <span class="pill bad">cancelled</span>' : ""}</div>
+      <div class="r-title" style="font-size:18px">${esc(i.customer)}</div>
+      <div class="r-sub">${lab(i.invoice_type)} · ${esc(i.trips || "")}</div>
+      <div class="d-figs">
+        <div><div class="k">Invoiced</div><div class="v">${m2(i.total_due, i.currency)}</div></div>
+        <div><div class="k">Paid</div><div class="v pos">${m2(i.paid, i.currency)}</div></div>
+        <div><div class="k">Outstanding</div><div class="v ${settled ? "pos" : (i.days_overdue > 0 ? "bad" : "")}">${m2(i.outstanding, i.currency)}</div></div>
+      </div></div>
+    ${cancelled ? `<div class="d-sec"><h3>Cancelled</h3>
+      <div class="d-hint">${i.cancelled_at ? esc(i.cancelled_at.slice(0, 10)) : ""} — ${esc(i.cancel_reason || "no reason recorded")}</div></div>` : ""}
+    <div class="d-sec"><div class="acts">
+      <button class="act" id="printBtn">Print / PDF</button>
+      ${!cancelled && paid === 0 ? `<button class="act" id="cancelBtn" style="border-color:var(--alert);color:var(--alert)">Cancel invoice</button>` : ""}
+    </div>
+    ${!cancelled && paid > 0 ? `<div class="d-hint" style="margin-top:9px">Can't be cancelled — ${m2(paid, i.currency)} has already been recorded against it.</div>` : ""}
+    <div id="cancelForm"></div></div>
+    <div class="d-sec"><h3>Terms</h3>
+      <div class="d-kv"><span>Issued</span><span>${i.issued_on}</span></div>
+      <div class="d-kv"><span>Due</span><span>${i.due_on}${i.days_overdue > 0 ? ` · ${i.days_overdue}d overdue` : ""}</span></div>
+      <div class="d-kv"><span>Ageing</span><span>${i.bucket}</span></div></div>
+    <div class="d-sec"><h3>Payments received</h3>
+      ${(pays || []).length ? pays.map(p => `<div class="d-kv"><span>${p.received_on}${p.method ? " · " + esc(p.method) : ""}${p.reference ? " · " + esc(p.reference) : ""}</span><span>${m2(p.amount, p.currency)}</span></div>`).join("")
+          : '<div class="d-hint">Nothing received yet.</div>'}</div>
+    ${!settled ? `<div class="panel-body"><div id="payNote"></div>
+      <div class="row">
+        <div class="field"><label for="pAmt">Amount</label><input id="pAmt" type="number" step="0.01" min="0" value="${Number(i.outstanding).toFixed(2)}"></div>
+        <div class="field"><label for="pDate">Received on</label><input id="pDate" type="date" value="${today()}"></div></div>
+      <div class="row">
+        <div class="field"><label for="pMethod">Method</label><select id="pMethod">
+          <option>Bank transfer</option><option>Cash</option><option>Mobile money</option><option>Cheque</option></select></div>
+        <div class="field"><label for="pRef">Reference</label><input id="pRef" type="text"></div></div>
+      <button class="primary settle" id="payBtn">Record payment</button></div>`: ""}`);
+      $("printBtn").onclick = () => printInvoice(id);
+      if ($("cancelBtn")) $("cancelBtn").onclick = () => showCancelForm(id);
+      if (!settled) $("payBtn").onclick = () => pay(id, i.currency);
+    }
+    function showCancelForm(id) {
+      el("cancelForm", `<div class="panel-body" style="background:#FAEFEC;border-top:1px solid var(--alert);margin-top:9px">
+      <div id="cancelNote"></div>
+      <div class="field"><label for="cReason">Reason for cancelling</label>
+        <input id="cReason" type="text" placeholder="e.g. raised against the wrong customer"></div>
+      <button class="primary" id="cancelConfirm" style="background:var(--alert)">Confirm cancellation</button>
+      <button class="ghost" id="cancelDismiss">Never mind</button>
+    </div>`);
+      $("cancelConfirm").onclick = () => cancelInvoiceAction(id);
+      $("cancelDismiss").onclick = () => el("cancelForm", "");
+    }
+    async function cancelInvoiceAction(id) {
+      const reason = $("cReason").value.trim();
+      if (!reason) return note("cancelNote", "A reason is required.", "bad");
+      const b = $("cancelConfirm"); b.disabled = true; b.textContent = "Cancelling…";
+      const { error } = await S.sb.rpc("cancel_invoice", { p_invoice: id, p_reason: reason });
+      if (error) { b.disabled = false; b.textContent = "Confirm cancellation"; return note("cancelNote", errMsg(error), "bad"); }
+      toast("Invoice cancelled");
+      await refreshAll(); viewBilling(); billInvoice(id);
+    }
+    async function pay(id, currency) {
+      const amt = parseFloat($("pAmt").value);
+      if (isNaN(amt) || amt <= 0) return note("payNote", "Enter an amount greater than zero.", "bad");
+      const b = $("payBtn"); b.disabled = true; b.textContent = "Recording…";
+      const { error } = await S.sb.from("payments").insert({
+        org_id: S.org, invoice_id: id, amount: amt, currency, received_on: $("pDate").value,
+        method: $("pMethod").value, reference: $("pRef").value.trim() || null
+      });
+      b.disabled = false; b.textContent = "Record payment";
+      if (error) return note("payNote", "Couldn't record it: " + errMsg(error), "bad");
+      toast("Payment recorded");
+      await refreshAll(); viewBilling(); billInvoice(id);
+    }
+    async function printInvoice(id) {
+      const [{ data: inv }, { data: lines }, { data: paid }] = await Promise.all([
+        S.sb.from("invoices").select("*, customers(name,country,tpin,contact_email,payment_terms)").eq("id", id).single(),
+        S.sb.from("invoice_lines").select("*").eq("invoice_id", id),
+        S.sb.from("payments").select("amount").eq("invoice_id", id)
+      ]);
+      const rec = (paid || []).reduce((s, p) => s + Number(p.amount), 0), c = inv.customers || {};
+      el("sheet", `
+    <div class="ih">
+      <div class="co"><h1>${esc(COMPANY.name)}</h1>
+        <p>${esc(COMPANY.reg)}<br>${esc(COMPANY.address)}<br>${esc(COMPANY.phone)} · ${esc(COMPANY.email)}</p></div>
+      <div class="im"><div class="big">Invoice</div>${esc(inv.invoice_no)}<br>Issued ${inv.issued_on}<br>Due ${inv.due_on}</div>
+    </div>
+    <div class="parties">
+      <div><h4>Invoice to</h4><div style="font-size:14px;font-weight:600">${esc(c.name || "")}</div>
+        <div style="font-size:11.5px;color:#444">${esc(c.country || "")}${c.tpin ? "<br>TPIN " + esc(c.tpin) : ""}${c.contact_email ? "<br>" + esc(c.contact_email) : ""}</div></div>
+      <div style="text-align:right"><h4>Stage</h4><div style="font-size:13px">${lab(inv.invoice_type)}</div></div>
+    </div>
+    <table><thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
+      <tbody>${(lines || []).map(l => `<tr><td>${esc(l.description)}</td><td class="num">${Number(l.quantity)}</td>
+        <td class="num">${m2(l.unit_price, inv.currency)}</td><td class="num">${m2(l.line_total, inv.currency)}</td></tr>`).join("")}</tbody></table>
+    <div class="totals">
+      <div><span>Subtotal</span><span>${m2(inv.subtotal, inv.currency)}</span></div>
+      ${rec > 0 ? `<div><span>Received to date</span><span>− ${m2(rec, inv.currency)}</span></div>` : ""}
+      <div class="due"><span>Amount due</span><span>${m2(Number(inv.total_due) - rec, inv.currency)}</span></div>
+    </div>
+    <div class="terms"><b>Payment terms</b><br>${esc(c.payment_terms || "50% on loading, 50% on delivery. USD only.")}<br><br>
+      <b>Remit to</b><br>${COMPANY.bank.map(esc).join("<br>")}</div>`);
+      window.print();
+    }
+
+    // =====================================================================
+    // ADMIN
+    // =====================================================================
+    const ENT = {
+      fx: { label: "Exchange rates", table: "fx_rates", custom: true },
+      customers: {
+        label: "Customers", table: "customers", fields: [
+          { k: "name", label: "Name", type: "text", req: true },
+          { k: "country", label: "Country", type: "select", opts: ["ZM", "TZ", "CD", "RW", "Other"] },
+          { k: "tpin", label: "Tax ID / TPIN", type: "text" },
+          { k: "contact_name", label: "Contact", type: "text", half: 1 },
+          { k: "contact_phone", label: "Phone", type: "text", half: 1 },
+          { k: "contact_email", label: "Email", type: "text" },
+          { k: "payment_terms", label: "Payment terms", type: "text", def: "50% on loading, 50% on delivery. USD only.", hint: "Printed on their invoices." },
+          { k: "payment_days", label: "Days to pay", type: "number", def: 0, hint: "0 means due on presentation." },
+          { k: "is_active", label: "Active", type: "bool", def: true }],
+        row: r => ({
+          t: r.name, s: [r.country, r.tpin].filter(Boolean).join(" · "),
+          m: r.contact_email || r.contact_phone || "", r: r.payment_days ? r.payment_days + "d" : "on presentation", off: !r.is_active
+        })
+      },
+      trucks: {
+        label: "Trucks", table: "trucks", fields: [
+          { k: "fleet_no", label: "Fleet number", type: "text", req: true, half: 1 },
+          { k: "make_model", label: "Make / model", type: "text", def: "SHACMAN X3000", half: 1 },
+          { k: "horse_reg", label: "Horse registration", type: "text", req: true, half: 1 },
+          { k: "trailer_reg", label: "Trailer registration", type: "text", half: 1 },
+          { k: "tank_capacity_l", label: "Tank capacity (litres)", type: "number" },
+          { k: "is_active", label: "Active", type: "bool", def: true }],
+        row: r => ({
+          t: r.fleet_no, s: r.make_model || "", m: [r.horse_reg, r.trailer_reg].filter(Boolean).join(" / "),
+          r: r.tank_capacity_l ? r.tank_capacity_l + " L" : "", off: !r.is_active
+        })
+      },
+      drivers: {
+        label: "Drivers", table: "drivers", fields: [
+          { k: "full_name", label: "Full name", type: "text", req: true },
+          { k: "phone", label: "Phone", type: "text", half: 1 },
+          { k: "nationality", label: "Nationality", type: "select", opts: ["TZ", "ZM", "CD", "RW", "Other"], half: 1 },
+          { k: "licence_no", label: "Licence number", type: "text", half: 1 },
+          { k: "passport_no", label: "Passport number", type: "text", half: 1 },
+          { k: "is_active", label: "Active", type: "bool", def: true }],
+        row: r => ({
+          t: r.full_name, s: r.phone || "",
+          m: [r.licence_no && "Lic " + r.licence_no, r.passport_no && "PP " + r.passport_no].filter(Boolean).join(" · "),
+          r: r.nationality || "", off: !r.is_active
+        })
+      },
+      routes: {
+        label: "Routes", table: "routes", fields: [
+          { k: "name", label: "Route name", type: "text", req: true },
+          { k: "origin", label: "Origin", type: "text", req: true, half: 1 },
+          { k: "destination", label: "Destination", type: "text", req: true, half: 1 },
+          { k: "distance_km", label: "Distance (km)", type: "number", half: 1 },
+          { k: "target_days", label: "Target days", type: "number", half: 1, hint: "Trips past this show as late." },
+          { k: "borders", label: "Borders", type: "tags", hint: "Comma separated, in crossing order." }],
+        row: r => ({
+          t: r.name, s: (r.borders || []).join(" → ") || "no borders listed", m: `${r.origin} → ${r.destination}`,
+          r: [r.distance_km && r.distance_km + " km", r.target_days && r.target_days + "d"].filter(Boolean).join(" · ")
+        })
+      },
+      rate_cards: {
+        label: "Rate cards", table: "rate_cards", fields: [
+          { k: "customer_id", label: "Customer", type: "fk", from: "customers", lab: "name", req: true },
+          { k: "route_id", label: "Route", type: "fk", from: "routes", lab: "name", req: true },
+          { k: "commodity", label: "Commodity", type: "text" },
+          { k: "rate_amount", label: "Rate", type: "number", req: true, half: 1 },
+          { k: "rate_currency", label: "Currency", type: "select", opts: ["USD"], def: "USD", half: 1 },
+          { k: "rate_basis", label: "Basis", type: "select", opts: ["per_trip", "per_tonne"], def: "per_trip", half: 1 },
+          { k: "valid_from", label: "Valid from", type: "date", def: today, half: 1 },
+          { k: "valid_to", label: "Valid to", type: "date", hint: "Blank while it's current." }],
+        row: r => ({
+          t: S.master.customers.find(c => c.id === r.customer_id)?.name || "—",
+          s: S.master.routes.find(x => x.id === r.route_id)?.name || "—",
+          m: [r.commodity, r.rate_basis?.replace("_", " ")].filter(Boolean).join(" · "),
+          r: `${r.rate_currency} ${num(r.rate_amount)}`,
+          tag: r.valid_to && r.valid_to < today() ? ["grey", "expired"] : ["good", "current"]
+        })
+      }
+    };
+
+    function viewAdmin() {
+      el("main", `
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:16px" id="aNav"></div>
+    <div class="grid">
+      <div class="panel">
+        <div class="panel-head"><h2 id="aTitle"></h2><button class="act" id="aNew">+ New</button></div>
+        <ul class="list" id="aList"></ul>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2 id="aFormT">Detail</h2></div>
+        <div class="panel-body" id="aForm"><div class="empty">Pick a record, or add a new one.</div></div>
+      </div>
+    </div>`);
+      el("aNav", Object.entries(ENT).map(([k, e]) =>
+        `<button class="chip ${S.adminView === k ? "on" : ""}" data-a="${k}">${e.label}<span class="c">${(S.master[k] || []).length}</span></button>`).join(""));
+      document.querySelectorAll("[data-a]").forEach(b => b.onclick = () => { S.adminView = b.dataset.a; S.adminSel = null; viewAdmin() });
+      $("aNew").onclick = () => { S.adminSel = null; adminList(); adminForm(null) };
+      adminList();
+      if (S.adminView === "fx") fxForm();
+    }
+    function adminList() {
+      const k = S.adminView, e = ENT[k];
+      $("aTitle").textContent = e.label;
+      if (k === "fx") {
+        const rows = S.master.fx || [], latest = {};
+        rows.forEach(r => { if (!latest[r.currency] || r.effective_on > latest[r.currency].effective_on) latest[r.currency] = r; });
+        el("aList", rows.length ? rows.map(r => {
+          const per = Number(r.rate_to_usd) > 0 ? 1 / Number(r.rate_to_usd) : 0;
+          return `<li><div><div class="r-title">${esc(r.currency)}</div>
+        <div class="r-mono">1 ${esc(r.currency)} = ${Number(r.rate_to_usd).toFixed(8)} USD</div>
+        <div class="r-tags">${latest[r.currency]?.id === r.id ? '<span class="pill good">in use</span>' : '<span class="pill grey">superseded</span>'}</div></div>
+        <div class="r-right"><div class="r-amt" style="font-size:13px">${r.currency === "USD" ? "—" : num(per) + " / USD"}</div>
+        <div class="r-min">${r.effective_on}</div></div></li>`;
+        }).join("") : '<li class="empty">No rates yet.</li>');
+        return;
+      }
+      const rows = S.master[k] || [];
+      el("aList", rows.length ? rows.map(r => {
+        const v = e.row(r);
+        return `<li class="tap ${S.adminSel === r.id ? "sel" : ""} ${v.off ? "off" : ""}" data-ar="${r.id}">
+      <div><div class="r-title">${esc(v.t)}</div>
+        ${v.s ? `<div class="r-sub">${esc(v.s)}</div>` : ""}
+        ${v.m ? `<div class="r-mono">${esc(v.m)}</div>` : ""}
+        ${v.off ? '<div class="r-tags"><span class="pill grey">inactive</span></div>'
+            : v.tag ? `<div class="r-tags"><span class="pill ${v.tag[0]}">${v.tag[1]}</span></div>` : ""}</div>
+      <div class="r-right"><div class="r-min">${esc(v.r || "")}</div></div></li>`;
+      }).join("") : `<li class="empty">No ${e.label.toLowerCase()} yet.</li>`);
+      document.querySelectorAll("[data-ar]").forEach(li => li.onclick = () => { S.adminSel = li.dataset.ar; adminList(); adminForm(S.adminSel) });
+    }
+    function adminForm(id) {
+      if (S.adminView === "fx") return fxForm();
+      const e = ENT[S.adminView], r = id ? (S.master[S.adminView] || []).find(x => x.id === id) : null;
+      $("aFormT").textContent = r ? "Edit" : "New " + e.label.toLowerCase().replace(/s$/, "");
+      const val = f => r ? r[f.k] : (typeof f.def === "function" ? f.def() : f.def);
+      const inp = f => {
+        const v = val(f);
+        if (f.type === "bool") return `<div class="check"><input type="checkbox" id="af_${f.k}" ${v ? "checked" : ""}><label for="af_${f.k}">${f.label}</label></div>`;
+        let c;
+        if (f.type === "select") c = `<select id="af_${f.k}">${f.opts.map(o => `<option ${v === o ? "selected" : ""}>${o}</option>`).join("")}</select>`;
+        else if (f.type === "fk") {
+          const src = (S.master[f.from] || []).filter(x => x.is_active !== false);
+          c = `<select id="af_${f.k}"><option value="">—</option>${src.map(o => `<option value="${o.id}" ${v === o.id ? "selected" : ""}>${esc(o[f.lab])}</option>`).join("")}</select>`;
+        }
+        else if (f.type === "tags") c = `<input id="af_${f.k}" type="text" value="${esc((v || []).join(", "))}">`;
+        else c = `<input id="af_${f.k}" type="${f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}" ${f.type === "number" ? 'step="any"' : ""} value="${esc(v ?? "")}">`;
+        return `<div class="field"><label for="af_${f.k}">${f.label}${f.req ? " *" : ""}</label>${c}${f.hint ? `<div class="hint">${f.hint}</div>` : ""}</div>`;
+      };
+      let html = "", i = 0;
+      while (i < e.fields.length) {
+        const f = e.fields[i];
+        if (f.half && e.fields[i + 1]?.half) { html += `<div class="row">${inp(f)}${inp(e.fields[i + 1])}</div>`; i += 2; }
+        else { html += inp(f); i++; }
+      }
+      el("aForm", `<div id="aNote"></div>${html}
+    <button class="primary" id="aSave">${r ? "Save changes" : "Create"}</button>
+    ${r && e.fields.some(f => f.k === "is_active") ? `<button class="ghost danger" id="aToggle">${r.is_active ? "Deactivate" : "Reactivate"}</button>` : ""}
+    <button class="ghost" id="aCancel">Cancel</button>`);
+      $("aSave").onclick = () => adminSave(id);
+      $("aCancel").onclick = () => { S.adminSel = null; adminList(); el("aForm", '<div class="empty">Pick a record, or add a new one.</div>') };
+      if ($("aToggle")) $("aToggle").onclick = () => adminToggle(id, !r.is_active, $("aToggle"));
+    }
+    async function adminSave(id) {
+      const e = ENT[S.adminView], p = {};
+      for (const f of e.fields) {
+        const x = $("af_" + f.k); if (!x) continue;
+        let v;
+        if (f.type === "bool") v = x.checked;
+        else if (f.type === "number") v = x.value === "" ? null : Number(x.value);
+        else if (f.type === "tags") v = x.value.split(",").map(s => s.trim()).filter(Boolean);
+        else v = x.value.trim() === "" ? null : x.value.trim();
+        if (f.req && (v === null || v === "")) return note("aNote", `${f.label} is required.`, "bad");
+        p[f.k] = v;
+      }
+      const b = $("aSave"); b.disabled = true; b.textContent = "Saving…";
+      const { error } = id ? await S.sb.from(e.table).update(p).eq("id", id)
+        : await S.sb.from(e.table).insert({ org_id: S.org, ...p });
+      b.disabled = false; b.textContent = id ? "Save changes" : "Create";
+      if (error) return note("aNote", errMsg(error), "bad");
+      toast("Saved"); S.adminSel = null; await refreshAll(); viewAdmin();
+    }
+    async function adminToggle(id, active, btn) {
+      const restore = busyGroup(btn);
+      const { error } = await S.sb.from(ENT[S.adminView].table).update({ is_active: active }).eq("id", id);
+      if (error) { restore(); return note("aNote", errMsg(error), "bad"); }
+      await refreshAll(); viewAdmin(); S.adminSel = id; adminList(); adminForm(id);
+    }
+
+    // FX entered the way it's quoted, inverted on save.
+    function fxForm() {
+      $("aFormT").textContent = "Add a rate";
+      const cur = ["TZS", "ZMW", "CDF", "USD", "RWF", "ZAR"];
+      el("aForm", `<div id="aNote"></div>
+    <div class="field"><label for="xCur">Currency</label><select id="xCur">${cur.map(c => `<option>${c}</option>`).join("")}</select></div>
+    <div class="field"><label for="xPer">Units per 1 USD</label><input id="xPer" type="number" step="any" min="0" placeholder="2600">
+      <div class="hint">Enter it the way it's quoted — how many of this currency buy one dollar.</div></div>
+    <div class="mirror" id="xMir"><div class="big" id="xBig">—</div>
+      <div class="small" id="xSmall">This is what gets stored and frozen onto every cost entered at this rate.</div></div>
+    <div class="field"><label for="xDate">Effective from</label><input id="xDate" type="date" value="${today()}"></div>
+    <div class="field"><label for="xSrc">Source</label><input id="xSrc" type="text" placeholder="BoZ / bureau / bank"></div>
+    <button class="primary" id="xSave">Add rate</button>
+    <div class="hint" style="margin-top:9px">Rates are never edited — a new row supersedes the old one, and past costs keep the rate they were entered at.</div>`);
+      const upd = () => {
+        const per = parseFloat($("xPer").value), c = $("xCur").value;
+        if (isNaN(per) || per <= 0) { $("xBig").textContent = "—"; $("xBig").classList.remove("on"); $("xMir").classList.remove("live"); return; }
+        $("xBig").textContent = `1 ${c} = ${(1 / per).toFixed(8)} USD`;
+        $("xBig").classList.add("on"); $("xMir").classList.add("live");
+        $("xSmall").textContent = `${num(per)} ${c} to the dollar. A 10,000 ${c} border fee would post as USD ${(10000 / per).toFixed(2)}.`;
+      };
+      $("xPer").oninput = upd;
+      $("xCur").onchange = () => { if ($("xCur").value === "USD") $("xPer").value = 1; upd(); };
+      $("xSave").onclick = async () => {
+        const per = parseFloat($("xPer").value), c = $("xCur").value, d = $("xDate").value;
+        if (isNaN(per) || per <= 0) return note("aNote", "Enter how many units buy one dollar.", "bad");
+        const b = $("xSave"); b.disabled = true; b.textContent = "Saving…";
+        const { error } = await S.sb.from("fx_rates").upsert({
+          org_id: S.org, currency: c, rate_to_usd: 1 / per, effective_on: d, source: $("xSrc").value.trim() || null
+        }, { onConflict: "org_id,currency,effective_on" });
+        b.disabled = false; b.textContent = "Add rate";
+        if (error) return note("aNote", errMsg(error), "bad");
+        toast(`${c} set at ${num(per)} to the dollar`);
+        await refreshAll(); viewAdmin();
+      };
+    }
+  </script>
+</body>
+
+</html>

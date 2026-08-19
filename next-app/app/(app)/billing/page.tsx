@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { m0, m2, lab, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
 import type { ArInvoice, BillableTrip, BootstrapPayload } from "@/lib/types";
@@ -385,7 +386,7 @@ function PrintSheet({ detail, onDone }: { detail: InvoiceDetail; onDone: () => v
   const rec = payments.reduce((s, p) => s + Number(p.amount), 0);
   const c = inv.customers;
 
-  return (
+  return createPortal(
     <div id="sheet">
       <div className="ih">
         <div className="co">
@@ -434,6 +435,7 @@ function PrintSheet({ detail, onDone }: { detail: InvoiceDetail; onDone: () => v
         <b>Payment terms</b><br />{c?.payment_terms || "50% on loading, 50% on delivery. USD only."}<br /><br />
         <b>Remit to</b><br />{COMPANY.bank.map((line, idx) => <span key={idx}>{line}<br /></span>)}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

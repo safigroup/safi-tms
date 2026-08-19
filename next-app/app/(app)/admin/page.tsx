@@ -177,6 +177,7 @@ export default function AdminPage() {
               <FxForm onSaved={load} />
             ) : creating || selected ? (
               <EntityForm
+                key={view + ":" + (selected ?? "new")}
                 entity={view}
                 id={selected}
                 data={data}

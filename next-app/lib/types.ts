@@ -80,12 +80,49 @@ export type RateCard = {
   valid_to: string | null;
 };
 
+export type FxRate = {
+  id: string;
+  currency: string;
+  rate_to_usd: number;
+  effective_on: string;
+  source: string | null;
+};
+
+export type TripCost = {
+  id: string;
+  trip_id: string;
+  category: string;
+  description: string | null;
+  amount: number;
+  currency: string;
+  fx_rate_to_usd: number;
+  amount_usd: number;
+  incurred_on: string;
+  location: string | null;
+  paid_by: string | null;
+  receipt_ref: string | null;
+  receipt_path: string | null;
+};
+
+export type DocStatus = "pending" | "issued" | "lodged" | "cleared" | "received" | "rejected";
+
+export type TripDocument = {
+  id: string;
+  trip_id: string;
+  doc_type: string;
+  doc_number: string | null;
+  status: DocStatus;
+  storage_path: string | null;
+  issued_on: string | null;
+  received_on: string | null;
+};
+
 export type BootstrapPayload = {
   fetchErrors: string[];
   board: BoardTrip[];
   billable: unknown[];
   ar: unknown[];
-  fx: unknown[];
+  fx: FxRate[];
   customers: Customer[];
   routes: Route[];
   trucks: Truck[];

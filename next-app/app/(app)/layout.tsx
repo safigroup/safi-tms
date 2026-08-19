@@ -7,7 +7,7 @@ import { signOut } from "./actions";
 // eventual structure is visible without offering a link into nothing.
 const VIEWS = [
   { href: "/board", label: "Board", enabled: true },
-  { href: "/docket", label: "Cost docket", enabled: false },
+  { href: "/docket", label: "Cost docket", enabled: true },
   { href: "/billing", label: "Billing", enabled: false },
   { href: "/admin", label: "Admin", enabled: false },
 ];

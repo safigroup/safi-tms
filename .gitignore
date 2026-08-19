@@ -1,1 +1,5 @@
 .DS_Store
+
+# Vercel CLI project link (moved here from next-app/ so `vercel deploy`
+# resolves the Root Directory setting correctly from the repo root)
+.vercel

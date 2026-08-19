@@ -9,7 +9,7 @@ const VIEWS = [
   { href: "/board", label: "Board", enabled: true },
   { href: "/docket", label: "Cost docket", enabled: true },
   { href: "/billing", label: "Billing", enabled: true },
-  { href: "/admin", label: "Admin", enabled: false },
+  { href: "/admin", label: "Admin", enabled: true },
 ];
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {

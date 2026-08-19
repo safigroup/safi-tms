@@ -1,0 +1,10 @@
+# Supabase CLI local cache/state — regenerates automatically, never commit
+supabase/.temp/
+
+# Next.js (populated once the app is scaffolded)
+node_modules/
+.next/
+out/
+
+# Environment secrets — the service_role key goes here, never in a tracked file
+.env*.local

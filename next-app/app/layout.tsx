@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Archivo_Narrow, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const archivoNarrow = Archivo_Narrow({
@@ -30,7 +31,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${archivoNarrow.variable} ${ibmPlexMono.variable} ${ibmPlexSans.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        {children}
+        <Toaster position="bottom-center" />
+      </body>
     </html>
   );
 }

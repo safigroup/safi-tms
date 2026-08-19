@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { m2, lab, today } from "@/lib/format";
 import { prepareFile } from "@/lib/imagePrep";
 import { saveCostDraft, loadCostDraft, clearCostDraft, type CostDraft } from "@/lib/costDraft";
+import { Spinner } from "@/lib/components/Spinner";
 import type { BootstrapPayload, BoardTrip, TripCost, TripDocument } from "@/lib/types";
 
 const CATS = [
@@ -19,7 +22,9 @@ const DOCTYPES = [
 const emptyDraft: CostDraft = { cat: CATS[0], amt: "", cur: "", when: today(), desc: "", loc: "", paid: "driver_float", ref: "" };
 
 export default function DocketPage() {
+  const router = useRouter();
   const [data, setData] = useState<BootstrapPayload | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [tripId, setTripId] = useState<string | null>(null);
   const [costs, setCosts] = useState<TripCost[]>([]);
   const [documents, setDocuments] = useState<TripDocument[]>([]);
@@ -32,14 +37,27 @@ export default function DocketPage() {
 
   async function loadBootstrap() {
     const res = await fetch("/api/bootstrap");
+    if (res.status === 401) {
+      router.push("/login");
+      return;
+    }
+    if (!res.ok) {
+      setLoadError("Couldn't load — try refreshing.");
+      return;
+    }
     const payload: BootstrapPayload = await res.json();
     setData(payload);
+    setLoadError(payload.fetchErrors.length ? `Couldn't load ${payload.fetchErrors.join(", ")}.` : null);
     const open = payload.board.filter((t) => !["closed", "cancelled" as string].includes(t.status));
     if (open.length) setTripId((cur) => cur ?? open[0].trip_id);
   }
 
   async function loadDetail(id: string) {
     const res = await fetch(`/api/trips/${id}/detail`);
+    if (!res.ok) {
+      setLoadError("Couldn't load this trip's costs/documents — try refreshing.");
+      return;
+    }
     const body = await res.json();
     setCosts(body.costs ?? []);
     setDocuments(body.documents ?? []);
@@ -48,6 +66,7 @@ export default function DocketPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount
     loadBootstrap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-once; loadBootstrap is recreated every render, adding it here would refetch on every render too
   }, []);
 
   useEffect(() => {
@@ -70,7 +89,7 @@ export default function DocketPage() {
     if (tripId) saveCostDraft(tripId, next);
   }
 
-  if (!data) return <div className="panel"><div className="empty">Loading…</div></div>;
+  if (!data) return <div className="panel"><Spinner /></div>;
 
   const open = data.board.filter((t) => !["closed", "cancelled"].includes(t.status));
   const trip = data.board.find((t) => t.trip_id === tripId) || null;
@@ -131,6 +150,7 @@ export default function DocketPage() {
         throw new Error(body.error || res.statusText);
       }
 
+      toast.success(`${m2(amtNum, draft.cur)} → ${m2(amtNum * rate.rate_to_usd)}`);
       clearCostDraft(tripId);
       setDraft({ ...emptyDraft, cat: draft.cat, cur: draft.cur, when: draft.when, paid: draft.paid });
       setCostFile(null);
@@ -147,6 +167,7 @@ export default function DocketPage() {
     if (!confirm("Remove this cost entry?")) return;
     const res = await fetch(`/api/trip-costs/${id}`, { method: "DELETE" });
     if (res.ok && tripId) {
+      toast.success("Cost entry removed");
       await loadDetail(tripId);
       await loadBootstrap();
     }
@@ -161,7 +182,9 @@ export default function DocketPage() {
   }
 
   return (
-    <div className="grid">
+    <>
+      {loadError ? <div className="note bad">{loadError}</div> : null}
+      <div className="grid">
       <div className="panel">
         <div className="panel-head"><h2>Record a cost</h2></div>
         <form className="panel-body" onSubmit={handleSaveCost}>
@@ -294,7 +317,8 @@ export default function DocketPage() {
           />
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -365,7 +389,10 @@ function DocsTab({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tripId }),
     });
-    if (res.ok) await onChanged();
+    if (res.ok) {
+      toast.success("POD received — delivery invoice unlocked");
+      await onChanged();
+    }
   }
 
   async function handleUpload(e: FormEvent) {
@@ -389,6 +416,7 @@ function DocsTab({
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
 
+      toast.success("Document uploaded");
       setDocNumber("");
       setDocFile(null);
       await onChanged();

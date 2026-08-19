@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { m0, m2, today } from "@/lib/format";
 import { useBusyGroup } from "@/lib/useBusyGroup";
+import { Spinner } from "@/lib/components/Spinner";
 import type { BoardTrip, BootstrapPayload, TripStatus } from "@/lib/types";
 
 const PILL: Record<string, string> = {
@@ -41,6 +44,7 @@ const NEXT: Record<string, [TripStatus, string][]> = {
 const lab = (s: string) => s.replace(/_/g, " ");
 
 export default function BoardPage() {
+  const router = useRouter();
   const [data, setData] = useState<BootstrapPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("active");
@@ -49,6 +53,10 @@ export default function BoardPage() {
 
   async function load() {
     const res = await fetch("/api/bootstrap");
+    if (res.status === 401) {
+      router.push("/login");
+      return;
+    }
     if (!res.ok) {
       setError("Couldn't load — try refreshing.");
       return;
@@ -60,12 +68,16 @@ export default function BoardPage() {
 
   useEffect(() => {
     // load() is also called after mutations (create/advance/border event),
-    // so it has to stay a shared function rather than get inlined here.
+    // so it has to stay a shared function rather than get inlined here --
+    // wrapping it in useCallback just to satisfy exhaustive-deps would
+    // re-run this effect every render, since router itself is a new
+    // reference each time.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount, no cascading-render risk
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-once; load is recreated every render, adding it here would refetch on every render too
   }, []);
 
-  if (!data) return <div className="panel"><div className="empty">Loading…</div></div>;
+  if (!data) return <div className="panel"><Spinner /></div>;
 
   const board = data.board;
   const rolling = board.filter((t) => ["loading", "in_transit", "at_border"].includes(t.status));
@@ -221,6 +233,7 @@ function TripDetail({ trip, onChanged }: { trip: BoardTrip; onChanged: () => Pro
         setNote("Couldn't update: " + (body.error || res.statusText));
         return;
       }
+      toast.success(`Status updated to ${lab(status)}`);
       await onChanged();
     });
   }
@@ -238,6 +251,8 @@ function TripDetail({ trip, onChanged }: { trip: BoardTrip; onChanged: () => Pro
         setNote("Couldn't log it: " + (body.error || res.statusText));
         return;
       }
+      const place = location.split("/")[0];
+      toast.success(kind === "arrival" ? `Arrived ${place}` : `Cleared ${place}`);
       await onChanged();
     });
   }
@@ -402,6 +417,7 @@ function NewTripForm({
       return setError("Couldn't create it: " + (body.error || res.statusText));
     }
     const body = await res.json();
+    toast.success(`${body.tripNo} created`);
     onCreated(body.id);
   }
 

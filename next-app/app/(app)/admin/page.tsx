@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { num, today } from "@/lib/format";
+import { Spinner } from "@/lib/components/Spinner";
 import type { BootstrapPayload, Customer, Route, FxRate } from "@/lib/types";
 
 type FieldType = "text" | "number" | "date" | "bool" | "select" | "fk" | "tags";
@@ -118,22 +121,35 @@ const VIEW_LABELS: Record<ViewKey, string> = {
 };
 
 export default function AdminPage() {
+  const router = useRouter();
   const [data, setData] = useState<BootstrapPayload | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [view, setView] = useState<ViewKey>("fx");
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   async function load() {
     const res = await fetch("/api/bootstrap");
-    setData(await res.json());
+    if (res.status === 401) {
+      router.push("/login");
+      return;
+    }
+    if (!res.ok) {
+      setLoadError("Couldn't load — try refreshing.");
+      return;
+    }
+    const payload: BootstrapPayload = await res.json();
+    setData(payload);
+    setLoadError(payload.fetchErrors.length ? `Couldn't load ${payload.fetchErrors.join(", ")}.` : null);
   }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-once; load is recreated every render, adding it here would refetch on every render too
   }, []);
 
-  if (!data) return <div className="panel"><div className="empty">Loading…</div></div>;
+  if (!data) return <div className="panel"><Spinner /></div>;
 
   const masters: Record<string, unknown[]> = {
     customers: data.customers, trucks: data.trucks, drivers: data.drivers, routes: data.routes, rate_cards: data.rateCards,
@@ -141,6 +157,7 @@ export default function AdminPage() {
 
   return (
     <>
+      {loadError ? <div className="note bad">{loadError}</div> : null}
       <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 16 }}>
         {VIEWS.map((v) => (
           <button
@@ -315,18 +332,21 @@ function EntityForm({
       const body = await res.json().catch(() => ({}));
       return setError(body.error || res.statusText);
     }
+    toast.success("Saved");
     await onSaved();
   }
 
   async function toggle() {
     if (!id || !existing) return;
     setSaving(true);
+    const nowActive = !existing.is_active;
     await fetch(`/api/admin/${entity}/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_active: !existing.is_active }),
+      body: JSON.stringify({ is_active: nowActive }),
     });
     setSaving(false);
+    toast.success(nowActive ? "Reactivated" : "Deactivated");
     await onSaved();
   }
 
@@ -445,6 +465,7 @@ function FxForm({ onSaved }: { onSaved: () => Promise<void> }) {
       const body = await res.json().catch(() => ({}));
       return setError(body.error || res.statusText);
     }
+    toast.success(`${currency} set at ${num(perNum)} to the dollar`);
     setPer("");
     setSource("");
     await onSaved();

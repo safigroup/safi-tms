@@ -1094,3 +1094,26 @@ button.ghost.danger:hover {
     transition: none !important
   }
 }
+
+/* loading spinner (Stage 1 UI/UX pass) */
+.spinner {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--rule);
+  border-top-color: var(--stamp);
+  border-radius: 50%;
+  animation: spin .7s linear infinite
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg)
+  }
+}
+
+@media(prefers-reduced-motion:reduce) {
+  .spinner {
+    animation: none
+  }
+}

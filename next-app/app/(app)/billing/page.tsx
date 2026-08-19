@@ -2,8 +2,11 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { m0, m2, lab, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
+import { Spinner } from "@/lib/components/Spinner";
 import type { ArInvoice, BillableTrip, BootstrapPayload } from "@/lib/types";
 
 const BUCKETS: [string, string, (i: ArInvoice) => boolean][] = [
@@ -34,7 +37,9 @@ type InvoiceDetail = {
 };
 
 export default function BillingPage() {
+  const router = useRouter();
   const [data, setData] = useState<BootstrapPayload | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<"bill" | "inv">("bill");
   const [bucket, setBucket] = useState("open");
   const [selected, setSelected] = useState<string | null>(null);
@@ -42,20 +47,30 @@ export default function BillingPage() {
 
   async function load() {
     const res = await fetch("/api/bootstrap");
+    if (res.status === 401) {
+      router.push("/login");
+      return;
+    }
+    if (!res.ok) {
+      setLoadError("Couldn't load — try refreshing.");
+      return;
+    }
     const payload: BootstrapPayload = await res.json();
     setData(payload);
+    setLoadError(payload.fetchErrors.length ? `Couldn't load ${payload.fetchErrors.join(", ")}.` : null);
   }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-once; load is recreated every render, adding it here would refetch on every render too
   }, []);
 
   useEffect(() => {
     if (printData) window.print();
   }, [printData]);
 
-  if (!data) return <div className="panel"><div className="empty">Loading…</div></div>;
+  if (!data) return <div className="panel"><Spinner /></div>;
 
   const out = data.ar.filter((i) => Number(i.outstanding) > 0);
   const overdue = out.filter((i) => i.days_overdue > 0);
@@ -80,6 +95,7 @@ export default function BillingPage() {
 
   return (
     <>
+      {loadError ? <div className="note bad">{loadError}</div> : null}
       <div className="strip">
         <div className="cell"><div className="k">Ready to raise</div><div className="v pos">{m0(raisable)}</div><div className="n">{data.billable.length} trip{data.billable.length === 1 ? "" : "s"}</div></div>
         <div className="cell"><div className="k">Blocked on POD</div><div className={"v" + (blocked.length ? " warn" : "")}>{m0(blockedVal)}</div><div className="n">{blocked.length} delivered, no POD</div></div>
@@ -198,6 +214,7 @@ function RaiseInvoicePanel({ trip, onRaised }: { trip: BillableTrip; onRaised: (
       return setNote(body.error || res.statusText);
     }
     const { id } = await res.json();
+    toast.success("Invoice raised");
     await onRaised(id);
   }
 
@@ -279,6 +296,7 @@ function InvoiceDetailPanel({
       const body = await res.json().catch(() => ({}));
       return setCancelNote(body.error || res.statusText);
     }
+    toast.success("Invoice cancelled");
     setShowCancel(false);
     await onChanged();
   }
@@ -299,6 +317,7 @@ function InvoiceDetailPanel({
       const body = await res.json().catch(() => ({}));
       return setPayNote("Couldn't record it: " + (body.error || res.statusText));
     }
+    toast.success("Payment recorded");
     await onChanged();
   }
 

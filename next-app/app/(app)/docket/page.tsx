@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { m2, lab, today } from "@/lib/format";
 import { prepareFile } from "@/lib/imagePrep";
 import { saveCostDraft, loadCostDraft, clearCostDraft, type CostDraft } from "@/lib/costDraft";
@@ -308,6 +308,7 @@ function CaptureField({
   idleText: string;
 }) {
   const [preparing, setPreparing] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(e: ChangeEvent<HTMLInputElement>) {
     const raw = e.target.files?.[0];
@@ -320,8 +321,8 @@ function CaptureField({
 
   return (
     <div className={"capture" + (file ? " has" : "")}>
-      <input type="file" id="capFile" accept="image/*,application/pdf" capture="environment" onChange={handleFile} style={{ display: "none" }} />
-      <button className="btn" type="button" onClick={() => document.getElementById("capFile")?.click()}>Attach</button>
+      <input ref={inputRef} type="file" accept="image/*,application/pdf" capture="environment" onChange={handleFile} style={{ display: "none" }} />
+      <button className="btn" type="button" onClick={() => inputRef.current?.click()}>Attach</button>
       {file && file.type.startsWith("image/") ? (
         // eslint-disable-next-line @next/next/no-img-element -- ephemeral local object URL preview, not worth next/image's remote-optimization machinery
         <img className="thumb" src={URL.createObjectURL(file)} alt="" />

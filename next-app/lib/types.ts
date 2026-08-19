@@ -117,11 +117,43 @@ export type TripDocument = {
   received_on: string | null;
 };
 
+export type BillableTrip = {
+  trip_id: string;
+  trip_no: string;
+  customer: string;
+  route: string;
+  status: TripStatus;
+  revenue_usd: number;
+  half_usd: number;
+  pod_in_hand: boolean;
+  loading_invoiced: boolean;
+  delivery_invoiced: boolean;
+};
+
+export type ArInvoice = {
+  id: string;
+  invoice_no: string;
+  invoice_type: string;
+  status: string;
+  customer: string;
+  currency: string;
+  total_due: number;
+  paid: number;
+  outstanding: number;
+  issued_on: string;
+  due_on: string;
+  days_overdue: number;
+  bucket: string;
+  trips: string | null;
+  cancelled_at: string | null;
+  cancel_reason: string | null;
+};
+
 export type BootstrapPayload = {
   fetchErrors: string[];
   board: BoardTrip[];
-  billable: unknown[];
-  ar: unknown[];
+  billable: BillableTrip[];
+  ar: ArInvoice[];
   fx: FxRate[];
   customers: Customer[];
   routes: Route[];

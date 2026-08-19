@@ -1,6 +1,19 @@
 SET session_replication_role = replica;
 
 --
+-- trip-docs storage bucket. Not part of the pg_dump below -- storage.buckets
+-- lives outside the `public` schema this file otherwise mirrors from
+-- production, and unlike the reference-data rows below, production already
+-- has this bucket, so it's only needed here for staging. ON CONFLICT DO
+-- NOTHING makes this file safe to re-run.
+--
+
+insert into storage.buckets (id, name, public, avif_autodetection, file_size_limit, allowed_mime_types, type)
+values ('trip-docs', 'trip-docs', false, false, 10485760,
+        array['image/jpeg','image/png','image/webp','image/heic','application/pdf'], 'STANDARD')
+on conflict (id) do nothing;
+
+--
 -- PostgreSQL database dump
 --
 

@@ -53,10 +53,11 @@ export async function getAuthedOrgContext(): Promise<
   } = await supabase.auth.getUser();
 
   if (userError || !user) {
+    console.error("[getAuthedOrgContext] auth.getUser() failed:", userError?.message ?? "no user in session");
     return { ok: false, status: 401, reason: "not signed in" };
   }
 
-  const { data: membership } = await supabase
+  const { data: membership, error: membershipError } = await supabase
     .from("memberships")
     .select("org_id, role, organizations(name)")
     .eq("user_id", user.id)
@@ -68,6 +69,11 @@ export async function getAuthedOrgContext(): Promise<
     }>();
 
   if (!membership) {
+    console.error(
+      "[getAuthedOrgContext] no membership row for user",
+      user.id,
+      membershipError ? `— query error: ${membershipError.message}` : "— query succeeded, zero rows",
+    );
     return {
       ok: false,
       status: 403,

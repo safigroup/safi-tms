@@ -1,0 +1,499 @@
+"use client";
+
+import { useEffect, useState, type FormEvent } from "react";
+import { m0, m2, today } from "@/lib/format";
+import { useBusyGroup } from "@/lib/useBusyGroup";
+import type { BoardTrip, BootstrapPayload, TripStatus } from "@/lib/types";
+
+const PILL: Record<string, string> = {
+  draft: "grey",
+  allocated: "grey",
+  loading: "violet",
+  in_transit: "violet",
+  at_border: "warn",
+  delivered: "warn",
+  pod_received: "good",
+  invoiced: "good",
+  closed: "grey",
+};
+
+const FILTERS: [string, string, (t: BoardTrip) => boolean][] = [
+  ["active", "Active", (t) => !["closed", "invoiced"].includes(t.status)],
+  ["rolling", "Rolling", (t) => ["loading", "in_transit", "at_border"].includes(t.status)],
+  ["border", "At border", (t) => t.status === "at_border"],
+  ["pod", "Awaiting POD", (t) => t.status === "delivered" && !t.pod_in_hand],
+  ["billable", "Billable", (t) => t.status === "pod_received"],
+  ["late", "Late", (t) => !!t.over_target],
+  ["all", "All", () => true],
+];
+
+const NEXT: Record<string, [TripStatus, string][]> = {
+  draft: [["allocated", "Allocate truck"]],
+  allocated: [["loading", "Start loading"]],
+  loading: [["in_transit", "Depart"]],
+  in_transit: [["delivered", "Mark delivered"]],
+  at_border: [],
+  delivered: [],
+  pod_received: [["invoiced", "Mark invoiced"]],
+  invoiced: [["closed", "Close trip"]],
+};
+
+const lab = (s: string) => s.replace(/_/g, " ");
+
+export default function BoardPage() {
+  const [data, setData] = useState<BootstrapPayload | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState("active");
+  const [selected, setSelected] = useState<string | null>(null);
+  const [showNewTrip, setShowNewTrip] = useState(false);
+
+  async function load() {
+    const res = await fetch("/api/bootstrap");
+    if (!res.ok) {
+      setError("Couldn't load — try refreshing.");
+      return;
+    }
+    const payload: BootstrapPayload = await res.json();
+    setData(payload);
+    setError(payload.fetchErrors.length ? `Couldn't load ${payload.fetchErrors.join(", ")}.` : null);
+  }
+
+  useEffect(() => {
+    // load() is also called after mutations (create/advance/border event),
+    // so it has to stay a shared function rather than get inlined here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount, no cascading-render risk
+    load();
+  }, []);
+
+  if (!data) return <div className="panel"><div className="empty">Loading…</div></div>;
+
+  const board = data.board;
+  const rolling = board.filter((t) => ["loading", "in_transit", "at_border"].includes(t.status));
+  const late = rolling.filter((t) => t.over_target);
+  const pod = board.filter((t) => t.status === "delivered" && !t.pod_in_hand);
+  const unbilled = pod.reduce((s, t) => s + Number(t.revenue_usd || 0) * 0.5, 0);
+  const done = board.filter((t) => ["pod_received", "invoiced", "closed"].includes(t.status));
+  const avg = done.length ? done.reduce((s, t) => s + Number(t.margin_pct || 0), 0) / done.length : null;
+
+  const filterFn = FILTERS.find((f) => f[0] === filter)![2];
+  const rows = board.filter(filterFn);
+  const selectedTrip = board.find((t) => t.trip_id === selected) || null;
+
+  return (
+    <>
+      {error ? <div className="note bad">{error}</div> : null}
+      <div className="strip">
+        <div className="cell">
+          <div className="k">On the road</div>
+          <div className="v">{rolling.length}</div>
+          <div className="n">{board.filter((t) => t.status !== "closed").length} open trips</div>
+        </div>
+        <div className="cell">
+          <div className="k">Over corridor target</div>
+          <div className={"v" + (late.length ? " warn" : "")}>{late.length}</div>
+          <div className="n">{late.length ? late.map((t) => t.trip_no).join(", ") : "all on schedule"}</div>
+        </div>
+        <div className="cell">
+          <div className="k">Awaiting POD</div>
+          <div className={"v" + (pod.length ? " warn" : "")}>{pod.length}</div>
+          <div className="n">{m0(unbilled)} not yet billable</div>
+        </div>
+        <div className="cell">
+          <div className="k">Avg margin, delivered</div>
+          <div className={"v" + (avg !== null && avg >= 0 ? " pos" : "")}>
+            {avg !== null ? avg.toFixed(1) + "%" : "—"}
+          </div>
+          <div className="n">{done.length} trips</div>
+        </div>
+      </div>
+      <div className="grid">
+        <div className="panel">
+          <div className="panel-head">
+            <h2>Trips</h2>
+            <button className="act" onClick={() => { setShowNewTrip(true); setSelected(null); }}>
+              + New trip
+            </button>
+          </div>
+          <div className="chips">
+            {FILTERS.map(([key, label, fn]) => (
+              <button
+                key={key}
+                className={"chip" + (filter === key ? " on" : "")}
+                onClick={() => setFilter(key)}
+              >
+                {label}
+                <span className="c">{board.filter(fn).length}</span>
+              </button>
+            ))}
+          </div>
+          <ul className="list">
+            {rows.length ? (
+              rows.map((t) => {
+                const m = Number(t.margin_usd || 0);
+                return (
+                  <li
+                    key={t.trip_id}
+                    className={"tap" + (selected === t.trip_id ? " sel" : "")}
+                    onClick={() => { setSelected(t.trip_id); setShowNewTrip(false); }}
+                  >
+                    <div>
+                      <div className="r-no">{t.trip_no}</div>
+                      <div className="r-title">{t.customer}</div>
+                      <div className="r-sub">
+                        {t.route}
+                        {t.fleet_no ? " · " + t.fleet_no : ""}
+                        {t.driver ? " · " + t.driver : ""}
+                      </div>
+                      <div className="r-tags">
+                        <span className={"pill " + (PILL[t.status] || "grey")}>{lab(t.status)}</span>
+                        {t.over_target ? (
+                          <span className="pill bad">day {t.days_running} of {t.target_days}</span>
+                        ) : t.days_running != null ? (
+                          <span className="pill grey">day {t.days_running}</span>
+                        ) : null}
+                        {t.last_border && ["in_transit", "at_border"].includes(t.status) ? (
+                          <span className="pill violet">{t.last_border}</span>
+                        ) : null}
+                        {t.docs_pending ? (
+                          <span className="pill warn">{t.docs_pending} doc{t.docs_pending > 1 ? "s" : ""}</span>
+                        ) : null}
+                        {t.status === "delivered" && !t.pod_in_hand ? (
+                          <span className="pill warn">no POD</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="r-right">
+                      <div className={"r-amt " + (m >= 0 ? "pos" : "neg")}>{m0(m)}</div>
+                      <div className="r-min">{t.margin_pct != null ? t.margin_pct + "%" : "—"}</div>
+                      <div className="r-min">{t.cost_entries} costs</div>
+                    </div>
+                  </li>
+                );
+              })
+            ) : (
+              <li className="empty">Nothing here.</li>
+            )}
+          </ul>
+        </div>
+        <div className="panel">
+          <div className="panel-head">
+            <h2>{showNewTrip ? "New trip" : "Trip detail"}</h2>
+          </div>
+          {showNewTrip ? (
+            <NewTripForm
+              data={data}
+              onCancel={() => setShowNewTrip(false)}
+              onCreated={async (tripId) => {
+                setShowNewTrip(false);
+                await load();
+                setSelected(tripId);
+              }}
+            />
+          ) : selectedTrip ? (
+            <TripDetail trip={selectedTrip} onChanged={load} />
+          ) : (
+            <div className="empty">Select a trip, or start a new one.</div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function TripDetail({ trip, onChanged }: { trip: BoardTrip; onChanged: () => Promise<void> }) {
+  const { busy, run } = useBusyGroup();
+  const [note, setNote] = useState<string | null>(null);
+  const m = Number(trip.margin_usd || 0);
+  const nexts = NEXT[trip.status] || [];
+  const canBorder = ["in_transit", "at_border"].includes(trip.status);
+  const borders = trip.borders || [];
+
+  async function advance(status: TripStatus) {
+    setNote(null);
+    await run(async () => {
+      const res = await fetch(`/api/trips/${trip.trip_id}/advance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setNote("Couldn't update: " + (body.error || res.statusText));
+        return;
+      }
+      await onChanged();
+    });
+  }
+
+  async function borderEvent(kind: "arrival" | "cleared", location: string) {
+    setNote(null);
+    await run(async () => {
+      const res = await fetch("/api/border-events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tripId: trip.trip_id, kind, location }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setNote("Couldn't log it: " + (body.error || res.statusText));
+        return;
+      }
+      await onChanged();
+    });
+  }
+
+  return (
+    <>
+      <div className="d-head">
+        <div className="r-no">
+          {trip.trip_no} · <span className={"pill " + (PILL[trip.status] || "grey")}>{lab(trip.status)}</span>
+        </div>
+        <div className="r-title" style={{ fontSize: 18 }}>{trip.customer}</div>
+        <div className="r-sub">{trip.route}</div>
+        <div className="d-figs">
+          <div><div className="k">Revenue</div><div className="v">{m2(trip.revenue_usd)}</div></div>
+          <div><div className="k">Costs</div><div className="v">{m2(trip.cost_usd)}</div></div>
+          <div><div className="k">Margin</div><div className={"v " + (m >= 0 ? "pos" : "neg")}>{m2(m)}</div></div>
+        </div>
+      </div>
+      {nexts.length ? (
+        <div className="d-sec">
+          <h3>Next step</h3>
+          <div className="acts">
+            {nexts.map(([status, label]) => (
+              <button
+                key={status}
+                className={"act" + (status === "delivered" ? " go" : "")}
+                disabled={busy}
+                onClick={() => advance(status)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {canBorder ? (
+        <div className="d-sec">
+          <h3>Border</h3>
+          <div className="acts">
+            {trip.status === "in_transit"
+              ? borders.map((b) => (
+                  <button key={b} className="act" disabled={busy} onClick={() => borderEvent("arrival", b)}>
+                    Arrived {b.split("/")[0]}
+                  </button>
+                ))
+              : (() => {
+                  const loc = trip.last_border || borders[0] || "";
+                  return (
+                    <button className="act go" disabled={busy} onClick={() => borderEvent("cleared", loc)}>
+                      Cleared {(loc || "border").split("/")[0]}
+                    </button>
+                  );
+                })()}
+          </div>
+        </div>
+      ) : null}
+      {trip.status === "delivered" && !trip.pod_in_hand ? (
+        <div className="d-sec">
+          <h3>Blocked on</h3>
+          <div className="d-hint">
+            POD not received. {m2(Number(trip.revenue_usd || 0) * 0.5)} can&apos;t be invoiced until it&apos;s in hand.
+          </div>
+        </div>
+      ) : null}
+      <div className="d-sec">
+        <h3>Assignment</h3>
+        <div className="d-kv"><span>Truck</span><span>{trip.fleet_no || "—"}{trip.horse_reg ? " · " + trip.horse_reg : ""}</span></div>
+        <div className="d-kv"><span>Driver</span><span>{trip.driver || "—"}</span></div>
+        <div className="d-kv"><span>Cargo</span><span>{trip.commodity || "—"}{trip.tonnage ? " · " + trip.tonnage + " t" : ""}</span></div>
+        <div className="d-kv"><span>Container</span><span>{trip.container_no || "—"}</span></div>
+      </div>
+      <div className="d-sec">
+        <h3>Timing</h3>
+        <div className="d-kv"><span>Loaded</span><span>{trip.actual_load_date || "—"}</span></div>
+        <div className="d-kv"><span>Planned ETA</span><span>{trip.planned_eta || "—"}</span></div>
+        <div className="d-kv"><span>Delivered</span><span>{trip.actual_delivery_at ? trip.actual_delivery_at.slice(0, 10) : "—"}</span></div>
+        <div className="d-kv"><span>Days running</span><span>{trip.days_running != null ? trip.days_running + " of " + (trip.target_days ?? "?") : "—"}</span></div>
+        <div className="d-kv"><span>Last border</span><span>{trip.last_border || "—"}</span></div>
+      </div>
+      {note ? <div className="panel-body" style={{ paddingTop: 0 }}><div className="note bad">{note}</div></div> : null}
+    </>
+  );
+}
+
+function NewTripForm({
+  data,
+  onCancel,
+  onCreated,
+}: {
+  data: BootstrapPayload;
+  onCancel: () => void;
+  onCreated: (tripId: string) => void;
+}) {
+  const [customerId, setCustomerId] = useState("");
+  const [routeId, setRouteId] = useState("");
+  const [revenue, setRevenue] = useState("");
+  const [rateHint, setRateHint] = useState<{ text: string; kind: "good" | "warn" } | null>(null);
+  const [truckId, setTruckId] = useState("");
+  const [driverId, setDriverId] = useState("");
+  const [commodity, setCommodity] = useState("");
+  const [tonnage, setTonnage] = useState("");
+  const [containerNo, setContainerNo] = useState("");
+  const [sealNo, setSealNo] = useState("");
+  const [loadDate, setLoadDate] = useState(today());
+  const [eta, setEta] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  function applyRate(cust: string, route: string) {
+    const hit = data.rateCards.find((r) => r.route_id === route && (r.customer_id === cust || !r.customer_id));
+    if (hit) {
+      setRevenue(Number(hit.rate_amount).toFixed(2));
+      setRateHint({
+        text: "Filled from the rate card" + (hit.commodity ? " · " + hit.commodity : ""),
+        kind: "good",
+      });
+      if (hit.commodity && !commodity) setCommodity(hit.commodity);
+    } else if (cust && route) {
+      setRateHint({ text: "No rate card for this pairing. Enter the agreed price.", kind: "warn" });
+    } else {
+      setRateHint(null);
+    }
+  }
+
+  function applyEta(route: string, load: string) {
+    const r = data.routes.find((x) => x.id === route);
+    if (r?.target_days && load) {
+      const d = new Date(load);
+      d.setDate(d.getDate() + r.target_days);
+      setEta(d.toISOString().slice(0, 10));
+    }
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!customerId || !routeId) return setError("Customer and route are both required.");
+    const rev = parseFloat(revenue);
+    if (isNaN(rev) || rev <= 0) return setError("Enter the agreed revenue.");
+
+    setSaving(true);
+    setError(null);
+    const res = await fetch("/api/trips", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customerId,
+        routeId,
+        revenue: rev,
+        truckId: truckId || null,
+        driverId: driverId || null,
+        commodity: commodity.trim() || null,
+        tonnage: tonnage ? Number(tonnage) : null,
+        containerNo: containerNo.trim() || null,
+        sealNo: sealNo.trim() || null,
+        loadDate: loadDate || null,
+        eta: eta || null,
+      }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return setError("Couldn't create it: " + (body.error || res.statusText));
+    }
+    const body = await res.json();
+    onCreated(body.id);
+  }
+
+  const activeCustomers = data.customers.filter((c) => c.is_active !== false);
+  const activeRoutes = data.routes.filter((r) => r.is_active !== false);
+  const activeTrucks = data.trucks.filter((t) => t.is_active !== false);
+  const activeDrivers = data.drivers.filter((d) => d.is_active !== false);
+
+  return (
+    <form className="panel-body" onSubmit={handleSubmit}>
+      {error ? <div className="note bad">{error}</div> : null}
+      <div className="field">
+        <label htmlFor="nCust">Customer</label>
+        <select
+          id="nCust"
+          value={customerId}
+          onChange={(e) => { setCustomerId(e.target.value); applyRate(e.target.value, routeId); }}
+        >
+          <option value="">—</option>
+          {activeCustomers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </div>
+      <div className="field">
+        <label htmlFor="nRoute">Route</label>
+        <select
+          id="nRoute"
+          value={routeId}
+          onChange={(e) => { setRouteId(e.target.value); applyRate(customerId, e.target.value); applyEta(e.target.value, loadDate); }}
+        >
+          <option value="">—</option>
+          {activeRoutes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+        </select>
+      </div>
+      <div className="field">
+        <label htmlFor="nRev">Revenue (USD)</label>
+        <input id="nRev" type="number" step="0.01" min="0" placeholder="0.00" value={revenue} onChange={(e) => setRevenue(e.target.value)} />
+      </div>
+      {rateHint ? (
+        <div className="hint" style={{ color: rateHint.kind === "good" ? "var(--settled)" : "var(--waiting)", margin: "-8px 0 13px" }}>
+          {rateHint.text}
+        </div>
+      ) : null}
+      <div className="row">
+        <div className="field">
+          <label htmlFor="nTruck">Truck</label>
+          <select id="nTruck" value={truckId} onChange={(e) => setTruckId(e.target.value)}>
+            <option value="">—</option>
+            {activeTrucks.map((t) => <option key={t.id} value={t.id}>{t.fleet_no}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="nDriver">Driver</label>
+          <select id="nDriver" value={driverId} onChange={(e) => setDriverId(e.target.value)}>
+            <option value="">—</option>
+            {activeDrivers.map((d) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="row">
+        <div className="field">
+          <label htmlFor="nComm">Commodity</label>
+          <input id="nComm" type="text" placeholder="General cargo" value={commodity} onChange={(e) => setCommodity(e.target.value)} />
+        </div>
+        <div className="field">
+          <label htmlFor="nTon">Tonnage</label>
+          <input id="nTon" type="number" step="0.001" min="0" placeholder="28.500" value={tonnage} onChange={(e) => setTonnage(e.target.value)} />
+        </div>
+      </div>
+      <div className="row">
+        <div className="field">
+          <label htmlFor="nCont">Container</label>
+          <input id="nCont" type="text" value={containerNo} onChange={(e) => setContainerNo(e.target.value)} />
+        </div>
+        <div className="field">
+          <label htmlFor="nSeal">Seal</label>
+          <input id="nSeal" type="text" value={sealNo} onChange={(e) => setSealNo(e.target.value)} />
+        </div>
+      </div>
+      <div className="row">
+        <div className="field">
+          <label htmlFor="nLoad">Load date</label>
+          <input id="nLoad" type="date" value={loadDate} onChange={(e) => { setLoadDate(e.target.value); applyEta(routeId, e.target.value); }} />
+        </div>
+        <div className="field">
+          <label htmlFor="nEta">Planned ETA</label>
+          <input id="nEta" type="date" value={eta} onChange={(e) => setEta(e.target.value)} />
+        </div>
+      </div>
+      <button className="primary" type="submit" disabled={saving}>
+        {saving ? "Creating…" : "Create trip"}
+      </button>
+      <button className="ghost" type="button" onClick={onCancel}>Cancel</button>
+    </form>
+  );
+}

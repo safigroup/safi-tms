@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { m0, m2, today } from "@/lib/format";
@@ -219,6 +220,9 @@ function TripDetail({ trip, onChanged }: { trip: BoardTrip; onChanged: () => Pro
   const nexts = NEXT[trip.status] || [];
   const canBorder = ["in_transit", "at_border"].includes(trip.status);
   const borders = trip.borders || [];
+  const canBill =
+    (!trip.pod_in_hand && trip.status === "delivered") ||
+    ["pod_received", "in_transit", "at_border", "loading"].includes(trip.status);
 
   async function advance(status: TripStatus) {
     setNote(null);
@@ -269,6 +273,13 @@ function TripDetail({ trip, onChanged }: { trip: BoardTrip; onChanged: () => Pro
           <div><div className="k">Revenue</div><div className="v">{m2(trip.revenue_usd)}</div></div>
           <div><div className="k">Costs</div><div className="v">{m2(trip.cost_usd)}</div></div>
           <div><div className="k">Margin</div><div className={"v " + (m >= 0 ? "pos" : "neg")}>{m2(m)}</div></div>
+        </div>
+      </div>
+      <div className="d-sec">
+        <h3>Go to</h3>
+        <div className="acts">
+          <Link className="act" href={`/docket?trip=${trip.trip_id}`}>Costs &amp; documents</Link>
+          {canBill ? <Link className="act" href={`/billing?trip=${trip.trip_id}`}>Billing</Link> : null}
         </div>
       </div>
       {nexts.length ? (

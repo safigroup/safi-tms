@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { m0, m2, lab, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
@@ -38,6 +38,7 @@ type InvoiceDetail = {
 
 export default function BillingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [data, setData] = useState<BootstrapPayload | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<"bill" | "inv">("bill");
@@ -58,6 +59,11 @@ export default function BillingPage() {
     const payload: BootstrapPayload = await res.json();
     setData(payload);
     setLoadError(payload.fetchErrors.length ? `Couldn't load ${payload.fetchErrors.join(", ")}.` : null);
+    const wanted = searchParams.get("trip");
+    if (wanted && payload.billable.some((t) => t.trip_id === wanted)) {
+      setTab("bill");
+      setSelected(wanted);
+    }
   }
 
   useEffect(() => {

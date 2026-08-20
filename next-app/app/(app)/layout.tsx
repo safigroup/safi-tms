@@ -1,16 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
+import { Nav } from "@/lib/components/Nav";
 import { signOut } from "./actions";
-
-// Docket/Billing/Admin land in later phases -- shown as disabled tabs so the
-// eventual structure is visible without offering a link into nothing.
-const VIEWS = [
-  { href: "/board", label: "Board", enabled: true },
-  { href: "/docket", label: "Cost docket", enabled: true },
-  { href: "/billing", label: "Billing", enabled: true },
-  { href: "/admin", label: "Admin", enabled: true },
-];
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const ctx = await getAuthedOrgContext();
@@ -34,20 +25,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </form>
         </div>
       </header>
-      <nav>
-        {VIEWS.map((v) =>
-          v.enabled ? (
-            <Link key={v.href} href={v.href}>
-              <button type="button">{v.label}</button>
-            </Link>
-          ) : (
-            <button key={v.href} type="button" disabled title="Coming in a later phase">
-              {v.label}
-            </button>
-          ),
-        )}
-      </nav>
-      <div id="warn" />
+      <Nav />
       {children}
     </div>
   );

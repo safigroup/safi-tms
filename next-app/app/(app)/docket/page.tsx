@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { m2, lab, today } from "@/lib/format";
 import { prepareFile } from "@/lib/imagePrep";
@@ -23,6 +23,7 @@ const emptyDraft: CostDraft = { cat: CATS[0], amt: "", cur: "", when: today(), d
 
 export default function DocketPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [data, setData] = useState<BootstrapPayload | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tripId, setTripId] = useState<string | null>(null);
@@ -49,7 +50,12 @@ export default function DocketPage() {
     setData(payload);
     setLoadError(payload.fetchErrors.length ? `Couldn't load ${payload.fetchErrors.join(", ")}.` : null);
     const open = payload.board.filter((t) => !["closed", "cancelled" as string].includes(t.status));
-    if (open.length) setTripId((cur) => cur ?? open[0].trip_id);
+    const wanted = searchParams.get("trip");
+    if (wanted && open.some((t) => t.trip_id === wanted)) {
+      setTripId(wanted);
+    } else if (open.length) {
+      setTripId((cur) => cur ?? open[0].trip_id);
+    }
   }
 
   async function loadDetail(id: string) {

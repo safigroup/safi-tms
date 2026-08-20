@@ -94,7 +94,7 @@ nav {
   margin-bottom: 16px
 }
 
-nav button {
+nav a {
   font-family: var(--cond);
   font-weight: 600;
   font-size: 12.5px;
@@ -105,10 +105,12 @@ nav button {
   background: var(--card);
   cursor: pointer;
   border-radius: 2px;
-  color: var(--ink-soft)
+  color: var(--ink-soft);
+  text-decoration: none;
+  display: inline-block
 }
 
-nav button.on {
+nav a.on {
   background: var(--stamp);
   border-color: var(--stamp);
   color: #fff
@@ -126,7 +128,7 @@ nav .n.alert {
   color: var(--waiting)
 }
 
-nav button.on .n {
+nav a.on .n {
   opacity: .75;
   color: #fff
 }

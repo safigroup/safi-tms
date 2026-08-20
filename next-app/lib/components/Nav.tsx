@@ -6,10 +6,10 @@ import { usePathname } from "next/navigation";
 import type { BootstrapPayload } from "@/lib/types";
 
 const VIEWS = [
-  { href: "/board", label: "Board" },
-  { href: "/docket", label: "Cost docket" },
-  { href: "/billing", label: "Billing" },
-  { href: "/admin", label: "Admin" },
+  { href: "/board", label: "Board", short: "Board" },
+  { href: "/docket", label: "Cost docket", short: "Docket" },
+  { href: "/billing", label: "Billing", short: "Billing" },
+  { href: "/admin", label: "Admin", short: "Admin" },
 ];
 
 // Ported from renderNav()/renderWarn() (index.html) -- one shared fetch for
@@ -52,13 +52,25 @@ export function Nav() {
 
   return (
     <>
-      <nav>
+      <nav className="nav-top">
         {VIEWS.map((v) => {
           const on = pathname === v.href || pathname.startsWith(v.href + "/");
           const [count, alert] = counts[v.href] ?? [0, false];
           return (
             <Link key={v.href} href={v.href} className={on ? "on" : undefined}>
               {v.label}
+              {count > 0 ? <span className={"n" + (alert ? " alert" : "")}>{count}</span> : null}
+            </Link>
+          );
+        })}
+      </nav>
+      <nav className="nav-mobile">
+        {VIEWS.map((v) => {
+          const on = pathname === v.href || pathname.startsWith(v.href + "/");
+          const [count, alert] = counts[v.href] ?? [0, false];
+          return (
+            <Link key={v.href} href={v.href} className={on ? "on" : undefined}>
+              {v.short}
               {count > 0 ? <span className={"n" + (alert ? " alert" : "")}>{count}</span> : null}
             </Link>
           );

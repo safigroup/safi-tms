@@ -151,6 +151,40 @@ export type ArInvoice = {
   cancel_reason: string | null;
 };
 
+export type TruckCost = {
+  id: string;
+  truck_id: string;
+  category: string;
+  description: string | null;
+  amount: number;
+  currency: string;
+  fx_rate_to_usd: number;
+  amount_usd: number;
+  incurred_on: string;
+};
+
+export type TruckReportTrip = {
+  trip_id: string;
+  trip_no: string;
+  actual_load_date: string | null;
+  revenue_usd: number;
+  cost_usd: number;
+  margin_usd: number;
+};
+
+export type TruckReport = {
+  truck: Truck;
+  from: string | null;
+  to: string | null;
+  trips: TruckReportTrip[];
+  standingCosts: TruckCost[];
+  tripRevenue: number;
+  tripExpenses: number;
+  standingExpenses: number;
+  totalExpenses: number;
+  margin: number;
+};
+
 export type BootstrapPayload = {
   fetchErrors: string[];
   role: OrgRole;

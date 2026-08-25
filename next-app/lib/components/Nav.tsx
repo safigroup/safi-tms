@@ -9,6 +9,7 @@ const VIEWS = [
   { href: "/board", label: "Board", short: "Board" },
   { href: "/docket", label: "Cost docket", short: "Docket" },
   { href: "/billing", label: "Billing", short: "Billing" },
+  { href: "/reports", label: "Reports", short: "Reports" },
   { href: "/admin", label: "Admin", short: "Admin" },
 ];
 

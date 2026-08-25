@@ -21,6 +21,10 @@ const DOCTYPES = [
 
 const emptyDraft: CostDraft = { cat: CATS[0], amt: "", cur: "", when: today(), desc: "", loc: "", paid: "driver_float", ref: "" };
 
+// Mirrors lib/auth/permissions.ts's CAN_MANAGE_TRIPS -- UI convenience only
+// (hides actions a role can't use), the route handlers are the real check.
+const CAN_MANAGE_TRIPS = ["owner", "admin", "ops"];
+
 export default function DocketPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -107,6 +111,7 @@ export default function DocketPage() {
   });
   const rate = data.fx.find((r) => r.currency === draft.cur);
   const amtNum = parseFloat(draft.amt);
+  const canWrite = CAN_MANAGE_TRIPS.includes(data.role);
 
   async function handleSaveCost(e: FormEvent) {
     e.preventDefault();
@@ -193,6 +198,9 @@ export default function DocketPage() {
       <div className="grid">
       <div className="panel">
         <div className="panel-head"><h2>Record a cost</h2></div>
+        {!canWrite ? (
+          <div className="empty">You have read-only access to this section.</div>
+        ) : (
         <form className="panel-body" onSubmit={handleSaveCost}>
           {formNote ? <div className="note bad">{formNote}</div> : null}
           {restoredNote ? <div className="note warn">Restored an unsaved draft from earlier — the receipt photo wasn&apos;t kept, re-attach it if needed.</div> : null}
@@ -271,6 +279,7 @@ export default function DocketPage() {
           />
           <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save cost"}</button>
         </form>
+        )}
       </div>
       <div className="panel">
         {trip ? (
@@ -309,7 +318,7 @@ export default function DocketPage() {
                   <div className="r-amt">{m2(c.amount_usd)}</div>
                   <div className="r-min">{c.currency !== "USD" ? m2(c.amount, c.currency) : " "}</div>
                 </div>
-                <button className="x" onClick={() => handleDeleteCost(c.id)}>✕</button>
+                {canWrite ? <button className="x" onClick={() => handleDeleteCost(c.id)}>✕</button> : null}
               </li>
             )) : <li className="empty">No costs recorded on this trip yet.</li>}
           </ul>
@@ -320,6 +329,7 @@ export default function DocketPage() {
             tripId={tripId}
             onOpen={(docId) => openFile(undefined, docId)}
             onChanged={async () => { if (tripId) { await loadDetail(tripId); await loadBootstrap(); } }}
+            canWrite={canWrite}
           />
         )}
       </div>
@@ -371,12 +381,14 @@ function DocsTab({
   tripId,
   onOpen,
   onChanged,
+  canWrite,
 }: {
   trip: BoardTrip | null;
   documents: TripDocument[];
   tripId: string | null;
   onOpen: (docId: string) => void;
   onChanged: () => Promise<void>;
+  canWrite: boolean;
 }) {
   const [docType, setDocType] = useState(DOCTYPES[0]);
   const [docNumber, setDocNumber] = useState("");
@@ -435,7 +447,7 @@ function DocsTab({
 
   return (
     <div>
-      {showPodCall ? (
+      {showPodCall && canWrite ? (
         <div className="pod-call">
           <p>The delivery half can&apos;t be invoiced until the POD is in hand. Upload it below, then <b>mark it received</b>.</p>
           <button className="primary settle" disabled={!pod?.storage_path} onClick={markPod}>Mark POD received</button>
@@ -457,21 +469,23 @@ function DocsTab({
           </li>
         )) : <li className="empty">No documents on this trip yet.</li>}
       </ul>
-      <form className="panel-body" style={{ background: "#F2F3EE", borderTop: "1px solid var(--rule)" }} onSubmit={handleUpload}>
-        {note ? <div className="note bad">{note}</div> : null}
-        <div className="field">
-          <label htmlFor="dType">Add or replace a document</label>
-          <select id="dType" value={docType} onChange={(e) => setDocType(e.target.value)}>
-            {DOCTYPES.map((d) => <option key={d} value={d}>{lab(d).replace(/^./, (x) => x.toUpperCase())}</option>)}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="dNum">Document number</label>
-          <input id="dNum" type="text" value={docNumber} onChange={(e) => setDocNumber(e.target.value)} />
-        </div>
-        <CaptureField file={docFile} onChange={setDocFile} idleText="Photo or PDF." />
-        <button className="primary" type="submit" disabled={saving}>{saving ? "Uploading…" : "Upload document"}</button>
-      </form>
+      {canWrite ? (
+        <form className="panel-body" style={{ background: "#F2F3EE", borderTop: "1px solid var(--rule)" }} onSubmit={handleUpload}>
+          {note ? <div className="note bad">{note}</div> : null}
+          <div className="field">
+            <label htmlFor="dType">Add or replace a document</label>
+            <select id="dType" value={docType} onChange={(e) => setDocType(e.target.value)}>
+              {DOCTYPES.map((d) => <option key={d} value={d}>{lab(d).replace(/^./, (x) => x.toUpperCase())}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="dNum">Document number</label>
+            <input id="dNum" type="text" value={docNumber} onChange={(e) => setDocNumber(e.target.value)} />
+          </div>
+          <CaptureField file={docFile} onChange={setDocFile} idleText="Photo or PDF." />
+          <button className="primary" type="submit" disabled={saving}>{saving ? "Uploading…" : "Upload document"}</button>
+        </form>
+      ) : null}
     </div>
   );
 }

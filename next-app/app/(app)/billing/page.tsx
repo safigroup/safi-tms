@@ -9,6 +9,10 @@ import { COMPANY } from "@/lib/company";
 import { Spinner } from "@/lib/components/Spinner";
 import type { ArInvoice, BillableTrip, BootstrapPayload } from "@/lib/types";
 
+// Mirrors lib/auth/permissions.ts's CAN_MANAGE_BILLING -- UI convenience
+// only (hides actions a role can't use), the route handlers are the real check.
+const CAN_MANAGE_BILLING = ["owner", "admin", "finance"];
+
 const BUCKETS: [string, string, (i: ArInvoice) => boolean][] = [
   ["open", "Unpaid", (i) => Number(i.outstanding) > 0],
   ["current", "Current", (i) => i.bucket === "current"],
@@ -91,6 +95,7 @@ export default function BillingPage() {
 
   const bucketFn = BUCKETS.find((b) => b[0] === bucket)![2];
   const invRows = data.ar.filter(bucketFn);
+  const canWrite = CAN_MANAGE_BILLING.includes(data.role);
 
   async function printInvoice(id: string) {
     const res = await fetch(`/api/invoices/${id}`);
@@ -184,6 +189,7 @@ export default function BillingPage() {
                 setTab("inv");
                 setSelected(invoiceId);
               }}
+              canWrite={canWrite}
             />
           ) : tab === "inv" && selected ? (
             <InvoiceDetailPanel
@@ -191,6 +197,7 @@ export default function BillingPage() {
               ar={data.ar}
               onChanged={load}
               onPrint={() => printInvoice(selected)}
+              canWrite={canWrite}
             />
           ) : (
             <div className="empty">Pick a trip to bill, or an invoice to settle.</div>
@@ -202,7 +209,15 @@ export default function BillingPage() {
   );
 }
 
-function RaiseInvoicePanel({ trip, onRaised }: { trip: BillableTrip; onRaised: (invoiceId: string) => Promise<void> }) {
+function RaiseInvoicePanel({
+  trip,
+  onRaised,
+  canWrite,
+}: {
+  trip: BillableTrip;
+  onRaised: (invoiceId: string) => Promise<void>;
+  canWrite: boolean;
+}) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
@@ -239,22 +254,28 @@ function RaiseInvoicePanel({ trip, onRaised }: { trip: BillableTrip; onRaised: (
       <div className="d-sec">
         <h3>Raise</h3>
         {note ? <div className="note bad">{note}</div> : null}
-        <div className="acts">
-          <button className="act" disabled={busy || trip.loading_invoiced} onClick={() => raise("loading")}>
-            {trip.loading_invoiced ? "Loading half raised" : "Loading half"}
-          </button>
-          <button className="act go" disabled={busy || !trip.pod_in_hand || trip.delivery_invoiced} onClick={() => raise("delivery")}>
-            {trip.delivery_invoiced ? "Delivery half raised" : "Delivery half"}
-          </button>
-          <button className="act" disabled={busy || trip.loading_invoiced || trip.delivery_invoiced} onClick={() => raise("full")}>
-            Full amount
-          </button>
-        </div>
-        {!trip.pod_in_hand ? (
-          <div className="d-hint" style={{ marginTop: 10 }}>
-            The delivery half stays locked until the POD is marked received.
-          </div>
-        ) : null}
+        {canWrite ? (
+          <>
+            <div className="acts">
+              <button className="act" disabled={busy || trip.loading_invoiced} onClick={() => raise("loading")}>
+                {trip.loading_invoiced ? "Loading half raised" : "Loading half"}
+              </button>
+              <button className="act go" disabled={busy || !trip.pod_in_hand || trip.delivery_invoiced} onClick={() => raise("delivery")}>
+                {trip.delivery_invoiced ? "Delivery half raised" : "Delivery half"}
+              </button>
+              <button className="act" disabled={busy || trip.loading_invoiced || trip.delivery_invoiced} onClick={() => raise("full")}>
+                Full amount
+              </button>
+            </div>
+            {!trip.pod_in_hand ? (
+              <div className="d-hint" style={{ marginTop: 10 }}>
+                The delivery half stays locked until the POD is marked received.
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="d-hint">You have read-only access to billing.</div>
+        )}
       </div>
     </>
   );
@@ -265,11 +286,13 @@ function InvoiceDetailPanel({
   ar,
   onChanged,
   onPrint,
+  canWrite,
 }: {
   invoiceId: string;
   ar: ArInvoice[];
   onChanged: () => Promise<void>;
   onPrint: () => void;
+  canWrite: boolean;
 }) {
   const i = ar.find((x) => x.id === invoiceId);
   const [showCancel, setShowCancel] = useState(false);
@@ -348,7 +371,7 @@ function InvoiceDetailPanel({
       <div className="d-sec">
         <div className="acts">
           <button className="act" onClick={onPrint}>Print / PDF</button>
-          {!cancelled && paid === 0 ? (
+          {!cancelled && paid === 0 && canWrite ? (
             <button className="act" style={{ borderColor: "var(--alert)", color: "var(--alert)" }} onClick={() => setShowCancel(true)}>
               Cancel invoice
             </button>
@@ -357,7 +380,7 @@ function InvoiceDetailPanel({
         {!cancelled && paid > 0 ? (
           <div className="d-hint" style={{ marginTop: 9 }}>Can&apos;t be cancelled — {m2(paid, i.currency)} has already been recorded against it.</div>
         ) : null}
-        {showCancel ? (
+        {showCancel && canWrite ? (
           <div className="panel-body" style={{ background: "#FAEFEC", borderTop: "1px solid var(--alert)", marginTop: 9 }}>
             {cancelNote ? <div className="note bad">{cancelNote}</div> : null}
             <div className="field">
@@ -377,7 +400,7 @@ function InvoiceDetailPanel({
         <div className="d-kv"><span>Due</span><span>{i.due_on}{i.days_overdue > 0 ? ` · ${i.days_overdue}d overdue` : ""}</span></div>
         <div className="d-kv"><span>Ageing</span><span>{i.bucket}</span></div>
       </div>
-      {!settled ? (
+      {!settled && canWrite ? (
         <form className="panel-body" onSubmit={recordPayment}>
           {payNote ? <div className="note bad">{payNote}</div> : null}
           <div className="row">

@@ -12,26 +12,31 @@ export const ADMIN_ENTITIES = {
     table: "customers",
     columns: ["name", "country", "tpin", "contact_name", "contact_phone", "contact_email", "payment_terms", "payment_days", "is_active"],
     hasToggle: true,
+    permission: "commercial",
   },
   trucks: {
     table: "trucks",
     columns: ["fleet_no", "make_model", "horse_reg", "trailer_reg", "tank_capacity_l", "is_active"],
     hasToggle: true,
+    permission: "fleet",
   },
   drivers: {
     table: "drivers",
     columns: ["full_name", "phone", "nationality", "licence_no", "passport_no", "is_active"],
     hasToggle: true,
+    permission: "fleet",
   },
   routes: {
     table: "routes",
     columns: ["name", "origin", "destination", "distance_km", "target_days", "borders"],
     hasToggle: false,
+    permission: "fleet",
   },
   rate_cards: {
     table: "rate_cards",
     columns: ["customer_id", "route_id", "commodity", "rate_amount", "rate_currency", "rate_basis", "valid_from", "valid_to"],
     hasToggle: false,
+    permission: "commercial",
   },
 } as const;
 

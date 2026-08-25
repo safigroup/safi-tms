@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
 import { ADMIN_ENTITIES, isAdminEntityKey } from "@/lib/admin/entities";
+import { CAN_EDIT_COMMERCIAL, CAN_EDIT_FLEET } from "@/lib/auth/permissions";
 
 // Generic create for the admin master-data entities. params.entity must be
 // an allowlist key (404 otherwise) -- this is the one place in the app
@@ -19,7 +20,11 @@ export async function POST(
   if (!isAdminEntityKey(entity)) {
     return NextResponse.json({ error: "unknown entity" }, { status: 404 });
   }
-  const { table, columns } = ADMIN_ENTITIES[entity];
+  const { table, columns, permission } = ADMIN_ENTITIES[entity];
+  const allowed = permission === "fleet" ? CAN_EDIT_FLEET : CAN_EDIT_COMMERCIAL;
+  if (!allowed.has(ctx.role)) {
+    return NextResponse.json({ error: "not permitted" }, { status: 403 });
+  }
 
   const body = await request.json();
   const payload: Record<string, unknown> = { org_id: ctx.orgId };

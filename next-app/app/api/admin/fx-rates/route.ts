@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
+import { CAN_EDIT_COMMERCIAL } from "@/lib/auth/permissions";
 
 // Separate from the generic /api/admin/[entity] route -- fx_rates is
 // upsert-only (never a plain insert-then-update-by-id), keyed on
@@ -10,6 +11,9 @@ export async function POST(request: Request) {
   const ctx = await getAuthedOrgContext();
   if (!ctx.ok) {
     return NextResponse.json({ error: ctx.reason }, { status: ctx.status });
+  }
+  if (!CAN_EDIT_COMMERCIAL.has(ctx.role)) {
+    return NextResponse.json({ error: "not permitted" }, { status: 403 });
   }
 
   const { currency, unitsPerUsd, effectiveOn, source } = await request.json();

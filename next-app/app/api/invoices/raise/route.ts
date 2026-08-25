@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
+import { CAN_MANAGE_BILLING } from "@/lib/auth/permissions";
 
 // Wraps raise_invoice() -- the RPC's amount math and business rules
 // (50/50 split, delivery-half self-correction, POD gate) are untouched
@@ -9,6 +10,9 @@ export async function POST(request: Request) {
   const ctx = await getAuthedOrgContext();
   if (!ctx.ok) {
     return NextResponse.json({ error: ctx.reason }, { status: ctx.status });
+  }
+  if (!CAN_MANAGE_BILLING.has(ctx.role)) {
+    return NextResponse.json({ error: "not permitted" }, { status: 403 });
   }
 
   const { tripId, type } = await request.json();

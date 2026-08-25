@@ -1,6 +1,8 @@
 // Shapes returned by /api/bootstrap, matching the trip_board/billable views
 // and reference tables exactly (index.html's S.board / S.billable / etc).
 
+export type OrgRole = "owner" | "admin" | "ops" | "finance" | "viewer";
+
 export type TripStatus =
   | "draft"
   | "allocated"
@@ -151,6 +153,8 @@ export type ArInvoice = {
 
 export type BootstrapPayload = {
   fetchErrors: string[];
+  role: OrgRole;
+  userId: string;
   board: BoardTrip[];
   billable: BillableTrip[];
   ar: ArInvoice[];

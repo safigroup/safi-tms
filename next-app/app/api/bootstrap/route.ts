@@ -35,6 +35,8 @@ export async function GET() {
 
   return NextResponse.json({
     fetchErrors,
+    role: ctx.role,
+    userId: ctx.userId,
     board: board.data ?? [],
     billable: (billable.data ?? []).filter(
       (t) => !t.loading_invoiced || (t.pod_in_hand && !t.delivery_invoiced),

@@ -24,12 +24,20 @@ type FieldConfig = {
 
 type RowView = { t: string; s?: string; m?: string; r?: string; off?: boolean; tag?: [string, string] };
 
+// Mirrors lib/auth/permissions.ts -- UI convenience only (hides actions a
+// role can't use), the route handlers are the real check.
+const CAN_EDIT_FLEET = ["owner", "admin", "ops"];
+const CAN_EDIT_COMMERCIAL = ["owner", "admin", "finance"];
+const CAN_MANAGE_TEAM = ["owner", "admin"];
+
 // Client-side UI config only -- labels, hints, field types, select options.
 // Deliberately NOT the security boundary (that's lib/admin/entities.ts,
-// server-only); this just drives what the form looks like.
-const ENT_UI: Record<string, { label: string; fields: FieldConfig[]; row: (r: Record<string, unknown>, data: BootstrapPayload) => RowView }> = {
+// server-only); this just drives what the form looks like. `permission`
+// mirrors that file's field of the same name (fleet vs. commercial data).
+const ENT_UI: Record<string, { label: string; permission: "fleet" | "commercial"; fields: FieldConfig[]; row: (r: Record<string, unknown>, data: BootstrapPayload) => RowView }> = {
   customers: {
     label: "Customers",
+    permission: "commercial",
     fields: [
       { k: "name", label: "Name", type: "text", req: true },
       { k: "country", label: "Country", type: "select", opts: ["ZM", "TZ", "CD", "RW", "Other"] },
@@ -48,6 +56,7 @@ const ENT_UI: Record<string, { label: string; fields: FieldConfig[]; row: (r: Re
   },
   trucks: {
     label: "Trucks",
+    permission: "fleet",
     fields: [
       { k: "fleet_no", label: "Fleet number", type: "text", req: true, half: true },
       { k: "make_model", label: "Make / model", type: "text", def: "SHACMAN X3000", half: true },
@@ -63,6 +72,7 @@ const ENT_UI: Record<string, { label: string; fields: FieldConfig[]; row: (r: Re
   },
   drivers: {
     label: "Drivers",
+    permission: "fleet",
     fields: [
       { k: "full_name", label: "Full name", type: "text", req: true },
       { k: "phone", label: "Phone", type: "text", half: true },
@@ -79,6 +89,7 @@ const ENT_UI: Record<string, { label: string; fields: FieldConfig[]; row: (r: Re
   },
   routes: {
     label: "Routes",
+    permission: "fleet",
     fields: [
       { k: "name", label: "Route name", type: "text", req: true },
       { k: "origin", label: "Origin", type: "text", req: true, half: true },
@@ -94,6 +105,7 @@ const ENT_UI: Record<string, { label: string; fields: FieldConfig[]; row: (r: Re
   },
   rate_cards: {
     label: "Rate cards",
+    permission: "commercial",
     fields: [
       { k: "customer_id", label: "Customer", type: "fk", from: "customers", lab: "name", req: true },
       { k: "route_id", label: "Route", type: "fk", from: "routes", lab: "name", req: true },
@@ -114,11 +126,13 @@ const ENT_UI: Record<string, { label: string; fields: FieldConfig[]; row: (r: Re
   },
 };
 
-const VIEWS = ["fx", "customers", "trucks", "drivers", "routes", "rate_cards"] as const;
+const VIEWS = ["fx", "team", "customers", "trucks", "drivers", "routes", "rate_cards"] as const;
 type ViewKey = (typeof VIEWS)[number];
 const VIEW_LABELS: Record<ViewKey, string> = {
-  fx: "Exchange rates", customers: "Customers", trucks: "Trucks", drivers: "Drivers", routes: "Routes", rate_cards: "Rate cards",
+  fx: "Exchange rates", team: "Team", customers: "Customers", trucks: "Trucks", drivers: "Drivers", routes: "Routes", rate_cards: "Rate cards",
 };
+
+type TeamMember = { userId: string; email: string; role: string; createdAt: string };
 
 export default function AdminPage() {
   const router = useRouter();
@@ -127,6 +141,9 @@ export default function AdminPage() {
   const [view, setView] = useState<ViewKey>("fx");
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [team, setTeam] = useState<TeamMember[] | null>(null);
+  const [viewerRole, setViewerRole] = useState<string | null>(null);
+  const [teamError, setTeamError] = useState<string | null>(null);
 
   async function load() {
     const res = await fetch("/api/bootstrap");
@@ -143,10 +160,22 @@ export default function AdminPage() {
     setLoadError(payload.fetchErrors.length ? `Couldn't load ${payload.fetchErrors.join(", ")}.` : null);
   }
 
+  async function loadTeam() {
+    const res = await fetch("/api/admin/users");
+    if (!res.ok) {
+      setTeamError("Couldn't load the team list — try refreshing.");
+      return;
+    }
+    const body = await res.json();
+    setTeam(body.members);
+    setViewerRole(body.viewerRole);
+  }
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-once; load is recreated every render, adding it here would refetch on every render too
+    loadTeam();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-once; load/loadTeam are recreated every render, adding them here would refetch on every render too
   }, []);
 
   if (!data) return <div className="panel"><Spinner /></div>;
@@ -155,17 +184,24 @@ export default function AdminPage() {
     customers: data.customers, trucks: data.trucks, drivers: data.drivers, routes: data.routes, rate_cards: data.rateCards,
   };
 
+  const canEditView = (v: ViewKey): boolean => {
+    if (v === "team") return false;
+    const permission = v === "fx" ? "commercial" : ENT_UI[v].permission;
+    return (permission === "fleet" ? CAN_EDIT_FLEET : CAN_EDIT_COMMERCIAL).includes(data.role);
+  };
+  const canEdit = canEditView(view);
+
   return (
     <>
       {loadError ? <div className="note bad">{loadError}</div> : null}
       <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 16 }}>
-        {VIEWS.map((v) => (
+        {VIEWS.filter((v) => v !== "team" || CAN_MANAGE_TEAM.includes(data.role)).map((v) => (
           <button
             key={v}
             className={"chip" + (view === v ? " on" : "")}
             onClick={() => { setView(v); setSelected(null); setCreating(false); }}
           >
-            {VIEW_LABELS[v]}<span className="c">{v === "fx" ? data.fx.length : masters[v].length}</span>
+            {VIEW_LABELS[v]}<span className="c">{v === "fx" ? data.fx.length : v === "team" ? team?.length ?? 0 : masters[v].length}</span>
           </button>
         ))}
       </div>
@@ -173,10 +209,19 @@ export default function AdminPage() {
         <div className="panel">
           <div className="panel-head">
             <h2>{VIEW_LABELS[view]}</h2>
-            {view !== "fx" ? <button className="act" onClick={() => { setSelected(null); setCreating(true); }}>+ New</button> : null}
+            {view !== "fx" && view !== "team" && canEdit ? <button className="act" onClick={() => { setSelected(null); setCreating(true); }}>+ New</button> : null}
+            {view === "team" ? <button className="act" onClick={() => { setSelected(null); setCreating(true); }}>+ Invite</button> : null}
           </div>
           {view === "fx" ? (
             <FxList fx={data.fx} />
+          ) : view === "team" ? (
+            teamError ? (
+              <div className="panel-body"><div className="note bad">{teamError}</div></div>
+            ) : team ? (
+              <TeamList members={team} selected={selected} onSelect={(id) => { setSelected(id); setCreating(false); }} />
+            ) : (
+              <Spinner />
+            )
           ) : (
             <EntityList
               entity={view}
@@ -188,10 +233,30 @@ export default function AdminPage() {
           )}
         </div>
         <div className="panel">
-          <div className="panel-head"><h2>{view === "fx" ? "Add a rate" : selected ? "Edit" : creating ? "New" : "Detail"}</h2></div>
+          <div className="panel-head"><h2>{view === "fx" ? "Add a rate" : view === "team" ? (creating ? "Invite" : "Team member") : selected ? "Edit" : creating ? "New" : "Detail"}</h2></div>
           <div className="panel-body">
             {view === "fx" ? (
-              <FxForm onSaved={load} />
+              canEdit ? <FxForm onSaved={load} /> : <div className="empty">You have read-only access to exchange rates.</div>
+            ) : view === "team" ? (
+              creating ? (
+                <InviteForm
+                  viewerRole={viewerRole}
+                  onInvited={async () => { await loadTeam(); }}
+                  onCancel={() => setCreating(false)}
+                />
+              ) : team && selected ? (
+                (() => {
+                  const member = team.find((m) => m.userId === selected)!;
+                  const isSelf = member.userId === data.userId;
+                  const canReset =
+                    isSelf ||
+                    viewerRole === "owner" ||
+                    (viewerRole === "admin" && member.role !== "owner" && member.role !== "admin");
+                  return <TeamDetail key={selected} member={member} canReset={canReset} />;
+                })()
+              ) : (
+                <div className="empty">Pick a team member.</div>
+              )
             ) : creating || selected ? (
               <EntityForm
                 key={view + ":" + (selected ?? "new")}
@@ -200,6 +265,7 @@ export default function AdminPage() {
                 data={data}
                 onSaved={async () => { await load(); setSelected(null); setCreating(false); }}
                 onCancel={() => { setSelected(null); setCreating(false); }}
+                canEdit={canEdit}
               />
             ) : (
               <div className="empty">Pick a record, or add a new one.</div>
@@ -207,6 +273,176 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+    </>
+  );
+}
+
+const ROLE_PILL: Record<string, string> = { owner: "violet", admin: "violet", ops: "grey", finance: "grey", viewer: "grey" };
+
+function TeamList({
+  members,
+  selected,
+  onSelect,
+}: {
+  members: TeamMember[];
+  selected: string | null;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <ul className="list">
+      {members.length ? members.map((m) => (
+        <li key={m.userId} className={"tap" + (selected === m.userId ? " sel" : "")} onClick={() => onSelect(m.userId)}>
+          <div>
+            <div className="r-title">{m.email}</div>
+            <div className="r-mono">member since {m.createdAt.slice(0, 10)}</div>
+            <div className="r-tags"><span className={"pill " + (ROLE_PILL[m.role] || "grey")}>{m.role}</span></div>
+          </div>
+        </li>
+      )) : <li className="empty">No team members yet.</li>}
+    </ul>
+  );
+}
+
+const ALL_ROLES = ["owner", "admin", "ops", "finance", "viewer"];
+
+function InviteForm({
+  viewerRole,
+  onInvited,
+  onCancel,
+}: {
+  viewerRole: string | null;
+  onInvited: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const grantable = viewerRole === "owner" ? ALL_ROLES : ["ops", "finance", "viewer"];
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState(grantable[0]);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!email.trim()) return setError("Enter an email address.");
+    setSaving(true);
+    setError(null);
+    const res = await fetch("/api/admin/invites", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim(), role }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return setError(body.error || res.statusText);
+    }
+    const body = await res.json();
+    toast.success("Invite created");
+    setInviteUrl(body.inviteUrl);
+    await onInvited();
+  }
+
+  async function copyLink() {
+    if (!inviteUrl) return;
+    await navigator.clipboard.writeText(inviteUrl);
+    toast.success("Copied");
+  }
+
+  if (inviteUrl) {
+    return (
+      <div className="d-sec" style={{ borderBottom: "none", paddingTop: 0 }}>
+        <div className="note good">Invite created for {email} — share this link with them directly. It won&apos;t be shown again.</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input type="text" readOnly value={inviteUrl} style={{ fontFamily: "var(--mono)" }} />
+          <button className="act" type="button" onClick={copyLink}>Copy</button>
+        </div>
+        <button className="ghost" type="button" onClick={onCancel}>Done</button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {error ? <div className="note bad">{error}</div> : null}
+      <div className="field">
+        <label htmlFor="iEmail">Email</label>
+        <input id="iEmail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+      </div>
+      <div className="field">
+        <label htmlFor="iRole">Role</label>
+        <select id="iRole" value={role} onChange={(e) => setRole(e.target.value)}>
+          {grantable.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+      </div>
+      <button className="primary" type="submit" disabled={saving}>{saving ? "Creating…" : "Create invite"}</button>
+      <button className="ghost" type="button" onClick={onCancel}>Cancel</button>
+    </form>
+  );
+}
+
+function TeamDetail({ member, canReset }: { member: TeamMember; canReset: boolean }) {
+  const [confirming, setConfirming] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [password, setPassword] = useState<string | null>(null);
+
+  async function confirmReset() {
+    setResetting(true);
+    setError(null);
+    const res = await fetch(`/api/admin/users/${member.userId}/reset-password`, { method: "POST" });
+    setResetting(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error || res.statusText);
+      return;
+    }
+    const body = await res.json();
+    setConfirming(false);
+    setPassword(body.password);
+  }
+
+  async function copyPassword() {
+    if (!password) return;
+    await navigator.clipboard.writeText(password);
+    toast.success("Copied");
+  }
+
+  return (
+    <>
+      <div className="d-sec" style={{ borderBottom: "none", paddingTop: 0 }}>
+        <div className="d-kv"><span>Email</span><span>{member.email}</span></div>
+        <div className="d-kv"><span>Role</span><span>{member.role}</span></div>
+        <div className="d-kv"><span>Member since</span><span>{member.createdAt.slice(0, 10)}</span></div>
+      </div>
+      {canReset ? (
+        <div className="d-sec">
+          <h3>Reset password</h3>
+          {error ? <div className="note bad">{error}</div> : null}
+          {password ? (
+            <>
+              <div className="note good">New password generated — share it with {member.email} directly. It won&apos;t be shown again.</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input type="text" readOnly value={password} style={{ fontFamily: "var(--mono)" }} />
+                <button className="act" type="button" onClick={copyPassword}>Copy</button>
+              </div>
+            </>
+          ) : confirming ? (
+            <>
+              <div className="d-hint" style={{ marginBottom: 10 }}>
+                Reset password for {member.email}? The current password stops working immediately.
+              </div>
+              <div className="acts">
+                <button className="act" style={{ borderColor: "var(--alert)", color: "var(--alert)" }} disabled={resetting} onClick={confirmReset}>
+                  {resetting ? "Resetting…" : "Confirm reset"}
+                </button>
+                <button className="act" disabled={resetting} onClick={() => setConfirming(false)}>Never mind</button>
+              </div>
+            </>
+          ) : (
+            <button className="act" onClick={() => setConfirming(true)}>Reset password</button>
+          )}
+        </div>
+      ) : null}
     </>
   );
 }
@@ -281,12 +517,14 @@ function EntityForm({
   data,
   onSaved,
   onCancel,
+  canEdit,
 }: {
   entity: ViewKey;
   id: string | null;
   data: BootstrapPayload;
   onSaved: () => Promise<void>;
   onCancel: () => void;
+  canEdit: boolean;
 }) {
   const ui = ENT_UI[entity];
   const masters: Record<string, unknown[]> = {
@@ -363,15 +601,19 @@ function EntityForm({
       {rows.map((group, idx) => (
         <div key={idx} className={group.length > 1 ? "row" : undefined}>
           {group.map((f) => (
-            <Field key={f.k} field={f} value={values[f.k]} onChange={(v) => setField(f.k, v)} customers={data.customers} routes={data.routes} />
+            <Field key={f.k} field={f} value={values[f.k]} onChange={(v) => setField(f.k, v)} customers={data.customers} routes={data.routes} disabled={!canEdit} />
           ))}
         </div>
       ))}
-      <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : id ? "Save changes" : "Create"}</button>
-      {id && ui.fields.some((f) => f.k === "is_active") ? (
-        <button className="ghost danger" type="button" disabled={saving} onClick={toggle}>
-          {existing?.is_active ? "Deactivate" : "Reactivate"}
-        </button>
+      {canEdit ? (
+        <>
+          <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : id ? "Save changes" : "Create"}</button>
+          {id && ui.fields.some((f) => f.k === "is_active") ? (
+            <button className="ghost danger" type="button" disabled={saving} onClick={toggle}>
+              {existing?.is_active ? "Deactivate" : "Reactivate"}
+            </button>
+          ) : null}
+        </>
       ) : null}
       <button className="ghost" type="button" onClick={onCancel}>Cancel</button>
     </form>
@@ -384,12 +626,14 @@ function Field({
   onChange,
   customers,
   routes,
+  disabled,
 }: {
   field: FieldConfig;
   value: unknown;
   onChange: (v: unknown) => void;
   customers: Customer[];
   routes: Route[];
+  disabled: boolean;
 }) {
   const id = "af_" + field.k;
 
@@ -397,26 +641,26 @@ function Field({
   if (field.type === "bool") {
     return (
       <div className="check">
-        <input type="checkbox" id={id} checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} />
+        <input type="checkbox" id={id} checked={Boolean(value)} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
         <label htmlFor={id}>{field.label}</label>
       </div>
     );
   } else if (field.type === "select") {
     control = (
-      <select id={id} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)}>
+      <select id={id} value={String(value ?? "")} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
         {field.opts!.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
     );
   } else if (field.type === "fk") {
     const src = (field.from === "customers" ? customers : routes).filter((r) => r.is_active !== false);
     control = (
-      <select id={id} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)}>
+      <select id={id} value={String(value ?? "")} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
         <option value="">—</option>
         {src.map((o) => <option key={o.id} value={o.id}>{(o as unknown as Record<string, string>)[field.lab!]}</option>)}
       </select>
     );
   } else if (field.type === "tags") {
-    control = <input id={id} type="text" value={Array.isArray(value) ? value.join(", ") : String(value ?? "")} onChange={(e) => onChange(e.target.value)} />;
+    control = <input id={id} type="text" value={Array.isArray(value) ? value.join(", ") : String(value ?? "")} disabled={disabled} onChange={(e) => onChange(e.target.value)} />;
   } else {
     control = (
       <input
@@ -424,6 +668,7 @@ function Field({
         type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
         step={field.type === "number" ? "any" : undefined}
         value={String(value ?? "")}
+        disabled={disabled}
         onChange={(e) => onChange(field.type === "number" ? (e.target.value === "" ? null : Number(e.target.value)) : e.target.value)}
       />
     );

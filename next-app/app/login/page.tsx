@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -63,6 +64,9 @@ export default function LoginPage() {
                 {signingIn ? "Signing in…" : "Sign in"}
               </button>
             </form>
+            <Link href="/forgot-password" style={{ display: "block", marginTop: 12, fontSize: 13, color: "var(--ink-soft)" }}>
+              Forgot password?
+            </Link>
           </div>
         </div>
       </div>

@@ -44,6 +44,10 @@ const NEXT: Record<string, [TripStatus, string][]> = {
 
 const lab = (s: string) => s.replace(/_/g, " ");
 
+// Mirrors lib/auth/permissions.ts's CAN_MANAGE_TRIPS -- UI convenience only
+// (hides actions a role can't use), the route handlers are the real check.
+const CAN_MANAGE_TRIPS = ["owner", "admin", "ops"];
+
 export default function BoardPage() {
   const router = useRouter();
   const [data, setData] = useState<BootstrapPayload | null>(null);
@@ -91,6 +95,7 @@ export default function BoardPage() {
   const filterFn = FILTERS.find((f) => f[0] === filter)![2];
   const rows = board.filter(filterFn);
   const selectedTrip = board.find((t) => t.trip_id === selected) || null;
+  const canWrite = CAN_MANAGE_TRIPS.includes(data.role);
 
   return (
     <>
@@ -123,9 +128,11 @@ export default function BoardPage() {
         <div className="panel">
           <div className="panel-head">
             <h2>Trips</h2>
-            <button className="act" onClick={() => { setShowNewTrip(true); setSelected(null); }}>
-              + New trip
-            </button>
+            {canWrite ? (
+              <button className="act" onClick={() => { setShowNewTrip(true); setSelected(null); }}>
+                + New trip
+              </button>
+            ) : null}
           </div>
           <div className="chips">
             {FILTERS.map(([key, label, fn]) => (
@@ -203,7 +210,7 @@ export default function BoardPage() {
               }}
             />
           ) : selectedTrip ? (
-            <TripDetail trip={selectedTrip} onChanged={load} />
+            <TripDetail trip={selectedTrip} onChanged={load} canWrite={canWrite} />
           ) : (
             <div className="empty">Select a trip, or start a new one.</div>
           )}
@@ -213,7 +220,7 @@ export default function BoardPage() {
   );
 }
 
-function TripDetail({ trip, onChanged }: { trip: BoardTrip; onChanged: () => Promise<void> }) {
+function TripDetail({ trip, onChanged, canWrite }: { trip: BoardTrip; onChanged: () => Promise<void>; canWrite: boolean }) {
   const { busy, run } = useBusyGroup();
   const [note, setNote] = useState<string | null>(null);
   const m = Number(trip.margin_usd || 0);
@@ -282,7 +289,7 @@ function TripDetail({ trip, onChanged }: { trip: BoardTrip; onChanged: () => Pro
           {canBill ? <Link className="act" href={`/billing?trip=${trip.trip_id}`}>Billing</Link> : null}
         </div>
       </div>
-      {nexts.length ? (
+      {nexts.length && canWrite ? (
         <div className="d-sec">
           <h3>Next step</h3>
           <div className="acts">
@@ -299,7 +306,7 @@ function TripDetail({ trip, onChanged }: { trip: BoardTrip; onChanged: () => Pro
           </div>
         </div>
       ) : null}
-      {canBorder ? (
+      {canBorder && canWrite ? (
         <div className="d-sec">
           <h3>Border</h3>
           <div className="acts">

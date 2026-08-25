@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
+import { CAN_MANAGE_TRIPS } from "@/lib/auth/permissions";
 
 // Ports saveCost() (index.html). The receipt photo itself is uploaded
 // separately first via POST /api/storage/upload (see that route for why),
@@ -8,6 +9,9 @@ export async function POST(request: Request) {
   const ctx = await getAuthedOrgContext();
   if (!ctx.ok) {
     return NextResponse.json({ error: ctx.reason }, { status: ctx.status });
+  }
+  if (!CAN_MANAGE_TRIPS.has(ctx.role)) {
+    return NextResponse.json({ error: "not permitted" }, { status: 403 });
   }
 
   const body = await request.json();

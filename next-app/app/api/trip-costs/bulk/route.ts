@@ -3,6 +3,24 @@ import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
 import { CAN_MANAGE_TRIPS } from "@/lib/auth/permissions";
 import { parseSpreadsheet } from "@/lib/parseSpreadsheet";
 
+// Accepts ISO (the template's format) and MM/DD/YYYY (what Google Sheets
+// exports by default under a US locale) -- anything else is rejected
+// rather than guessed at, since a format like "5/6/2026" is genuinely
+// ambiguous (5 June or 6 May) and silently inserting the wrong date into
+// a financial record is worse than a caught error.
+function normalizeDate(value: string): string | null {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const us = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (us) {
+    const month = Number(us[1]);
+    const day = Number(us[2]);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${us[3]}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+  return null;
+}
+
 // Bulk version of trip-costs/route.ts's FX-freeze-at-entry pattern, batched:
 // trip numbers and currencies are resolved in two upfront queries instead
 // of one per row. Unlike the interactive cost form (which only offers
@@ -101,12 +119,9 @@ export async function POST(request: Request) {
       errors.push({ row: rowNo, message: "Date is required." });
       continue;
     }
-    // Rejected rather than best-effort-parsed: an ambiguous format like
-    // "3/5/2026" (could mean 3 May or 5 March) or "March 5, 2026" would
-    // otherwise risk silently inserting a wrong date into a financial
-    // record, which is worse than a caught error.
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.incurred_on)) {
-      errors.push({ row: rowNo, message: `Date must be in YYYY-MM-DD format (got "${row.incurred_on}").` });
+    const incurredOn = normalizeDate(row.incurred_on);
+    if (!incurredOn) {
+      errors.push({ row: rowNo, message: `Date must be in YYYY-MM-DD or MM/DD/YYYY format (got "${row.incurred_on}").` });
       continue;
     }
 
@@ -117,7 +132,7 @@ export async function POST(request: Request) {
       amount,
       currency: row.currency,
       fx_rate_to_usd: rate,
-      incurred_on: row.incurred_on,
+      incurred_on: incurredOn,
       description: row.description || null,
       location: row.location || null,
       paid_by: row.paid_by || null,

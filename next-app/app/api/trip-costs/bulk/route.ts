@@ -125,10 +125,15 @@ export async function POST(request: Request) {
       continue;
     }
 
+    // cost_category is lowercase snake_case (fuel, driver_advance, ...) --
+    // real-world exports commonly have this capitalized or space-separated
+    // ("Other", "Driver Advance"), so normalize before the enum rejects it.
+    const category = row.category.trim().toLowerCase().replace(/\s+/g, "_");
+
     const { error } = await ctx.admin.from("trip_costs").insert({
       org_id: ctx.orgId,
       trip_id: tripId,
-      category: row.category,
+      category,
       amount,
       currency: row.currency,
       fx_rate_to_usd: rate,

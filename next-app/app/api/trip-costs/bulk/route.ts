@@ -88,13 +88,25 @@ export async function POST(request: Request) {
       errors.push({ row: rowNo, message: `No exchange rate on file for ${row.currency}.` });
       continue;
     }
-    const amount = Number(row.amount);
+    // Strips thousands separators/currency symbols -- a value like
+    // "1,200.00" round-trips through CSV as a quoted string (Google
+    // Sheets quotes any field containing a comma), and Number() doesn't
+    // understand comma separators on its own.
+    const amount = Number(String(row.amount).replace(/[^0-9.-]/g, ""));
     if (!Number.isFinite(amount) || amount <= 0) {
       errors.push({ row: rowNo, message: "Amount must be a number greater than zero." });
       continue;
     }
     if (!row.incurred_on) {
       errors.push({ row: rowNo, message: "Date is required." });
+      continue;
+    }
+    // Rejected rather than best-effort-parsed: an ambiguous format like
+    // "3/5/2026" (could mean 3 May or 5 March) or "March 5, 2026" would
+    // otherwise risk silently inserting a wrong date into a financial
+    // record, which is worse than a caught error.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.incurred_on)) {
+      errors.push({ row: rowNo, message: `Date must be in YYYY-MM-DD format (got "${row.incurred_on}").` });
       continue;
     }
 

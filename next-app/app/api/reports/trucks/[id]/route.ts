@@ -60,6 +60,26 @@ export async function GET(
     return NextResponse.json({ error: costsError.message }, { status: 400 });
   }
 
+  // trip_board's cost_usd is already an aggregate across all trip_costs for
+  // a trip, so the per-category P/L breakdown needs its own query against
+  // trip_costs directly, scoped to just the trips already resolved above.
+  const tripIds = (trips ?? []).map((t) => t.trip_id);
+  const { data: tripCostRows, error: tripCostRowsError } = tripIds.length
+    ? await ctx.admin.from("trip_costs").select("category, amount_usd").in("trip_id", tripIds)
+    : { data: [] as { category: string; amount_usd: number }[], error: null };
+  if (tripCostRowsError) {
+    return NextResponse.json({ error: tripCostRowsError.message }, { status: 400 });
+  }
+
+  const sumByCategory = (rows: { category: string; amount_usd: number }[]) => {
+    const totals = new Map<string, number>();
+    for (const r of rows) {
+      totals.set(r.category, (totals.get(r.category) ?? 0) + Number(r.amount_usd || 0));
+    }
+    return Array.from(totals, ([category, amountUsd]) => ({ category, amountUsd }))
+      .sort((a, b) => b.amountUsd - a.amountUsd);
+  };
+
   const tripRevenue = (trips ?? []).reduce((s, t) => s + Number(t.revenue_usd || 0), 0);
   const tripExpenses = (trips ?? []).reduce((s, t) => s + Number(t.cost_usd || 0), 0);
   const standingExpenses = (standingCosts ?? []).reduce((s, c) => s + Number(c.amount_usd || 0), 0);
@@ -76,5 +96,7 @@ export async function GET(
     standingExpenses,
     totalExpenses,
     margin: tripRevenue - totalExpenses,
+    tripExpensesByCategory: sumByCategory(tripCostRows ?? []),
+    standingExpensesByCategory: sumByCategory(standingCosts ?? []),
   });
 }

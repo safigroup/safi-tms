@@ -172,6 +172,11 @@ export type TruckReportTrip = {
   margin_usd: number;
 };
 
+export type CategoryAmount = {
+  category: string;
+  amountUsd: number;
+};
+
 export type TruckReport = {
   truck: Truck;
   from: string | null;
@@ -183,6 +188,8 @@ export type TruckReport = {
   standingExpenses: number;
   totalExpenses: number;
   margin: number;
+  tripExpensesByCategory: CategoryAmount[];
+  standingExpensesByCategory: CategoryAmount[];
 };
 
 export type BootstrapPayload = {

@@ -37,17 +37,25 @@ export async function POST(request: Request) {
 
   // Most recent rate on file for this currency — mirrors how the old
   // client built S.rates (fx_rates ordered by effective_on desc, first
-  // match per currency wins).
-  const { data: rate } = await ctx.admin
-    .from("fx_rates")
-    .select("rate_to_usd")
-    .eq("org_id", ctx.orgId)
-    .eq("currency", currency)
-    .order("effective_on", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!rate) {
-    return NextResponse.json({ error: `No exchange rate on file for ${currency}.` }, { status: 400 });
+  // match per currency wins). USD needs no lookup: it never has a real
+  // conversion, so requiring an org to keep a trivial "1 USD = 1 USD" row
+  // on file just to record a native-USD cost would be needless friction.
+  let rateToUsd: number;
+  if (currency === "USD") {
+    rateToUsd = 1;
+  } else {
+    const { data: rate } = await ctx.admin
+      .from("fx_rates")
+      .select("rate_to_usd")
+      .eq("org_id", ctx.orgId)
+      .eq("currency", currency)
+      .order("effective_on", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!rate) {
+      return NextResponse.json({ error: `No exchange rate on file for ${currency}.` }, { status: 400 });
+    }
+    rateToUsd = rate.rate_to_usd;
   }
 
   const { data, error } = await ctx.admin
@@ -59,7 +67,7 @@ export async function POST(request: Request) {
       description: body.description?.trim() || null,
       amount: amt,
       currency,
-      fx_rate_to_usd: rate.rate_to_usd,
+      fx_rate_to_usd: rateToUsd,
       incurred_on: incurredOn,
       location: body.location?.trim() || null,
       paid_by: body.paidBy,

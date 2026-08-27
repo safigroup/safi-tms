@@ -35,16 +35,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "truck not found" }, { status: 404 });
   }
 
-  const { data: rate } = await ctx.admin
-    .from("fx_rates")
-    .select("rate_to_usd")
-    .eq("org_id", ctx.orgId)
-    .eq("currency", currency)
-    .order("effective_on", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!rate) {
-    return NextResponse.json({ error: `No exchange rate on file for ${currency}.` }, { status: 400 });
+  // USD needs no lookup -- see the identical comment in trip-costs/route.ts.
+  let rateToUsd: number;
+  if (currency === "USD") {
+    rateToUsd = 1;
+  } else {
+    const { data: rate } = await ctx.admin
+      .from("fx_rates")
+      .select("rate_to_usd")
+      .eq("org_id", ctx.orgId)
+      .eq("currency", currency)
+      .order("effective_on", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!rate) {
+      return NextResponse.json({ error: `No exchange rate on file for ${currency}.` }, { status: 400 });
+    }
+    rateToUsd = rate.rate_to_usd;
   }
 
   const { data, error } = await ctx.admin
@@ -56,7 +63,7 @@ export async function POST(request: Request) {
       description: body.description?.trim() || null,
       amount: amt,
       currency,
-      fx_rate_to_usd: rate.rate_to_usd,
+      fx_rate_to_usd: rateToUsd,
       incurred_on: incurredOn,
       recorded_by: ctx.userId,
     })

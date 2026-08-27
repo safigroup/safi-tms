@@ -95,7 +95,10 @@ export default function ReportsPage() {
 
   const canEdit = CAN_EDIT_COMMERCIAL.includes(data.role);
 
-  const curOpts = Array.from(new Set(data.fx.map((r) => r.currency))).sort((a, b) => {
+  // USD is always a valid entry currency (no conversion needed), whether
+  // or not the org has ever bothered to add a redundant "1 USD = 1 USD"
+  // row to fx_rates.
+  const curOpts = Array.from(new Set([...data.fx.map((r) => r.currency), "USD"])).sort((a, b) => {
     const order = ["USD", "TZS", "ZMW", "CDF"];
     const ia = order.indexOf(a), ib = order.indexOf(b);
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
@@ -293,14 +296,15 @@ function AddTruckCostForm({
   const [saving, setSaving] = useState(false);
 
   const amtNum = parseFloat(amount);
-  const rate = fx.find((r) => r.currency === currency);
+  const fxRate = fx.find((r) => r.currency === currency);
+  const rateToUsd = currency === "USD" ? 1 : fxRate?.rate_to_usd;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!Number.isFinite(amtNum) || amtNum <= 0) {
       return setError("Enter an amount greater than zero.");
     }
-    if (!rate) {
+    if (rateToUsd === undefined) {
       return setError(`No exchange rate on file for ${currency}.`);
     }
     setSaving(true);
@@ -357,12 +361,14 @@ function AddTruckCostForm({
         <span className="native">{Number.isFinite(amtNum) && amtNum > 0 ? m2(amtNum, currency) : "—"}</span>
         <span className="arrow">→</span>
         <span className={"usd" + (Number.isFinite(amtNum) && amtNum > 0 ? "" : " idle")}>
-          {Number.isFinite(amtNum) && amtNum > 0 && rate ? m2(amtNum * rate.rate_to_usd) : "USD 0.00"}
+          {Number.isFinite(amtNum) && amtNum > 0 && rateToUsd !== undefined ? m2(amtNum * rateToUsd) : "USD 0.00"}
         </span>
         <span className="rate">
-          {rate
-            ? <>Rate on file <b>1 {currency} = {Number(rate.rate_to_usd).toFixed(8)} USD</b> · dated {rate.effective_on}</>
-            : `No rate on file for ${currency}.`}
+          {currency === "USD"
+            ? "Recorded directly in USD — no conversion needed."
+            : fxRate
+              ? <>Rate on file <b>1 {currency} = {Number(fxRate.rate_to_usd).toFixed(8)} USD</b> · dated {fxRate.effective_on}</>
+              : `No rate on file for ${currency}.`}
         </span>
       </div>
       <div className="field">

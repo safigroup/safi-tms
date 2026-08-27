@@ -76,7 +76,8 @@ export async function POST(request: Request) {
   ]);
 
   const tripByNo = new Map((trips ?? []).map((t) => [t.trip_no, t.id]));
-  const rateByCurrency = new Map<string, number>();
+  // USD needs no lookup -- see the identical comment in trip-costs/route.ts.
+  const rateByCurrency = new Map<string, number>([["USD", 1]]);
   for (const r of rates ?? []) {
     if (!rateByCurrency.has(r.currency)) rateByCurrency.set(r.currency, r.rate_to_usd);
   }

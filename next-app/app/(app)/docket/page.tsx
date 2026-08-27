@@ -104,12 +104,16 @@ export default function DocketPage() {
   const open = data.board.filter((t) => !["closed", "cancelled"].includes(t.status));
   const trip = data.board.find((t) => t.trip_id === tripId) || null;
 
-  const curOpts = Array.from(new Set(data.fx.map((r) => r.currency))).sort((a, b) => {
+  // USD is always a valid entry currency (no conversion needed), whether
+  // or not the org has ever bothered to add a redundant "1 USD = 1 USD"
+  // row to fx_rates.
+  const curOpts = Array.from(new Set([...data.fx.map((r) => r.currency), "USD"])).sort((a, b) => {
     const order = ["USD", "TZS", "ZMW", "CDF"];
     const ia = order.indexOf(a), ib = order.indexOf(b);
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
   });
-  const rate = data.fx.find((r) => r.currency === draft.cur);
+  const fxRate = data.fx.find((r) => r.currency === draft.cur);
+  const rateToUsd = draft.cur === "USD" ? 1 : fxRate?.rate_to_usd;
   const amtNum = parseFloat(draft.amt);
   const canWrite = CAN_MANAGE_TRIPS.includes(data.role);
 
@@ -120,7 +124,7 @@ export default function DocketPage() {
     if (!Number.isFinite(amtNum) || amtNum <= 0) {
       return setFormNote("Enter an amount greater than zero.");
     }
-    if (!rate) {
+    if (rateToUsd === undefined) {
       return setFormNote(`No exchange rate on file for ${draft.cur}.`);
     }
 
@@ -161,7 +165,7 @@ export default function DocketPage() {
         throw new Error(body.error || res.statusText);
       }
 
-      toast.success(`${m2(amtNum, draft.cur)} → ${m2(amtNum * rate.rate_to_usd)}`);
+      toast.success(`${m2(amtNum, draft.cur)} → ${m2(amtNum * rateToUsd)}`);
       clearCostDraft(tripId);
       setDraft({ ...emptyDraft, cat: draft.cat, cur: draft.cur, when: draft.when, paid: draft.paid });
       setCostFile(null);
@@ -238,12 +242,14 @@ export default function DocketPage() {
             <span className="native">{Number.isFinite(amtNum) && amtNum > 0 ? m2(amtNum, draft.cur) : "—"}</span>
             <span className="arrow">→</span>
             <span className={"usd" + (Number.isFinite(amtNum) && amtNum > 0 ? "" : " idle")}>
-              {Number.isFinite(amtNum) && amtNum > 0 && rate ? m2(amtNum * rate.rate_to_usd) : "USD 0.00"}
+              {Number.isFinite(amtNum) && amtNum > 0 && rateToUsd !== undefined ? m2(amtNum * rateToUsd) : "USD 0.00"}
             </span>
             <span className="rate">
-              {rate
-                ? <>Rate on file <b>1 {draft.cur} = {Number(rate.rate_to_usd).toFixed(8)} USD</b> · dated {rate.effective_on} · frozen onto this entry</>
-                : `No rate on file for ${draft.cur}.`}
+              {draft.cur === "USD"
+                ? "Recorded directly in USD — no conversion needed."
+                : fxRate
+                  ? <>Rate on file <b>1 {draft.cur} = {Number(fxRate.rate_to_usd).toFixed(8)} USD</b> · dated {fxRate.effective_on} · frozen onto this entry</>
+                  : `No rate on file for ${draft.cur}.`}
             </span>
           </div>
           <div className="field">

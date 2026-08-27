@@ -334,7 +334,81 @@ export default function DocketPage() {
         )}
       </div>
       </div>
+      {canWrite ? (
+        <BulkImportForm
+          onImported={async () => {
+            await loadBootstrap();
+            if (tripId) await loadDetail(tripId);
+          }}
+        />
+      ) : null}
     </>
+  );
+}
+
+function BulkImportForm({ onImported }: { onImported: () => Promise<void> }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<{ inserted: number; errors: { row: number; message: string }[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleUpload(e: FormEvent) {
+    e.preventDefault();
+    const file = inputRef.current?.files?.[0];
+    if (!file) return setError("Choose a file to upload.");
+    setUploading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/trip-costs/bulk", { method: "POST", body: form });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || res.statusText);
+      setResult(body);
+      if (body.inserted) {
+        toast.success(`${body.inserted} cost${body.inserted === 1 ? "" : "s"} imported`);
+        await onImported();
+      }
+      if (inputRef.current) inputRef.current.value = "";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="panel" style={{ marginTop: 16 }}>
+      <div className="panel-head">
+        <h2>Bulk import trip costs</h2>
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- downloads a file from an API route, not a page transition; next/link doesn't apply */}
+        <a className="act" href="/api/trip-costs/bulk-template">Download template</a>
+      </div>
+      <form className="panel-body" onSubmit={handleUpload}>
+        {error ? <div className="note bad">{error}</div> : null}
+        <div className="field">
+          <label htmlFor="bulkFile">CSV or Excel file</label>
+          <input ref={inputRef} id="bulkFile" type="file" accept=".csv,.xlsx" />
+        </div>
+        <button className="primary" type="submit" disabled={uploading}>{uploading ? "Uploading…" : "Upload"}</button>
+        {result ? (
+          <div style={{ marginTop: 13 }}>
+            {result.inserted ? (
+              <div className="note good">{result.inserted} cost{result.inserted === 1 ? "" : "s"} imported.</div>
+            ) : null}
+            {result.errors.length ? (
+              <div className="note bad">
+                {result.errors.length} row{result.errors.length === 1 ? "" : "s"} skipped:
+                <ul style={{ marginTop: 6, paddingLeft: 18 }}>
+                  {result.errors.map((e, i) => <li key={i}>Row {e.row}: {e.message}</li>)}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </form>
+    </div>
   );
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -14,6 +14,19 @@ import type { BootstrapPayload, TruckReport } from "@/lib/types";
 const CAN_EDIT_COMMERCIAL = ["owner", "admin", "finance"];
 
 const CATS = ["maintenance", "insurance", "licensing", "depreciation", "tyres", "repairs", "other"];
+
+// Accounting convention: a loss is shown in parentheses rather than with a
+// leading minus sign.
+const pl = (n: number) => (n < 0 ? "(" + m2(Math.abs(n)) + ")" : m2(n));
+
+const subheadStyle: CSSProperties = {
+  fontFamily: "var(--mono)",
+  fontSize: 9.5,
+  letterSpacing: ".14em",
+  textTransform: "uppercase",
+  color: "var(--ink-soft)",
+  marginBottom: 4,
+};
 
 export default function ReportsPage() {
   const router = useRouter();
@@ -125,7 +138,52 @@ export default function ReportsPage() {
             <div className="cell"><div className="k">Revenue</div><div className="v pos">{m0(report.tripRevenue)}</div><div className="n">{report.trips.length} trip{report.trips.length === 1 ? "" : "s"}</div></div>
             <div className="cell"><div className="k">Trip expenses</div><div className="v">{m0(report.tripExpenses)}</div><div className="n">fuel, border fees, etc.</div></div>
             <div className="cell"><div className="k">Standing expenses</div><div className="v">{m0(report.standingExpenses)}</div><div className="n">{report.standingCosts.length} entr{report.standingCosts.length === 1 ? "y" : "ies"}</div></div>
-            <div className="cell"><div className="k">Margin</div><div className={"v" + (report.margin >= 0 ? " pos" : " bad")}>{m0(report.margin)}</div><div className="n">{report.tripRevenue > 0 ? Math.round((report.margin / report.tripRevenue) * 100) + "%" : "—"}</div></div>
+            <div className="cell"><div className="k">Net profit / (loss)</div><div className={"v" + (report.margin >= 0 ? " pos" : " bad")}>{m0(report.margin)}</div><div className="n">{report.tripRevenue > 0 ? Math.round((report.margin / report.tripRevenue) * 100) + "%" : "—"}</div></div>
+          </div>
+
+          <div className="panel" style={{ marginBottom: 16 }}>
+            <div className="panel-head"><h2>Profit &amp; loss</h2></div>
+            <div className="panel-body">
+              <div className="d-kv"><span>Revenue</span><span>{m2(report.tripRevenue)}</span></div>
+
+              <div style={{ marginTop: 13 }}>
+                <div style={subheadStyle}>Trip expenses</div>
+                {report.tripExpensesByCategory.length ? report.tripExpensesByCategory.map((c) => (
+                  <div key={c.category} className="d-kv" style={{ paddingLeft: 14 }}>
+                    <span>{lab(c.category)}</span><span>{m2(c.amountUsd)}</span>
+                  </div>
+                )) : <div className="d-hint" style={{ paddingLeft: 14 }}>None in this range.</div>}
+                <div className="d-kv" style={{ paddingLeft: 14, borderTop: "1px solid var(--rule-soft)", marginTop: 4, paddingTop: 6, fontWeight: 600 }}>
+                  <span>Total trip expenses</span><span>{m2(report.tripExpenses)}</span>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 13 }}>
+                <div style={subheadStyle}>Standing expenses</div>
+                {report.standingExpensesByCategory.length ? report.standingExpensesByCategory.map((c) => (
+                  <div key={c.category} className="d-kv" style={{ paddingLeft: 14 }}>
+                    <span>{lab(c.category)}</span><span>{m2(c.amountUsd)}</span>
+                  </div>
+                )) : <div className="d-hint" style={{ paddingLeft: 14 }}>None in this range.</div>}
+                <div className="d-kv" style={{ paddingLeft: 14, borderTop: "1px solid var(--rule-soft)", marginTop: 4, paddingTop: 6, fontWeight: 600 }}>
+                  <span>Total standing expenses</span><span>{m2(report.standingExpenses)}</span>
+                </div>
+              </div>
+
+              <div
+                className="d-kv"
+                style={{
+                  marginTop: 13,
+                  paddingTop: 10,
+                  borderTop: "2px solid var(--ink)",
+                  fontWeight: 700,
+                  fontSize: 14.5,
+                }}
+              >
+                <span>Net profit / (loss)</span>
+                <span style={{ color: report.margin >= 0 ? "var(--settled)" : "var(--alert)" }}>{pl(report.margin)}</span>
+              </div>
+            </div>
           </div>
 
           <div className="grid">
@@ -364,11 +422,24 @@ function ReportPrintSheet({ report, onDone }: { report: TruckReport; onDone: () 
           </tbody>
         </table>
       ) : null}
+
+      <h4 style={{ fontFamily: "var(--mono)", fontSize: 9.5, letterSpacing: ".14em", textTransform: "uppercase", color: "#666", marginTop: 26 }}>
+        Profit &amp; loss
+      </h4>
+      <table style={{ marginTop: 8 }}>
+        <tbody>
+          <tr><td>Revenue</td><td className="num">{m2(report.tripRevenue)}</td></tr>
+          {report.tripExpensesByCategory.map((c) => (
+            <tr key={"t-" + c.category}><td>Trip: {lab(c.category)}</td><td className="num">− {m2(c.amountUsd)}</td></tr>
+          ))}
+          {report.standingExpensesByCategory.map((c) => (
+            <tr key={"s-" + c.category}><td>Standing: {lab(c.category)}</td><td className="num">− {m2(c.amountUsd)}</td></tr>
+          ))}
+        </tbody>
+      </table>
       <div className="totals">
-        <div><span>Trip revenue</span><span>{m2(report.tripRevenue)}</span></div>
-        <div><span>Trip expenses</span><span>− {m2(report.tripExpenses)}</span></div>
-        <div><span>Standing expenses</span><span>− {m2(report.standingExpenses)}</span></div>
-        <div className="due"><span>Margin</span><span>{m2(report.margin)}</span></div>
+        <div><span>Total expenses</span><span>− {m2(report.totalExpenses)}</span></div>
+        <div className="due"><span>Net profit / (loss)</span><span>{pl(report.margin)}</span></div>
       </div>
     </div>,
     document.body,

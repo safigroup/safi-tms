@@ -17,10 +17,18 @@ export async function POST(request: Request) {
   const body = await request.json();
   const { tripId, category, amount, currency, incurredOn } = body;
 
-  const amt = Number(amount);
   if (!tripId) {
     return NextResponse.json({ error: "Pick a trip first." }, { status: 400 });
   }
+
+  // If both are on file, the server computes the total itself rather than
+  // trusting a client-computed value -- liters/price and the stored amount
+  // can never drift apart. Otherwise amount is used as submitted, same as
+  // before liters/price existed.
+  const liters = Number(body.liters);
+  const pricePerLiter = Number(body.pricePerLiter);
+  const hasFuelBreakdown = Number.isFinite(liters) && liters > 0 && Number.isFinite(pricePerLiter) && pricePerLiter > 0;
+  const amt = hasFuelBreakdown ? Math.round(liters * pricePerLiter * 100) / 100 : Number(amount);
   if (!Number.isFinite(amt) || amt <= 0) {
     return NextResponse.json({ error: "Enter an amount greater than zero." }, { status: 400 });
   }
@@ -73,6 +81,8 @@ export async function POST(request: Request) {
       paid_by: body.paidBy,
       receipt_ref: body.receiptRef?.trim() || null,
       receipt_path: body.receiptPath || null,
+      liters: hasFuelBreakdown ? liters : null,
+      price_per_liter: hasFuelBreakdown ? pricePerLiter : null,
       recorded_by: ctx.userId,
     })
     .select("id, amount_usd")

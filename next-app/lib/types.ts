@@ -104,6 +104,8 @@ export type TripCost = {
   paid_by: string | null;
   receipt_ref: string | null;
   receipt_path: string | null;
+  liters: number | null;
+  price_per_liter: number | null;
 };
 
 export type DocStatus = "pending" | "issued" | "lodged" | "cleared" | "received" | "rejected";
@@ -175,6 +177,9 @@ export type TruckReportTrip = {
 export type CategoryAmount = {
   category: string;
   amountUsd: number;
+  // Only populated for the "fuel" row.
+  liters?: number;
+  avgPricePerLiterUsd?: number;
 };
 
 export type TruckReport = {

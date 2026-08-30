@@ -65,19 +65,27 @@ export async function GET(
   // trip_costs directly, scoped to just the trips already resolved above.
   const tripIds = (trips ?? []).map((t) => t.trip_id);
   const { data: tripCostRows, error: tripCostRowsError } = tripIds.length
-    ? await ctx.admin.from("trip_costs").select("category, amount_usd").in("trip_id", tripIds)
-    : { data: [] as { category: string; amount_usd: number }[], error: null };
+    ? await ctx.admin.from("trip_costs").select("category, amount_usd, liters").in("trip_id", tripIds)
+    : { data: [] as { category: string; amount_usd: number; liters: number | null }[], error: null };
   if (tripCostRowsError) {
     return NextResponse.json({ error: tripCostRowsError.message }, { status: 400 });
   }
 
-  const sumByCategory = (rows: { category: string; amount_usd: number }[]) => {
-    const totals = new Map<string, number>();
+  // Fuel's liters/avg-price-per-liter rides along on the same category
+  // breakdown -- no separate query, since these rows are already fetched.
+  const sumByCategory = (rows: { category: string; amount_usd: number; liters?: number | null }[]) => {
+    const totals = new Map<string, { amountUsd: number; liters: number }>();
     for (const r of rows) {
-      totals.set(r.category, (totals.get(r.category) ?? 0) + Number(r.amount_usd || 0));
+      const cur = totals.get(r.category) ?? { amountUsd: 0, liters: 0 };
+      cur.amountUsd += Number(r.amount_usd || 0);
+      cur.liters += Number(r.liters || 0);
+      totals.set(r.category, cur);
     }
-    return Array.from(totals, ([category, amountUsd]) => ({ category, amountUsd }))
-      .sort((a, b) => b.amountUsd - a.amountUsd);
+    return Array.from(totals, ([category, { amountUsd, liters }]) => ({
+      category,
+      amountUsd,
+      ...(category === "fuel" && liters > 0 ? { liters, avgPricePerLiterUsd: amountUsd / liters } : {}),
+    })).sort((a, b) => b.amountUsd - a.amountUsd);
   };
 
   const tripRevenue = (trips ?? []).reduce((s, t) => s + Number(t.revenue_usd || 0), 0);

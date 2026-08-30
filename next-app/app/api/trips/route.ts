@@ -44,6 +44,7 @@ export async function POST(request: Request) {
       p_load_date: body.loadDate || null,
       p_eta: body.eta || null,
       p_user: ctx.userId,
+      p_borders: Array.isArray(body.borders) && body.borders.length ? body.borders : null,
     })
     .single();
 

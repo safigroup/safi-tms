@@ -15,7 +15,7 @@ export async function GET() {
 
   const { admin, orgId } = ctx;
 
-  const [board, billable, ar, fx, customers, routes, trucks, drivers, rateCards] =
+  const [board, billable, ar, fx, customers, routes, trucks, drivers, rateCards, routeBorderPaths] =
     await Promise.all([
       admin.from("trip_board").select("*").eq("org_id", orgId).order("actual_load_date", { ascending: false, nullsFirst: true }),
       admin.from("billable").select("*").eq("org_id", orgId).order("trip_no", { ascending: false }),
@@ -26,9 +26,10 @@ export async function GET() {
       admin.from("trucks").select("*").eq("org_id", orgId).order("fleet_no"),
       admin.from("drivers").select("*").eq("org_id", orgId).order("full_name"),
       admin.from("rate_cards").select("*").eq("org_id", orgId).order("valid_from", { ascending: false }),
+      admin.from("route_border_paths").select("*").eq("org_id", orgId).order("label"),
     ]);
 
-  const sources = { board, billable, ar, fx, customers, routes, trucks, drivers, rateCards };
+  const sources = { board, billable, ar, fx, customers, routes, trucks, drivers, rateCards, routeBorderPaths };
   const fetchErrors = Object.entries(sources)
     .filter(([, r]) => r.error)
     .map(([name]) => name);
@@ -48,5 +49,6 @@ export async function GET() {
     trucks: trucks.data ?? [],
     drivers: drivers.data ?? [],
     rateCards: rateCards.data ?? [],
+    routeBorderPaths: routeBorderPaths.data ?? [],
   });
 }

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { num, today } from "@/lib/format";
 import { Spinner } from "@/lib/components/Spinner";
-import type { BootstrapPayload, Customer, Route, FxRate } from "@/lib/types";
+import type { BootstrapPayload, Customer, Route, FxRate, RouteBorderPath } from "@/lib/types";
 
 type FieldType = "text" | "number" | "date" | "bool" | "select" | "fk" | "tags";
 
@@ -596,27 +596,134 @@ function EntityForm({
   }
 
   return (
-    <form onSubmit={handleSubmit}>
-      {error ? <div className="note bad">{error}</div> : null}
-      {rows.map((group, idx) => (
-        <div key={idx} className={group.length > 1 ? "row" : undefined}>
-          {group.map((f) => (
-            <Field key={f.k} field={f} value={values[f.k]} onChange={(v) => setField(f.k, v)} customers={data.customers} routes={data.routes} disabled={!canEdit} />
-          ))}
-        </div>
-      ))}
-      {canEdit ? (
-        <>
-          <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : id ? "Save changes" : "Create"}</button>
-          {id && ui.fields.some((f) => f.k === "is_active") ? (
-            <button className="ghost danger" type="button" disabled={saving} onClick={toggle}>
-              {existing?.is_active ? "Deactivate" : "Reactivate"}
-            </button>
-          ) : null}
-        </>
+    <>
+      <form onSubmit={handleSubmit}>
+        {error ? <div className="note bad">{error}</div> : null}
+        {rows.map((group, idx) => (
+          <div key={idx} className={group.length > 1 ? "row" : undefined}>
+            {group.map((f) => (
+              <Field key={f.k} field={f} value={values[f.k]} onChange={(v) => setField(f.k, v)} customers={data.customers} routes={data.routes} disabled={!canEdit} />
+            ))}
+          </div>
+        ))}
+        {canEdit ? (
+          <>
+            <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : id ? "Save changes" : "Create"}</button>
+            {id && ui.fields.some((f) => f.k === "is_active") ? (
+              <button className="ghost danger" type="button" disabled={saving} onClick={toggle}>
+                {existing?.is_active ? "Deactivate" : "Reactivate"}
+              </button>
+            ) : null}
+          </>
+        ) : null}
+        <button className="ghost" type="button" onClick={onCancel}>Cancel</button>
+      </form>
+      {entity === "routes" && id ? (
+        <RouteBorderPaths
+          routeId={id}
+          paths={data.routeBorderPaths.filter((p) => p.route_id === id)}
+          canEdit={canEdit}
+          onChanged={onSaved}
+        />
       ) : null}
-      <button className="ghost" type="button" onClick={onCancel}>Cancel</button>
-    </form>
+    </>
+  );
+}
+
+function RouteBorderPaths({
+  routeId,
+  paths,
+  canEdit,
+  onChanged,
+}: {
+  routeId: string;
+  paths: RouteBorderPath[];
+  canEdit: boolean;
+  onChanged: () => Promise<void>;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [label, setLabel] = useState("");
+  const [borders, setBorders] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function handleAdd(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSaving(true);
+    const res = await fetch(`/api/admin/routes/${routeId}/paths`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        label: label.trim(),
+        borders: borders.split(",").map((s) => s.trim()).filter(Boolean),
+      }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return setError(body.error || res.statusText);
+    }
+    toast.success("Alternate path added");
+    setLabel("");
+    setBorders("");
+    setAdding(false);
+    await onChanged();
+  }
+
+  async function handleRemove(pathId: string) {
+    if (!confirm("Remove this alternate path?")) return;
+    const res = await fetch(`/api/admin/routes/${routeId}/paths/${pathId}`, { method: "DELETE" });
+    if (res.ok) {
+      toast.success("Removed");
+      await onChanged();
+    }
+  }
+
+  return (
+    <div className="panel" style={{ marginTop: 16 }}>
+      <div className="panel-head"><h2>Alternate border paths</h2></div>
+      <div className="panel-body">
+        <div className="hint" style={{ marginBottom: 10 }}>
+          The route&apos;s own Borders field above is the default. Add alternates here for trips that cross elsewhere.
+        </div>
+        {paths.length ? (
+          <ul className="list" style={{ marginBottom: canEdit ? 13 : 0 }}>
+            {paths.map((p) => (
+              <li key={p.id}>
+                <div>
+                  <div className="r-title">{p.label}</div>
+                  <div className="r-mono">{p.borders.join(" → ")}</div>
+                </div>
+                {canEdit ? <button className="x" onClick={() => handleRemove(p.id)}>✕</button> : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="d-hint" style={{ marginBottom: canEdit ? 13 : 0 }}>No alternates yet — this route only has its default path.</div>
+        )}
+        {canEdit ? (
+          adding ? (
+            <form onSubmit={handleAdd}>
+              {error ? <div className="note bad">{error}</div> : null}
+              <div className="field">
+                <label htmlFor="pathLabel">Label</label>
+                <input id="pathLabel" type="text" placeholder="e.g. Via Mokambo" value={label} onChange={(e) => setLabel(e.target.value)} />
+              </div>
+              <div className="field">
+                <label htmlFor="pathBorders">Borders</label>
+                <input id="pathBorders" type="text" placeholder="Tunduma/Nakonde, Mokambo" value={borders} onChange={(e) => setBorders(e.target.value)} />
+                <div className="hint">Comma separated, in crossing order.</div>
+              </div>
+              <button className="primary" type="submit" disabled={saving}>{saving ? "Adding…" : "Add path"}</button>
+              <button className="ghost" type="button" onClick={() => setAdding(false)}>Cancel</button>
+            </form>
+          ) : (
+            <button className="act" type="button" onClick={() => setAdding(true)}>+ Add alternate path</button>
+          )
+        ) : null}
+      </div>
+    </div>
   );
 }
 

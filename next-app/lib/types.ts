@@ -59,6 +59,13 @@ export type Route = {
   is_active?: boolean;
 };
 
+export type RouteBorderPath = {
+  id: string;
+  route_id: string;
+  label: string;
+  borders: string[];
+};
+
 export type Truck = {
   id: string;
   fleet_no: string;
@@ -210,4 +217,5 @@ export type BootstrapPayload = {
   trucks: Truck[];
   drivers: Driver[];
   rateCards: RateCard[];
+  routeBorderPaths: RouteBorderPath[];
 };

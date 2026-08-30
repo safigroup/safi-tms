@@ -111,7 +111,15 @@ export async function POST(request: Request) {
     // "1,200.00" round-trips through CSV as a quoted string (Google
     // Sheets quotes any field containing a comma), and Number() doesn't
     // understand comma separators on its own.
-    const amount = Number(String(row.amount).replace(/[^0-9.-]/g, ""));
+    const stripFormatting = (v: string) => Number(v.replace(/[^0-9.-]/g, ""));
+    // If both are on file, the total is computed from them rather than the
+    // submitted amount -- see the identical comment in trip-costs/route.ts.
+    const liters = stripFormatting(row.liters || "");
+    const pricePerLiter = stripFormatting(row.price_per_liter || "");
+    const hasFuelBreakdown = Number.isFinite(liters) && liters > 0 && Number.isFinite(pricePerLiter) && pricePerLiter > 0;
+    const amount = hasFuelBreakdown
+      ? Math.round(liters * pricePerLiter * 100) / 100
+      : stripFormatting(row.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
       errors.push({ row: rowNo, message: "Amount must be a number greater than zero." });
       continue;
@@ -141,6 +149,8 @@ export async function POST(request: Request) {
       incurred_on: incurredOn,
       description: row.description || null,
       location: row.location || null,
+      liters: hasFuelBreakdown ? liters : null,
+      price_per_liter: hasFuelBreakdown ? pricePerLiter : null,
       paid_by: row.paid_by || null,
       receipt_ref: row.receipt_ref || null,
       recorded_by: ctx.userId,

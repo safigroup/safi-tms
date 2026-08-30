@@ -19,7 +19,7 @@ const DOCTYPES = [
   "delivery_note", "weighbridge_ticket", "insurance", "permit", "other",
 ];
 
-const emptyDraft: CostDraft = { cat: CATS[0], amt: "", cur: "", when: today(), desc: "", loc: "", paid: "driver_float", ref: "" };
+const emptyDraft: CostDraft = { cat: CATS[0], amt: "", cur: "", when: today(), desc: "", loc: "", paid: "driver_float", ref: "", liters: "", pricePerLiter: "" };
 
 // Mirrors lib/auth/permissions.ts's CAN_MANAGE_TRIPS -- UI convenience only
 // (hides actions a role can't use), the route handlers are the real check.
@@ -85,7 +85,9 @@ export default function DocketPage() {
     loadDetail(tripId);
     const d = loadCostDraft(tripId);
     if (d) {
-      setDraft(d);
+      // Spread over emptyDraft so a draft saved before liters/pricePerLiter
+      // existed doesn't come back with those fields undefined.
+      setDraft({ ...emptyDraft, ...d });
       setRestoredNote(true);
     } else {
       setDraft(emptyDraft);
@@ -97,6 +99,15 @@ export default function DocketPage() {
     const next = { ...draft, ...patch };
     setDraft(next);
     if (tripId) saveCostDraft(tripId, next);
+  }
+
+  function updateFuelField(patch: Partial<Pick<CostDraft, "liters" | "pricePerLiter">>) {
+    const liters = parseFloat(patch.liters ?? draft.liters);
+    const price = parseFloat(patch.pricePerLiter ?? draft.pricePerLiter);
+    const amt = Number.isFinite(liters) && liters > 0 && Number.isFinite(price) && price > 0
+      ? (liters * price).toFixed(2)
+      : draft.amt;
+    updateDraft({ ...patch, amt });
   }
 
   if (!data) return <div className="panel"><Spinner /></div>;
@@ -158,6 +169,8 @@ export default function DocketPage() {
           paidBy: draft.paid,
           receiptRef: draft.ref.trim() || null,
           receiptPath,
+          liters: draft.cat === "fuel" ? draft.liters || null : null,
+          pricePerLiter: draft.cat === "fuel" ? draft.pricePerLiter || null : null,
         }),
       });
       if (!res.ok) {
@@ -222,10 +235,25 @@ export default function DocketPage() {
               {CATS.map((c) => <option key={c} value={c}>{lab(c).replace(/^./, (x) => x.toUpperCase())}</option>)}
             </select>
           </div>
+          {draft.cat === "fuel" ? (
+            <div className="row">
+              <div className="field">
+                <label htmlFor="liters">Liters</label>
+                <input id="liters" type="number" step="0.01" min="0" placeholder="0.00" inputMode="decimal" value={draft.liters} onChange={(e) => updateFuelField({ liters: e.target.value })} />
+              </div>
+              <div className="field">
+                <label htmlFor="pricePerLiter">Price per liter</label>
+                <input id="pricePerLiter" type="number" step="0.0001" min="0" placeholder="0.00" inputMode="decimal" value={draft.pricePerLiter} onChange={(e) => updateFuelField({ pricePerLiter: e.target.value })} />
+              </div>
+            </div>
+          ) : null}
           <div className="row3">
             <div className="field">
               <label htmlFor="amt">Amount</label>
               <input id="amt" type="number" step="0.01" min="0" placeholder="0.00" inputMode="decimal" value={draft.amt} onChange={(e) => updateDraft({ amt: e.target.value })} />
+              {draft.cat === "fuel" && draft.liters && draft.pricePerLiter ? (
+                <div className="hint">Auto-filled from liters × price — edit directly to override.</div>
+              ) : null}
             </div>
             <div className="field">
               <label htmlFor="cur">Currency</label>
@@ -317,6 +345,7 @@ export default function DocketPage() {
                   <div style={{ fontSize: 13, marginTop: 1 }}>{c.description || "—"}</div>
                   <div className="r-mono">
                     {c.incurred_on}{c.location ? " · " + c.location : ""}{c.receipt_ref ? " · " + c.receipt_ref : ""}
+                    {c.liters ? ` · ${c.liters} L @ ${c.price_per_liter}` : ""}
                     {c.receipt_path ? <> · <a href="#" onClick={(e) => { e.preventDefault(); openFile(c.id); }}>receipt</a></> : null}
                   </div>
                 </div>

@@ -4,7 +4,7 @@ import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { m0, m2, lab, today } from "@/lib/format";
+import { m0, m2, num, lab, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
 import { Spinner } from "@/lib/components/Spinner";
 import type { BootstrapPayload, TruckReport } from "@/lib/types";
@@ -152,8 +152,15 @@ export default function ReportsPage() {
               <div style={{ marginTop: 13 }}>
                 <div style={subheadStyle}>Trip expenses</div>
                 {report.tripExpensesByCategory.length ? report.tripExpensesByCategory.map((c) => (
-                  <div key={c.category} className="d-kv" style={{ paddingLeft: 14 }}>
-                    <span>{lab(c.category)}</span><span>{m2(c.amountUsd)}</span>
+                  <div key={c.category}>
+                    <div className="d-kv" style={{ paddingLeft: 14 }}>
+                      <span>{lab(c.category)}</span><span>{m2(c.amountUsd)}</span>
+                    </div>
+                    {c.liters ? (
+                      <div className="d-hint" style={{ paddingLeft: 14, marginTop: -2 }}>
+                        {num(c.liters)} L · avg {m2(c.avgPricePerLiterUsd)}/L
+                      </div>
+                    ) : null}
                   </div>
                 )) : <div className="d-hint" style={{ paddingLeft: 14 }}>None in this range.</div>}
                 <div className="d-kv" style={{ paddingLeft: 14, borderTop: "1px solid var(--rule-soft)", marginTop: 4, paddingTop: 6, fontWeight: 600 }}>
@@ -436,7 +443,10 @@ function ReportPrintSheet({ report, onDone }: { report: TruckReport; onDone: () 
         <tbody>
           <tr><td>Revenue</td><td className="num">{m2(report.tripRevenue)}</td></tr>
           {report.tripExpensesByCategory.map((c) => (
-            <tr key={"t-" + c.category}><td>Trip: {lab(c.category)}</td><td className="num">− {m2(c.amountUsd)}</td></tr>
+            <tr key={"t-" + c.category}>
+              <td>Trip: {lab(c.category)}{c.liters ? ` (${num(c.liters)} L · avg ${m2(c.avgPricePerLiterUsd)}/L)` : ""}</td>
+              <td className="num">− {m2(c.amountUsd)}</td>
+            </tr>
           ))}
           {report.standingExpensesByCategory.map((c) => (
             <tr key={"s-" + c.category}><td>Standing: {lab(c.category)}</td><td className="num">− {m2(c.amountUsd)}</td></tr>

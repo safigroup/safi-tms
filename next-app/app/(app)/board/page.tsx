@@ -366,6 +366,7 @@ function NewTripForm({
 }) {
   const [customerId, setCustomerId] = useState("");
   const [routeId, setRouteId] = useState("");
+  const [borderPathId, setBorderPathId] = useState("");
   const [revenue, setRevenue] = useState("");
   const [rateHint, setRateHint] = useState<{ text: string; kind: "good" | "warn" } | null>(null);
   const [truckId, setTruckId] = useState("");
@@ -410,6 +411,8 @@ function NewTripForm({
     const rev = parseFloat(revenue);
     if (isNaN(rev) || rev <= 0) return setError("Enter the agreed revenue.");
 
+    const chosenPath = data.routeBorderPaths.find((p) => p.id === borderPathId);
+
     setSaving(true);
     setError(null);
     const res = await fetch("/api/trips", {
@@ -427,6 +430,7 @@ function NewTripForm({
         sealNo: sealNo.trim() || null,
         loadDate: loadDate || null,
         eta: eta || null,
+        borders: chosenPath ? chosenPath.borders : null,
       }),
     });
     setSaving(false);
@@ -443,6 +447,7 @@ function NewTripForm({
   const activeRoutes = data.routes.filter((r) => r.is_active !== false);
   const activeTrucks = data.trucks.filter((t) => t.is_active !== false);
   const activeDrivers = data.drivers.filter((d) => d.is_active !== false);
+  const pathsForRoute = data.routeBorderPaths.filter((p) => p.route_id === routeId);
 
   return (
     <form className="panel-body" onSubmit={handleSubmit}>
@@ -463,12 +468,21 @@ function NewTripForm({
         <select
           id="nRoute"
           value={routeId}
-          onChange={(e) => { setRouteId(e.target.value); applyRate(customerId, e.target.value); applyEta(e.target.value, loadDate); }}
+          onChange={(e) => { setRouteId(e.target.value); setBorderPathId(""); applyRate(customerId, e.target.value); applyEta(e.target.value, loadDate); }}
         >
           <option value="">—</option>
           {activeRoutes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
       </div>
+      {pathsForRoute.length ? (
+        <div className="field">
+          <label htmlFor="nBorderPath">Border route</label>
+          <select id="nBorderPath" value={borderPathId} onChange={(e) => setBorderPathId(e.target.value)}>
+            <option value="">Default ({(activeRoutes.find((r) => r.id === routeId)?.borders || []).join(" → ") || "route's own path"})</option>
+            {pathsForRoute.map((p) => <option key={p.id} value={p.id}>{p.label} ({p.borders.join(" → ")})</option>)}
+          </select>
+        </div>
+      ) : null}
       <div className="field">
         <label htmlFor="nRev">Revenue (USD)</label>
         <input id="nRev" type="number" step="0.01" min="0" placeholder="0.00" value={revenue} onChange={(e) => setRevenue(e.target.value)} />

@@ -43,6 +43,11 @@ export type BoardTrip = {
   docs_pending: number;
   pod_in_hand: boolean;
   last_border: string | null;
+  customer_id: string;
+  route_id: string;
+  driver_id: string | null;
+  truck_id: string | null;
+  seal_no: string | null;
 };
 
 export type Customer = {
@@ -95,6 +100,14 @@ export type FxRate = {
   rate_to_usd: number;
   effective_on: string;
   source: string | null;
+};
+
+export type AuditLogEntry = {
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+  edited_by_email: string;
+  edited_at: string;
 };
 
 export type TripCost = {

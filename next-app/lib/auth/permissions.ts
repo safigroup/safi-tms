@@ -10,3 +10,8 @@ export const CAN_MANAGE_BILLING: ReadonlySet<OrgRole> = new Set(["owner", "admin
 export const CAN_EDIT_FLEET: ReadonlySet<OrgRole> = new Set(["owner", "admin", "ops"]);
 export const CAN_EDIT_COMMERCIAL: ReadonlySet<OrgRole> = new Set(["owner", "admin", "finance"]);
 export const CAN_MANAGE_TEAM: ReadonlySet<OrgRole> = new Set(["owner", "admin"]);
+// Retroactively editing an already-recorded trip or ledger entry -- a
+// deliberately narrower gate than CAN_MANAGE_TRIPS (which still governs
+// creating/deleting trip costs day-to-day); this is the "correct a
+// mistake after the fact" power, not routine data entry.
+export const CAN_OVERRIDE_RECORDS: ReadonlySet<OrgRole> = new Set(["owner", "admin"]);

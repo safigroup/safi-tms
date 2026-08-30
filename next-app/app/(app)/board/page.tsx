@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { m0, m2, today } from "@/lib/format";
 import { useBusyGroup } from "@/lib/useBusyGroup";
 import { Spinner } from "@/lib/components/Spinner";
-import type { BoardTrip, BootstrapPayload, TripStatus } from "@/lib/types";
+import type { AuditLogEntry, BoardTrip, BootstrapPayload, TripStatus } from "@/lib/types";
 
 const PILL: Record<string, string> = {
   draft: "grey",
@@ -44,9 +44,11 @@ const NEXT: Record<string, [TripStatus, string][]> = {
 
 const lab = (s: string) => s.replace(/_/g, " ");
 
-// Mirrors lib/auth/permissions.ts's CAN_MANAGE_TRIPS -- UI convenience only
-// (hides actions a role can't use), the route handlers are the real check.
+// Mirrors lib/auth/permissions.ts's CAN_MANAGE_TRIPS/CAN_OVERRIDE_RECORDS --
+// UI convenience only (hides actions a role can't use), the route handlers
+// are the real check.
 const CAN_MANAGE_TRIPS = ["owner", "admin", "ops"];
+const CAN_OVERRIDE_RECORDS = ["owner", "admin"];
 
 export default function BoardPage() {
   const router = useRouter();
@@ -210,7 +212,7 @@ export default function BoardPage() {
               }}
             />
           ) : selectedTrip ? (
-            <TripDetail trip={selectedTrip} onChanged={load} canWrite={canWrite} />
+            <TripDetail trip={selectedTrip} data={data} onChanged={load} canWrite={canWrite} />
           ) : (
             <div className="empty">Select a trip, or start a new one.</div>
           )}
@@ -220,9 +222,21 @@ export default function BoardPage() {
   );
 }
 
-function TripDetail({ trip, onChanged, canWrite }: { trip: BoardTrip; onChanged: () => Promise<void>; canWrite: boolean }) {
+function TripDetail({
+  trip,
+  data,
+  onChanged,
+  canWrite,
+}: {
+  trip: BoardTrip;
+  data: BootstrapPayload;
+  onChanged: () => Promise<void>;
+  canWrite: boolean;
+}) {
   const { busy, run } = useBusyGroup();
   const [note, setNote] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const canOverride = CAN_OVERRIDE_RECORDS.includes(data.role);
   const m = Number(trip.margin_usd || 0);
   const nexts = NEXT[trip.status] || [];
   const canBorder = ["in_transit", "at_border"].includes(trip.status);
@@ -282,11 +296,21 @@ function TripDetail({ trip, onChanged, canWrite }: { trip: BoardTrip; onChanged:
           <div><div className="k">Margin</div><div className={"v " + (m >= 0 ? "pos" : "neg")}>{m2(m)}</div></div>
         </div>
       </div>
+      {editing ? (
+        <TripEditForm
+          trip={trip}
+          data={data}
+          onSaved={async () => { setEditing(false); await onChanged(); }}
+          onCancel={() => setEditing(false)}
+        />
+      ) : (
+        <>
       <div className="d-sec">
         <h3>Go to</h3>
         <div className="acts">
           <Link className="act" href={`/docket?trip=${trip.trip_id}`}>Costs &amp; documents</Link>
           {canBill ? <Link className="act" href={`/billing?trip=${trip.trip_id}`}>Billing</Link> : null}
+          {canOverride ? <button className="act" type="button" onClick={() => setEditing(true)}>Edit trip</button> : null}
         </div>
       </div>
       {nexts.length && canWrite ? (
@@ -350,8 +374,181 @@ function TripDetail({ trip, onChanged, canWrite }: { trip: BoardTrip; onChanged:
         <div className="d-kv"><span>Days running</span><span>{trip.days_running != null ? trip.days_running + " of " + (trip.target_days ?? "?") : "—"}</span></div>
         <div className="d-kv"><span>Last border</span><span>{trip.last_border || "—"}</span></div>
       </div>
+        </>
+      )}
       {note ? <div className="panel-body" style={{ paddingTop: 0 }}><div className="note bad">{note}</div></div> : null}
     </>
+  );
+}
+
+function TripEditForm({
+  trip,
+  data,
+  onSaved,
+  onCancel,
+}: {
+  trip: BoardTrip;
+  data: BootstrapPayload;
+  onSaved: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [customerId, setCustomerId] = useState(trip.customer_id);
+  const [routeId, setRouteId] = useState(trip.route_id);
+  const [truckId, setTruckId] = useState(trip.truck_id ?? "");
+  const [driverId, setDriverId] = useState(trip.driver_id ?? "");
+  const [commodity, setCommodity] = useState(trip.commodity ?? "");
+  const [tonnage, setTonnage] = useState(trip.tonnage != null ? String(trip.tonnage) : "");
+  const [containerNo, setContainerNo] = useState(trip.container_no ?? "");
+  const [sealNo, setSealNo] = useState(trip.seal_no ?? "");
+  const [revenue, setRevenue] = useState(String(trip.revenue_usd));
+  const [actualLoadDate, setActualLoadDate] = useState(trip.actual_load_date ?? "");
+  const [plannedEta, setPlannedEta] = useState(trip.planned_eta ?? "");
+  const [actualDeliveryAt, setActualDeliveryAt] = useState(trip.actual_delivery_at ? trip.actual_delivery_at.slice(0, 10) : "");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [history, setHistory] = useState<AuditLogEntry[] | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/trips/${trip.trip_id}`)
+      .then((res) => (res.ok ? res.json() : { entries: [] }))
+      .then((body) => setHistory(body.entries ?? []));
+  }, [trip.trip_id]);
+
+  const activeCustomers = data.customers.filter((c) => c.is_active !== false);
+  const activeRoutes = data.routes.filter((r) => r.is_active !== false);
+  const activeTrucks = data.trucks.filter((t) => t.is_active !== false);
+  const activeDrivers = data.drivers.filter((d) => d.is_active !== false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    const rev = parseFloat(revenue);
+    if (isNaN(rev) || rev <= 0) return setError("Enter a valid revenue amount.");
+
+    setSaving(true);
+    setError(null);
+    const res = await fetch(`/api/trips/${trip.trip_id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customer_id: customerId,
+        route_id: routeId,
+        truck_id: truckId || null,
+        driver_id: driverId || null,
+        commodity: commodity.trim() || null,
+        tonnage: tonnage ? Number(tonnage) : null,
+        container_no: containerNo.trim() || null,
+        seal_no: sealNo.trim() || null,
+        revenue_amount: rev,
+        actual_load_date: actualLoadDate || null,
+        planned_eta: plannedEta || null,
+        actual_delivery_at: actualDeliveryAt || null,
+      }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return setError(body.error || res.statusText);
+    }
+    const body = await res.json();
+    if (body.warning) toast.warning(body.warning);
+    else toast.success("Trip updated");
+    await onSaved();
+  }
+
+  return (
+    <div className="panel-body">
+      <form onSubmit={handleSubmit}>
+        {error ? <div className="note bad">{error}</div> : null}
+        <div className="field">
+          <label htmlFor="eCust">Customer</label>
+          <select id="eCust" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+            {activeCustomers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="eRoute">Route</label>
+          <select id="eRoute" value={routeId} onChange={(e) => setRouteId(e.target.value)}>
+            {activeRoutes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+        </div>
+        <div className="row">
+          <div className="field">
+            <label htmlFor="eTruck">Truck</label>
+            <select id="eTruck" value={truckId} onChange={(e) => setTruckId(e.target.value)}>
+              <option value="">—</option>
+              {activeTrucks.map((t) => <option key={t.id} value={t.id}>{t.fleet_no}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="eDriver">Driver</label>
+            <select id="eDriver" value={driverId} onChange={(e) => setDriverId(e.target.value)}>
+              <option value="">—</option>
+              {activeDrivers.map((d) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="row">
+          <div className="field">
+            <label htmlFor="eComm">Commodity</label>
+            <input id="eComm" type="text" value={commodity} onChange={(e) => setCommodity(e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="eTon">Tonnage</label>
+            <input id="eTon" type="number" step="0.001" min="0" value={tonnage} onChange={(e) => setTonnage(e.target.value)} />
+          </div>
+        </div>
+        <div className="row">
+          <div className="field">
+            <label htmlFor="eCont">Container</label>
+            <input id="eCont" type="text" value={containerNo} onChange={(e) => setContainerNo(e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="eSeal">Seal</label>
+            <input id="eSeal" type="text" value={sealNo} onChange={(e) => setSealNo(e.target.value)} />
+          </div>
+        </div>
+        <div className="field">
+          <label htmlFor="eRev">Revenue (USD)</label>
+          <input id="eRev" type="number" step="0.01" min="0" value={revenue} onChange={(e) => setRevenue(e.target.value)} />
+        </div>
+        <div className="row">
+          <div className="field">
+            <label htmlFor="eLoad">Load date</label>
+            <input id="eLoad" type="date" value={actualLoadDate} onChange={(e) => setActualLoadDate(e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="eEta">Planned ETA</label>
+            <input id="eEta" type="date" value={plannedEta} onChange={(e) => setPlannedEta(e.target.value)} />
+          </div>
+        </div>
+        <div className="field">
+          <label htmlFor="eDelivered">Delivered</label>
+          <input id="eDelivered" type="date" value={actualDeliveryAt} onChange={(e) => setActualDeliveryAt(e.target.value)} />
+        </div>
+        <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button>
+        <button className="ghost" type="button" onClick={onCancel}>Cancel</button>
+      </form>
+      <div className="d-sec" style={{ marginTop: 16, paddingLeft: 0, paddingRight: 0, borderBottom: "none" }}>
+        <h3>Edit history</h3>
+        {history === null ? (
+          <div className="d-hint">Loading…</div>
+        ) : history.length ? (
+          <ul className="list" style={{ maxHeight: 220 }}>
+            {history.map((h, i) => (
+              <li key={i}>
+                <div>
+                  <div className="r-no">{lab(h.field)}</div>
+                  <div style={{ fontSize: 13 }}>{h.old_value ?? "—"} → {h.new_value ?? "—"}</div>
+                  <div className="r-mono">{h.edited_by_email} · {new Date(h.edited_at).toLocaleString()}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="d-hint">No edits yet.</div>
+        )}
+      </div>
+    </div>
   );
 }
 

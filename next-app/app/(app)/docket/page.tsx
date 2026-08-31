@@ -7,7 +7,7 @@ import { m2, lab, today } from "@/lib/format";
 import { prepareFile } from "@/lib/imagePrep";
 import { saveCostDraft, loadCostDraft, clearCostDraft, type CostDraft } from "@/lib/costDraft";
 import { Spinner } from "@/lib/components/Spinner";
-import type { BootstrapPayload, BoardTrip, TripCost, TripDocument } from "@/lib/types";
+import type { AuditLogEntry, BootstrapPayload, BoardTrip, TripCost, TripDocument } from "@/lib/types";
 
 const CATS = [
   "fuel", "driver_advance", "driver_allowance", "border_fees", "customs_duty",
@@ -21,9 +21,11 @@ const DOCTYPES = [
 
 const emptyDraft: CostDraft = { cat: CATS[0], amt: "", cur: "", when: today(), desc: "", loc: "", paid: "driver_float", ref: "", liters: "", pricePerLiter: "" };
 
-// Mirrors lib/auth/permissions.ts's CAN_MANAGE_TRIPS -- UI convenience only
-// (hides actions a role can't use), the route handlers are the real check.
+// Mirrors lib/auth/permissions.ts's CAN_MANAGE_TRIPS/CAN_OVERRIDE_RECORDS --
+// UI convenience only (hides actions a role can't use), the route handlers
+// are the real check.
 const CAN_MANAGE_TRIPS = ["owner", "admin", "ops"];
+const CAN_OVERRIDE_RECORDS = ["owner", "admin"];
 
 export default function DocketPage() {
   const router = useRouter();
@@ -39,6 +41,7 @@ export default function DocketPage() {
   const [costFile, setCostFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [formNote, setFormNote] = useState<string | null>(null);
+  const [editingCostId, setEditingCostId] = useState<string | null>(null);
 
   async function loadBootstrap() {
     const res = await fetch("/api/bootstrap");
@@ -127,6 +130,7 @@ export default function DocketPage() {
   const rateToUsd = draft.cur === "USD" ? 1 : fxRate?.rate_to_usd;
   const amtNum = parseFloat(draft.amt);
   const canWrite = CAN_MANAGE_TRIPS.includes(data.role);
+  const canOverride = CAN_OVERRIDE_RECORDS.includes(data.role);
 
   async function handleSaveCost(e: FormEvent) {
     e.preventDefault();
@@ -337,6 +341,15 @@ export default function DocketPage() {
           </button>
         </div>
         {tab === "ledger" ? (
+          editingCostId ? (
+            <EditCostForm
+              cost={costs.find((c) => c.id === editingCostId)!}
+              curOpts={curOpts}
+              fx={data.fx}
+              onSaved={async () => { setEditingCostId(null); if (tripId) { await loadDetail(tripId); await loadBootstrap(); } }}
+              onCancel={() => setEditingCostId(null)}
+            />
+          ) : (
           <ul className="list">
             {costs.length ? costs.map((c) => (
               <li key={c.id}>
@@ -353,10 +366,12 @@ export default function DocketPage() {
                   <div className="r-amt">{m2(c.amount_usd)}</div>
                   <div className="r-min">{c.currency !== "USD" ? m2(c.amount, c.currency) : " "}</div>
                 </div>
+                {canOverride ? <button className="x" style={{ color: "var(--stamp)" }} onClick={() => setEditingCostId(c.id)}>✎</button> : null}
                 {canWrite ? <button className="x" onClick={() => handleDeleteCost(c.id)}>✕</button> : null}
               </li>
             )) : <li className="empty">No costs recorded on this trip yet.</li>}
           </ul>
+          )
         ) : (
           <DocsTab
             trip={trip}
@@ -443,6 +458,164 @@ function BulkImportForm({ onImported }: { onImported: () => Promise<void> }) {
           </div>
         ) : null}
       </form>
+    </div>
+  );
+}
+
+function EditCostForm({
+  cost,
+  curOpts,
+  fx,
+  onSaved,
+  onCancel,
+}: {
+  cost: TripCost;
+  curOpts: string[];
+  fx: BootstrapPayload["fx"];
+  onSaved: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [category, setCategory] = useState(cost.category);
+  const [amount, setAmount] = useState(String(cost.amount));
+  const [currency, setCurrency] = useState(cost.currency);
+  const [incurredOn, setIncurredOn] = useState(cost.incurred_on);
+  const [description, setDescription] = useState(cost.description ?? "");
+  const [location, setLocation] = useState(cost.location ?? "");
+  const [receiptRef, setReceiptRef] = useState(cost.receipt_ref ?? "");
+  const [liters, setLiters] = useState(cost.liters != null ? String(cost.liters) : "");
+  const [pricePerLiter, setPricePerLiter] = useState(cost.price_per_liter != null ? String(cost.price_per_liter) : "");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [history, setHistory] = useState<AuditLogEntry[] | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/trip-costs/${cost.id}`)
+      .then((res) => (res.ok ? res.json() : { entries: [] }))
+      .then((body) => setHistory(body.entries ?? []));
+  }, [cost.id]);
+
+  const amtNum = parseFloat(amount);
+  const fxRate = fx.find((r) => r.currency === currency);
+  const rateToUsd = currency === "USD" ? 1 : fxRate?.rate_to_usd;
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!Number.isFinite(amtNum) || amtNum <= 0) return setError("Enter an amount greater than zero.");
+    setSaving(true);
+    setError(null);
+    const res = await fetch(`/api/trip-costs/${cost.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        category,
+        amount: amtNum,
+        currency,
+        incurred_on: incurredOn,
+        description: description.trim() || null,
+        location: location.trim() || null,
+        receipt_ref: receiptRef.trim() || null,
+        liters: liters || null,
+        price_per_liter: pricePerLiter || null,
+      }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return setError(body.error || res.statusText);
+    }
+    toast.success("Cost entry updated");
+    await onSaved();
+  }
+
+  return (
+    <div className="panel-body">
+      <form onSubmit={handleSubmit}>
+        {error ? <div className="note bad">{error}</div> : null}
+        <div className="field">
+          <label htmlFor="ecCat">Category</label>
+          <select id="ecCat" value={category} onChange={(e) => setCategory(e.target.value)}>
+            {CATS.map((c) => <option key={c} value={c}>{lab(c).replace(/^./, (x) => x.toUpperCase())}</option>)}
+          </select>
+        </div>
+        {category === "fuel" ? (
+          <div className="row">
+            <div className="field">
+              <label htmlFor="ecLiters">Liters</label>
+              <input id="ecLiters" type="number" step="0.01" min="0" value={liters} onChange={(e) => setLiters(e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="ecPpl">Price per liter</label>
+              <input id="ecPpl" type="number" step="0.0001" min="0" value={pricePerLiter} onChange={(e) => setPricePerLiter(e.target.value)} />
+            </div>
+          </div>
+        ) : null}
+        <div className="row3">
+          <div className="field">
+            <label htmlFor="ecAmt">Amount</label>
+            <input id="ecAmt" type="number" step="0.01" min="0" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="ecCur">Currency</label>
+            <select id="ecCur" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              {curOpts.map((c) => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="ecWhen">Date</label>
+            <input id="ecWhen" type="date" value={incurredOn} onChange={(e) => setIncurredOn(e.target.value)} />
+          </div>
+        </div>
+        <div className={"stamp" + (Number.isFinite(amtNum) && amtNum > 0 ? " live" : "")}>
+          <span className="native">{Number.isFinite(amtNum) && amtNum > 0 ? m2(amtNum, currency) : "—"}</span>
+          <span className="arrow">→</span>
+          <span className={"usd" + (Number.isFinite(amtNum) && amtNum > 0 ? "" : " idle")}>
+            {Number.isFinite(amtNum) && amtNum > 0 && rateToUsd !== undefined ? m2(amtNum * rateToUsd) : "USD 0.00"}
+          </span>
+          <span className="rate">
+            {currency === "USD"
+              ? "Recorded directly in USD — no conversion needed."
+              : fxRate
+                ? <>Rate on file <b>1 {currency} = {Number(fxRate.rate_to_usd).toFixed(8)} USD</b> · dated {fxRate.effective_on}</>
+                : `No rate on file for ${currency}.`}
+          </span>
+        </div>
+        <div className="field">
+          <label htmlFor="ecDesc">Description</label>
+          <input id="ecDesc" type="text" value={description} onChange={(e) => setDescription(e.target.value)} />
+        </div>
+        <div className="row">
+          <div className="field">
+            <label htmlFor="ecLoc">Location</label>
+            <input id="ecLoc" type="text" value={location} onChange={(e) => setLocation(e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="ecRef">Receipt ref</label>
+            <input id="ecRef" type="text" value={receiptRef} onChange={(e) => setReceiptRef(e.target.value)} />
+          </div>
+        </div>
+        <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button>
+        <button className="ghost" type="button" onClick={onCancel}>Cancel</button>
+      </form>
+      <div className="d-sec" style={{ marginTop: 16, paddingLeft: 0, paddingRight: 0, borderBottom: "none" }}>
+        <h3>Edit history</h3>
+        {history === null ? (
+          <div className="d-hint">Loading…</div>
+        ) : history.length ? (
+          <ul className="list" style={{ maxHeight: 220 }}>
+            {history.map((h, i) => (
+              <li key={i}>
+                <div>
+                  <div className="r-no">{lab(h.field)}</div>
+                  <div style={{ fontSize: 13 }}>{h.old_value ?? "—"} → {h.new_value ?? "—"}</div>
+                  <div className="r-mono">{h.edited_by_email} · {new Date(h.edited_at).toLocaleString()}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="d-hint">No edits yet.</div>
+        )}
+      </div>
     </div>
   );
 }

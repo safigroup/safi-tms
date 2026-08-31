@@ -34,8 +34,20 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
+      data-theme="light"
+      suppressHydrationWarning
       className={`${manrope.variable} ${ibmPlexMono.variable} ${inter.variable}`}
     >
+      <head>
+        {/* Sets the stored theme before first paint, avoiding a light-mode
+            flash for users with dark saved -- see ThemeToggle for why this
+            alone isn't quite enough in dev (React Strict Mode remount). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("safi:theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})()`,
+          }}
+        />
+      </head>
       <body>
         {children}
         <Toaster position="bottom-center" />

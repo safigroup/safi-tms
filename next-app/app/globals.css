@@ -31,7 +31,7 @@ body {
   color: var(--ink);
   font-family: var(--sans);
   font-size: 15px;
-  line-height: 1.45;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased
 }
 
@@ -63,7 +63,7 @@ header {
   font-family: var(--cond);
   font-weight: 700;
   font-size: 22px;
-  letter-spacing: 0
+  letter-spacing: -0.01em
 }
 
 .brand .sub {

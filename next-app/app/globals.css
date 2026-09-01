@@ -551,15 +551,20 @@ ul.list li.off {
 .x {
   background: none;
   border: none;
-  color: var(--rule);
+  color: var(--ink-soft);
   cursor: pointer;
   font-family: var(--mono);
-  font-size: 14px;
-  padding: 0 0 0 8px
+  font-size: 16px;
+  line-height: 1;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  transition: background-color .12s ease, color .12s ease
 }
 
 .x:hover {
-  color: var(--alert)
+  color: var(--alert);
+  background: var(--stamp-wash)
 }
 
 .pill {
@@ -753,7 +758,7 @@ ul.list li.off {
   margin-top: 4px
 }
 
-input,
+input:not([type="checkbox"]):not([type="radio"]),
 select {
   width: 100%;
   font-family: var(--sans);
@@ -764,6 +769,15 @@ select {
   border-radius: var(--radius-sm);
   padding: 10px 12px;
   transition: border-color .12s ease, box-shadow .12s ease
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  accent-color: var(--stamp);
+  cursor: pointer
 }
 
 input[type=number] {

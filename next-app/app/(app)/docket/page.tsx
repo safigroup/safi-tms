@@ -299,16 +299,16 @@ export default function DocketPage() {
           <ul className="list">
             {costs.length ? costs.map((c) => (
               <li key={c.id}>
-                <div style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
+                <div style={{ display: "flex", gap: 10, alignItems: "flex-start", minWidth: 0 }}>
                   {canWrite ? (
                     <input
                       type="checkbox"
                       checked={selectedCostIds.has(c.id)}
                       onChange={() => toggleCostSelected(c.id)}
-                      style={{ marginTop: 3, flexShrink: 0 }}
+                      style={{ marginTop: 4 }}
                     />
                   ) : null}
-                  <div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
                   <div className="r-no" style={{ color: "var(--stamp)" }}>{lab(c.category)}</div>
                   <div style={{ fontSize: 13, marginTop: 1 }}>{c.description || "—"}</div>
                   <div className="r-mono">

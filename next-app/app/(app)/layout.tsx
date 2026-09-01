@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
 import { Nav } from "@/lib/components/Nav";
+import { ThemeToggle } from "@/lib/components/ThemeToggle";
 import { signOut } from "./actions";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
@@ -23,6 +24,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           <form action={signOut} style={{ display: "inline" }}>
             <button type="submit">sign out</button>
           </form>
+          {" "}
+          <ThemeToggle />
         </div>
       </header>
       <Nav />

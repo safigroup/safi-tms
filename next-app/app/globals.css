@@ -1,16 +1,24 @@
 :root {
-  --ground: #F4F5F7;
-  --card: #FFFFFF;
+  --ground: #F6F4EF;
+  --card: #FCFAF6;
+  --field-bg: #FFFFFF;
   --ink: #1A1D23;
   --ink-soft: #667085;
-  --rule: #E4E7EC;
-  --rule-soft: #EEF1F4;
-  --stamp: #5B3FBD;
-  --stamp-hover: #4A32A0;
-  --stamp-wash: #F3F0FB;
+  --rule: #E1DCD2;
+  --rule-soft: #ECE7DC;
+  --stamp: #1E3A5F;
+  --stamp-hover: #152A47;
+  --stamp-wash: #EAF0F6;
   --settled: #12875A;
   --alert: #D0402B;
   --waiting: #C17F0A;
+  --pill-warn-bg: #FBF3E2;
+  --pill-warn-border: #F1DDAF;
+  --pill-good-bg: #E9F7EF;
+  --pill-good-border: #B7E0CA;
+  --pill-bad-bg: #FCEBE7;
+  --pill-bad-border: #F1C4BA;
+  --capture-has-bg: #F0F9F4;
   --mono: var(--font-mono), ui-monospace, monospace;
   --sans: var(--font-sans), system-ui, sans-serif;
   --cond: var(--font-cond), var(--sans);
@@ -18,6 +26,37 @@
   --radius-sm: 8px;
   --shadow-card: 0 1px 2px rgba(16, 24, 40, .04), 0 1px 3px rgba(16, 24, 40, .06);
   --shadow-pop: 0 4px 12px rgba(16, 24, 40, .1), 0 2px 4px rgba(16, 24, 40, .06);
+}
+
+/* Dark theme -- toggled via ThemeToggle, which sets data-theme on <html>.
+   Backgrounds/ink/borders get a proper dark surface hierarchy (ground
+   darkest, card/field lighter for elevation); the accent and semantic
+   status colors are brightened versions of their light-mode selves, since
+   the originals don't have enough contrast against a dark background.
+   #sheet (the printed invoice/report) is deliberately untouched here --
+   it doesn't use these tokens at all, and printing should always be
+   light regardless of the app's on-screen theme. */
+[data-theme="dark"] {
+  --ground: #14161A;
+  --card: #1C1F26;
+  --field-bg: #242830;
+  --ink: #E8EAED;
+  --ink-soft: #9AA3AE;
+  --rule: #2A2E37;
+  --rule-soft: #23262D;
+  --stamp: #5B8DBE;
+  --stamp-hover: #6FA0CE;
+  --stamp-wash: #1E2A38;
+  --settled: #34C784;
+  --alert: #F0665A;
+  --waiting: #E0A83E;
+  --pill-warn-bg: #3A2F14;
+  --pill-warn-border: #6B5423;
+  --pill-good-bg: #10281C;
+  --pill-good-border: #1F5C3F;
+  --pill-bad-bg: #331410;
+  --pill-bad-border: #6B2E24;
+  --capture-has-bg: #16261C;
 }
 
 * {
@@ -31,7 +70,7 @@ body {
   color: var(--ink);
   font-family: var(--sans);
   font-size: 15px;
-  line-height: 1.45;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased
 }
 
@@ -63,7 +102,7 @@ header {
   font-family: var(--cond);
   font-weight: 700;
   font-size: 22px;
-  letter-spacing: 0
+  letter-spacing: -0.01em
 }
 
 .brand .sub {
@@ -95,6 +134,19 @@ header {
 
 .who button:hover {
   text-decoration: underline
+}
+
+.theme-toggle {
+  font-size: 15px;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+  padding: 3px 6px !important;
+  vertical-align: middle
+}
+
+.theme-toggle:hover {
+  text-decoration: none !important;
+  background: var(--stamp-wash)
 }
 
 nav {
@@ -533,20 +585,20 @@ ul.list li.off {
 
 .pill.warn {
   color: var(--waiting);
-  border-color: #F1DDAF;
-  background: #FBF3E2
+  border-color: var(--pill-warn-border);
+  background: var(--pill-warn-bg)
 }
 
 .pill.good {
   color: var(--settled);
-  border-color: #B7E0CA;
-  background: #E9F7EF
+  border-color: var(--pill-good-border);
+  background: var(--pill-good-bg)
 }
 
 .pill.bad {
   color: var(--alert);
-  border-color: #F1C4BA;
-  background: #FCEBE7
+  border-color: var(--pill-bad-border);
+  background: var(--pill-bad-bg)
 }
 
 /* detail */
@@ -697,7 +749,7 @@ select {
   font-family: var(--sans);
   font-size: 15px;
   color: var(--ink);
-  background: #fff;
+  background: var(--field-bg);
   border: 1px solid var(--rule);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
@@ -878,7 +930,7 @@ button.ghost.danger:hover {
 .capture {
   border: 1px dashed var(--rule);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--field-bg);
   padding: 12px 14px;
   margin-bottom: 14px;
   display: flex;
@@ -890,7 +942,7 @@ button.ghost.danger:hover {
 .capture.has {
   border-style: solid;
   border-color: var(--settled);
-  background: #F0F9F4
+  background: var(--capture-has-bg)
 }
 
 .capture input[type=file] {
@@ -949,7 +1001,7 @@ button.ghost.danger:hover {
   margin: 15px 18px;
   border-left: 3px solid var(--waiting);
   border-radius: var(--radius);
-  background: #FBF3E2;
+  background: var(--pill-warn-bg);
   padding: 13px 16px
 }
 
@@ -1016,19 +1068,19 @@ button.ghost.danger:hover {
 
 .note.bad {
   border-left-color: var(--alert);
-  background: #FCEBE7;
+  background: var(--pill-bad-bg);
   color: var(--alert)
 }
 
 .note.good {
   border-left-color: var(--settled);
-  background: #E9F7EF;
+  background: var(--pill-good-bg);
   color: var(--settled)
 }
 
 .note.warn {
   border-left-color: var(--waiting);
-  background: #FBF3E2;
+  background: var(--pill-warn-bg);
   color: var(--waiting)
 }
 

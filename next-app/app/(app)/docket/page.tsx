@@ -252,108 +252,6 @@ export default function DocketPage() {
       {loadError ? <div className="note bad">{loadError}</div> : null}
       <div className="grid">
       <div className="panel">
-        <div className="panel-head"><h2>Record a cost</h2></div>
-        {!canWrite ? (
-          <div className="empty">You have read-only access to this section.</div>
-        ) : (
-        <form className="panel-body" onSubmit={handleSaveCost}>
-          {formNote ? <div className="note bad">{formNote}</div> : null}
-          {restoredNote ? <div className="note warn">Restored an unsaved draft from earlier — the receipt photo wasn&apos;t kept, re-attach it if needed.</div> : null}
-          <div className="field">
-            <label htmlFor="trip">Trip</label>
-            <select id="trip" value={tripId ?? ""} onChange={(e) => setTripId(e.target.value)}>
-              {open.map((t) => (
-                <option key={t.trip_id} value={t.trip_id}>{t.trip_no} — {t.customer} — {t.route}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="cat">Category</label>
-            <select id="cat" value={draft.cat} onChange={(e) => updateDraft({ cat: e.target.value })}>
-              {CATS.map((c) => <option key={c} value={c}>{lab(c).replace(/^./, (x) => x.toUpperCase())}</option>)}
-            </select>
-          </div>
-          {draft.cat === "fuel" ? (
-            <div className="row">
-              <div className="field">
-                <label htmlFor="liters">Liters</label>
-                <input id="liters" type="number" step="0.01" min="0" placeholder="0.00" inputMode="decimal" value={draft.liters} onChange={(e) => updateFuelField({ liters: e.target.value })} />
-              </div>
-              <div className="field">
-                <label htmlFor="pricePerLiter">Price per liter</label>
-                <input id="pricePerLiter" type="number" step="0.0001" min="0" placeholder="0.00" inputMode="decimal" value={draft.pricePerLiter} onChange={(e) => updateFuelField({ pricePerLiter: e.target.value })} />
-              </div>
-            </div>
-          ) : null}
-          <div className="row3">
-            <div className="field">
-              <label htmlFor="amt">Amount</label>
-              <input id="amt" type="number" step="0.01" min="0" placeholder="0.00" inputMode="decimal" value={draft.amt} onChange={(e) => updateDraft({ amt: e.target.value })} />
-              {draft.cat === "fuel" && draft.liters && draft.pricePerLiter ? (
-                <div className="hint">Auto-filled from liters × price — edit directly to override.</div>
-              ) : null}
-            </div>
-            <div className="field">
-              <label htmlFor="cur">Currency</label>
-              <select id="cur" value={draft.cur} onChange={(e) => updateDraft({ cur: e.target.value })}>
-                {curOpts.map((c) => <option key={c}>{c}</option>)}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="when">Date</label>
-              <input id="when" type="date" value={draft.when} onChange={(e) => updateDraft({ when: e.target.value })} />
-            </div>
-          </div>
-          <div className={"stamp" + (Number.isFinite(amtNum) && amtNum > 0 ? " live" : "")}>
-            <span className="native">{Number.isFinite(amtNum) && amtNum > 0 ? m2(amtNum, draft.cur) : "—"}</span>
-            <span className="arrow">→</span>
-            <span className={"usd" + (Number.isFinite(amtNum) && amtNum > 0 ? "" : " idle")}>
-              {Number.isFinite(amtNum) && amtNum > 0 && rateToUsd !== undefined ? m2(amtNum * rateToUsd) : "USD 0.00"}
-            </span>
-            <span className="rate">
-              {draft.cur === "USD"
-                ? "Recorded directly in USD — no conversion needed."
-                : fxRate
-                  ? <>Rate on file <b>1 {draft.cur} = {Number(fxRate.rate_to_usd).toFixed(8)} USD</b> · dated {fxRate.effective_on} · frozen onto this entry</>
-                  : `No rate on file for ${draft.cur}.`}
-            </span>
-          </div>
-          <div className="field">
-            <label htmlFor="desc">Description</label>
-            <input id="desc" type="text" placeholder="e.g. Tunduma crossing charges" value={draft.desc} onChange={(e) => updateDraft({ desc: e.target.value })} />
-          </div>
-          <div className="row3">
-            <div className="field">
-              <label htmlFor="loc">Location</label>
-              <input id="loc" type="text" placeholder="Nakonde" value={draft.loc} onChange={(e) => updateDraft({ loc: e.target.value })} />
-            </div>
-            <div className="field">
-              <label htmlFor="paid">Paid by</label>
-              <select id="paid" value={draft.paid} onChange={(e) => updateDraft({ paid: e.target.value })}>
-                <option value="driver_float">Driver float</option>
-                <option value="office">Office</option>
-                <option value="agent">Agent</option>
-                <option value="card">Card</option>
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="ref">Receipt ref</label>
-              <input id="ref" type="text" value={draft.ref} onChange={(e) => updateDraft({ ref: e.target.value })} />
-            </div>
-          </div>
-          <label style={{ display: "block", fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--ink-soft)", marginBottom: 5 }}>
-            Receipt photo
-          </label>
-          <CaptureField
-            file={costFile}
-            onChange={setCostFile}
-            idleText="Optional — but a float can't be reconciled without one."
-          />
-          <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save cost"}</button>
-        </form>
-        )}
-      </div>
-      <div className="panel">
         {trip ? (
           <div className="d-head">
             <div className="r-no">{trip.trip_no} · <span className="pill grey">{lab(trip.status)}</span></div>
@@ -420,12 +318,14 @@ export default function DocketPage() {
                   </div>
                   </div>
                 </div>
-                <div className="r-right">
-                  <div className="r-amt">{m2(c.amount_usd)}</div>
-                  <div className="r-min">{c.currency !== "USD" ? m2(c.amount, c.currency) : " "}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <div className="r-right">
+                    <div className="r-amt">{m2(c.amount_usd)}</div>
+                    <div className="r-min">{c.currency !== "USD" ? m2(c.amount, c.currency) : " "}</div>
                   </div>
-                {canOverride ? <button className="x" style={{ color: "var(--stamp)" }} onClick={() => setEditingCostId(c.id)}>✎</button> : null}
-                {canWrite ? <button className="x" onClick={() => handleDeleteCost(c.id)}>✕</button> : null}
+                  {canOverride ? <button className="x" style={{ color: "var(--stamp)" }} onClick={() => setEditingCostId(c.id)}>✎</button> : null}
+                  {canWrite ? <button className="x" onClick={() => handleDeleteCost(c.id)}>✕</button> : null}
+                </div>
               </li>
             )) : <li className="empty">No costs recorded on this trip yet.</li>}
           </ul>
@@ -440,6 +340,108 @@ export default function DocketPage() {
             onChanged={async () => { if (tripId) { await loadDetail(tripId); await loadBootstrap(); } }}
             canWrite={canWrite}
           />
+        )}
+      </div>
+      <div className="panel">
+        <div className="panel-head"><h2>Record a cost</h2></div>
+        {!canWrite ? (
+          <div className="empty">You have read-only access to this section.</div>
+        ) : (
+        <form className="panel-body" onSubmit={handleSaveCost}>
+          {formNote ? <div className="note bad">{formNote}</div> : null}
+          {restoredNote ? <div className="note warn">Restored an unsaved draft from earlier — the receipt photo wasn&apos;t kept, re-attach it if needed.</div> : null}
+          <div className="field">
+            <label htmlFor="trip">Trip</label>
+            <select id="trip" value={tripId ?? ""} onChange={(e) => setTripId(e.target.value)}>
+              {open.map((t) => (
+                <option key={t.trip_id} value={t.trip_id}>{t.trip_no} — {t.customer} — {t.route}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="cat">Category</label>
+            <select id="cat" value={draft.cat} onChange={(e) => updateDraft({ cat: e.target.value })}>
+              {CATS.map((c) => <option key={c} value={c}>{lab(c).replace(/^./, (x) => x.toUpperCase())}</option>)}
+            </select>
+          </div>
+          {draft.cat === "fuel" ? (
+            <div className="row">
+              <div className="field">
+                <label htmlFor="liters">Liters</label>
+                <input id="liters" type="number" step="0.01" min="0" placeholder="0.00" inputMode="decimal" value={draft.liters} onChange={(e) => updateFuelField({ liters: e.target.value })} />
+              </div>
+              <div className="field">
+                <label htmlFor="pricePerLiter">Price per liter</label>
+                <input id="pricePerLiter" type="number" step="0.0001" min="0" placeholder="0.00" inputMode="decimal" value={draft.pricePerLiter} onChange={(e) => updateFuelField({ pricePerLiter: e.target.value })} />
+              </div>
+            </div>
+          ) : null}
+          <div className="row">
+            <div className="field">
+              <label htmlFor="amt">Amount</label>
+              <input id="amt" type="number" step="0.01" min="0" placeholder="0.00" inputMode="decimal" value={draft.amt} onChange={(e) => updateDraft({ amt: e.target.value })} />
+              {draft.cat === "fuel" && draft.liters && draft.pricePerLiter ? (
+                <div className="hint">Auto-filled from liters × price — edit directly to override.</div>
+              ) : null}
+            </div>
+            <div className="field">
+              <label htmlFor="cur">Currency</label>
+              <select id="cur" value={draft.cur} onChange={(e) => updateDraft({ cur: e.target.value })}>
+                {curOpts.map((c) => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="when">Date</label>
+            <input id="when" type="date" value={draft.when} onChange={(e) => updateDraft({ when: e.target.value })} />
+          </div>
+          <div className={"stamp" + (Number.isFinite(amtNum) && amtNum > 0 ? " live" : "")}>
+            <span className="native">{Number.isFinite(amtNum) && amtNum > 0 ? m2(amtNum, draft.cur) : "—"}</span>
+            <span className="arrow">→</span>
+            <span className={"usd" + (Number.isFinite(amtNum) && amtNum > 0 ? "" : " idle")}>
+              {Number.isFinite(amtNum) && amtNum > 0 && rateToUsd !== undefined ? m2(amtNum * rateToUsd) : "USD 0.00"}
+            </span>
+            <span className="rate">
+              {draft.cur === "USD"
+                ? "Recorded directly in USD — no conversion needed."
+                : fxRate
+                  ? <>Rate on file <b>1 {draft.cur} = {Number(fxRate.rate_to_usd).toFixed(8)} USD</b> · dated {fxRate.effective_on} · frozen onto this entry</>
+                  : `No rate on file for ${draft.cur}.`}
+            </span>
+          </div>
+          <div className="field">
+            <label htmlFor="desc">Description</label>
+            <input id="desc" type="text" placeholder="e.g. Tunduma crossing charges" value={draft.desc} onChange={(e) => updateDraft({ desc: e.target.value })} />
+          </div>
+          <div className="field">
+            <label htmlFor="loc">Location</label>
+            <input id="loc" type="text" placeholder="Nakonde" value={draft.loc} onChange={(e) => updateDraft({ loc: e.target.value })} />
+          </div>
+          <div className="row">
+            <div className="field">
+              <label htmlFor="paid">Paid by</label>
+              <select id="paid" value={draft.paid} onChange={(e) => updateDraft({ paid: e.target.value })}>
+                <option value="driver_float">Driver float</option>
+                <option value="office">Office</option>
+                <option value="agent">Agent</option>
+                <option value="card">Card</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="ref">Receipt ref</label>
+              <input id="ref" type="text" value={draft.ref} onChange={(e) => updateDraft({ ref: e.target.value })} />
+            </div>
+          </div>
+          <label style={{ display: "block", fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--ink-soft)", marginBottom: 5 }}>
+            Receipt photo
+          </label>
+          <CaptureField
+            file={costFile}
+            onChange={setCostFile}
+            idleText="Optional — but a float can't be reconciled without one."
+          />
+          <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save cost"}</button>
+        </form>
         )}
       </div>
       </div>
@@ -811,7 +813,7 @@ function DocsTab({
         )) : <li className="empty">No documents on this trip yet.</li>}
       </ul>
       {canWrite ? (
-        <form className="panel-body" style={{ background: "#F2F3EE", borderTop: "1px solid var(--rule)" }} onSubmit={handleUpload}>
+        <form className="panel-body" style={{ background: "var(--ground)", borderTop: "1px solid var(--rule)" }} onSubmit={handleUpload}>
           {note ? <div className="note bad">{note}</div> : null}
           <div className="field">
             <label htmlFor="dType">Add or replace a document</label>

@@ -165,3 +165,34 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ inserted, errors });
 }
+
+// Bulk counterpart to trip-costs/[id]/route.ts's DELETE -- same org-scoped
+// delete, just applied to every id in one request instead of one fetch per
+// row from the client.
+export async function DELETE(request: Request) {
+  const ctx = await getAuthedOrgContext();
+  if (!ctx.ok) {
+    return NextResponse.json({ error: ctx.reason }, { status: ctx.status });
+  }
+  if (!CAN_MANAGE_TRIPS.has(ctx.role)) {
+    return NextResponse.json({ error: "not permitted" }, { status: 403 });
+  }
+
+  const body = await request.json().catch(() => null);
+  const ids = Array.isArray(body?.ids) ? body.ids.filter((id: unknown): id is string => typeof id === "string") : [];
+  if (!ids.length) {
+    return NextResponse.json({ error: "ids is required" }, { status: 400 });
+  }
+
+  const { error, count } = await ctx.admin
+    .from("trip_costs")
+    .delete({ count: "exact" })
+    .in("id", ids)
+    .eq("org_id", ctx.orgId);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  return NextResponse.json({ ok: true, deleted: count ?? ids.length });
+}

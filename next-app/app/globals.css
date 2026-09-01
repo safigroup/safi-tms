@@ -714,6 +714,16 @@ ul.list li.off {
   color: #fff
 }
 
+.act.bad {
+  border-color: var(--alert);
+  color: var(--alert)
+}
+
+.act.bad:hover {
+  background: var(--alert);
+  color: #fff
+}
+
 .act:disabled {
   border-color: var(--rule);
   color: var(--rule);

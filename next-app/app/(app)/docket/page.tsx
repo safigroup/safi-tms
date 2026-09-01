@@ -42,6 +42,7 @@ export default function DocketPage() {
   const [saving, setSaving] = useState(false);
   const [formNote, setFormNote] = useState<string | null>(null);
   const [editingCostId, setEditingCostId] = useState<string | null>(null);
+  const [selectedCostIds, setSelectedCostIds] = useState<Set<string>>(new Set());
 
   async function loadBootstrap() {
     const res = await fetch("/api/bootstrap");
@@ -74,6 +75,7 @@ export default function DocketPage() {
     const body = await res.json();
     setCosts(body.costs ?? []);
     setDocuments(body.documents ?? []);
+    setSelectedCostIds(new Set());
   }
 
   useEffect(() => {
@@ -202,6 +204,38 @@ export default function DocketPage() {
       toast.success("Cost entry removed");
       await loadDetail(tripId);
       await loadBootstrap();
+    }
+  }
+
+  function toggleCostSelected(id: string) {
+    setSelectedCostIds((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllCostsSelected() {
+    setSelectedCostIds((cur) => (cur.size === costs.length ? new Set() : new Set(costs.map((c) => c.id))));
+  }
+
+  async function handleBulkDeleteCosts() {
+    const ids = Array.from(selectedCostIds);
+    if (!ids.length) return;
+    if (!confirm(`Remove ${ids.length} cost ${ids.length === 1 ? "entry" : "entries"}?`)) return;
+    const res = await fetch("/api/trip-costs/bulk", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    if (res.ok && tripId) {
+      toast.success(`${ids.length} cost ${ids.length === 1 ? "entry" : "entries"} removed`);
+      await loadDetail(tripId);
+      await loadBootstrap();
+    } else {
+      const body = await res.json().catch(() => null);
+      toast.error("Couldn't delete: " + (body?.error ?? "unknown error"));
     }
   }
 
@@ -350,10 +384,33 @@ export default function DocketPage() {
               onCancel={() => setEditingCostId(null)}
             />
           ) : (
+          <>
+          {canWrite && costs.length ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 18px", borderBottom: "1px solid var(--rule-soft)" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "var(--ink-soft)", cursor: "pointer" }}>
+                <input type="checkbox" checked={selectedCostIds.size > 0 && selectedCostIds.size === costs.length} onChange={toggleAllCostsSelected} />
+                Select all
+              </label>
+              {selectedCostIds.size ? (
+                <button type="button" className="act bad" onClick={handleBulkDeleteCosts}>
+                  Delete selected ({selectedCostIds.size})
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           <ul className="list">
             {costs.length ? costs.map((c) => (
               <li key={c.id}>
-                <div>
+                <div style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
+                  {canWrite ? (
+                    <input
+                      type="checkbox"
+                      checked={selectedCostIds.has(c.id)}
+                      onChange={() => toggleCostSelected(c.id)}
+                      style={{ marginTop: 3, flexShrink: 0 }}
+                    />
+                  ) : null}
+                  <div>
                   <div className="r-no" style={{ color: "var(--stamp)" }}>{lab(c.category)}</div>
                   <div style={{ fontSize: 13, marginTop: 1 }}>{c.description || "—"}</div>
                   <div className="r-mono">
@@ -361,16 +418,18 @@ export default function DocketPage() {
                     {c.liters ? ` · ${c.liters} L @ ${c.price_per_liter}` : ""}
                     {c.receipt_path ? <> · <a href="#" onClick={(e) => { e.preventDefault(); openFile(c.id); }}>receipt</a></> : null}
                   </div>
+                  </div>
                 </div>
                 <div className="r-right">
                   <div className="r-amt">{m2(c.amount_usd)}</div>
                   <div className="r-min">{c.currency !== "USD" ? m2(c.amount, c.currency) : " "}</div>
-                </div>
+                  </div>
                 {canOverride ? <button className="x" style={{ color: "var(--stamp)" }} onClick={() => setEditingCostId(c.id)}>✎</button> : null}
                 {canWrite ? <button className="x" onClick={() => handleDeleteCost(c.id)}>✕</button> : null}
               </li>
             )) : <li className="empty">No costs recorded on this trip yet.</li>}
           </ul>
+          </>
           )
         ) : (
           <DocsTab

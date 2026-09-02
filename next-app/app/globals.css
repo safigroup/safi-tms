@@ -549,22 +549,27 @@ ul.list li.off {
 }
 
 .x {
-  background: none;
-  border: none;
-  color: var(--ink-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: var(--ground);
+  border: 1px solid var(--rule);
+  color: var(--ink);
   cursor: pointer;
   font-family: var(--mono);
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1;
-  padding: 6px 8px;
   border-radius: var(--radius-sm);
   flex-shrink: 0;
-  transition: background-color .12s ease, color .12s ease
+  transition: background-color .12s ease, color .12s ease, border-color .12s ease
 }
 
 .x:hover {
   color: var(--alert);
-  background: var(--stamp-wash)
+  background: var(--pill-bad-bg);
+  border-color: var(--pill-bad-border)
 }
 
 .pill {

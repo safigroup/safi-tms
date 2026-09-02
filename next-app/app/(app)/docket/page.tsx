@@ -42,6 +42,7 @@ export default function DocketPage() {
   const [saving, setSaving] = useState(false);
   const [formNote, setFormNote] = useState<string | null>(null);
   const [editingCostId, setEditingCostId] = useState<string | null>(null);
+  const [selectedCostIds, setSelectedCostIds] = useState<Set<string>>(new Set());
 
   async function loadBootstrap() {
     const res = await fetch("/api/bootstrap");
@@ -74,6 +75,7 @@ export default function DocketPage() {
     const body = await res.json();
     setCosts(body.costs ?? []);
     setDocuments(body.documents ?? []);
+    setSelectedCostIds(new Set());
   }
 
   useEffect(() => {
@@ -205,6 +207,38 @@ export default function DocketPage() {
     }
   }
 
+  function toggleCostSelected(id: string) {
+    setSelectedCostIds((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllCostsSelected() {
+    setSelectedCostIds((cur) => (cur.size === costs.length ? new Set() : new Set(costs.map((c) => c.id))));
+  }
+
+  async function handleBulkDeleteCosts() {
+    const ids = Array.from(selectedCostIds);
+    if (!ids.length) return;
+    if (!confirm(`Remove ${ids.length} cost ${ids.length === 1 ? "entry" : "entries"}?`)) return;
+    const res = await fetch("/api/trip-costs/bulk", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    if (res.ok && tripId) {
+      toast.success(`${ids.length} cost ${ids.length === 1 ? "entry" : "entries"} removed`);
+      await loadDetail(tripId);
+      await loadBootstrap();
+    } else {
+      const body = await res.json().catch(() => null);
+      toast.error("Couldn't delete: " + (body?.error ?? "unknown error"));
+    }
+  }
+
   async function openFile(costId?: string, docId?: string) {
     const qs = costId ? `costId=${costId}` : `docId=${docId}`;
     const res = await fetch(`/api/storage/signed-url?${qs}`);
@@ -217,6 +251,96 @@ export default function DocketPage() {
     <>
       {loadError ? <div className="note bad">{loadError}</div> : null}
       <div className="grid">
+      <div className="panel">
+        {trip ? (
+          <div className="d-head">
+            <div className="r-no">{trip.trip_no} · <span className="pill grey">{lab(trip.status)}</span></div>
+            <div className="r-title" style={{ fontSize: 18 }}>{trip.customer}</div>
+            <div className="r-sub">{trip.route}{trip.fleet_no ? " · " + trip.fleet_no : ""}</div>
+            <div className="d-figs">
+              <div><div className="k">Revenue</div><div className="v">{m2(trip.revenue_usd)}</div></div>
+              <div><div className="k">Costs</div><div className="v">{m2(trip.cost_usd)}</div></div>
+              <div><div className="k">Margin</div><div className={"v " + (Number(trip.margin_usd) >= 0 ? "pos" : "neg")}>{m2(trip.margin_usd)}</div></div>
+            </div>
+          </div>
+        ) : null}
+        <div className="tabs">
+          <button className={tab === "ledger" ? "on" : ""} onClick={() => setTab("ledger")}>
+            Ledger {costs.length ? <span className="c">({costs.length})</span> : null}
+          </button>
+          <button className={tab === "docs" ? "on" : ""} onClick={() => setTab("docs")}>
+            Documents {documents.filter((d) => d.status === "pending").length ? <span className="badge">{documents.filter((d) => d.status === "pending").length}</span> : null}
+          </button>
+        </div>
+        {tab === "ledger" ? (
+          editingCostId ? (
+            <EditCostForm
+              cost={costs.find((c) => c.id === editingCostId)!}
+              curOpts={curOpts}
+              fx={data.fx}
+              onSaved={async () => { setEditingCostId(null); if (tripId) { await loadDetail(tripId); await loadBootstrap(); } }}
+              onCancel={() => setEditingCostId(null)}
+            />
+          ) : (
+          <>
+          {canWrite && costs.length ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 18px", borderBottom: "1px solid var(--rule-soft)" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "var(--ink-soft)", cursor: "pointer" }}>
+                <input type="checkbox" checked={selectedCostIds.size > 0 && selectedCostIds.size === costs.length} onChange={toggleAllCostsSelected} />
+                Select all
+              </label>
+              {selectedCostIds.size ? (
+                <button type="button" className="act bad" onClick={handleBulkDeleteCosts}>
+                  Delete selected ({selectedCostIds.size})
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          <ul className="list">
+            {costs.length ? costs.map((c) => (
+              <li key={c.id} style={{ alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
+                  {canWrite ? (
+                    <input
+                      type="checkbox"
+                      checked={selectedCostIds.has(c.id)}
+                      onChange={() => toggleCostSelected(c.id)}
+                    />
+                  ) : null}
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                  <div className="r-no" style={{ color: "var(--stamp)" }}>{lab(c.category)}</div>
+                  <div style={{ fontSize: 13, marginTop: 1 }}>{c.description || "—"}</div>
+                  <div className="r-mono">
+                    {c.incurred_on}{c.location ? " · " + c.location : ""}{c.receipt_ref ? " · " + c.receipt_ref : ""}
+                    {c.liters ? ` · ${c.liters} L @ ${c.price_per_liter}` : ""}
+                    {c.receipt_path ? <> · <a href="#" onClick={(e) => { e.preventDefault(); openFile(c.id); }}>receipt</a></> : null}
+                  </div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <div className="r-right">
+                    <div className="r-amt">{m2(c.amount_usd)}</div>
+                    <div className="r-min">{c.currency !== "USD" ? m2(c.amount, c.currency) : " "}</div>
+                  </div>
+                  {canOverride ? <button className="x" style={{ color: "var(--stamp)" }} onClick={() => setEditingCostId(c.id)}>✎</button> : null}
+                  {canWrite ? <button className="x" onClick={() => handleDeleteCost(c.id)}>✕</button> : null}
+                </div>
+              </li>
+            )) : <li className="empty">No costs recorded on this trip yet.</li>}
+          </ul>
+          </>
+          )
+        ) : (
+          <DocsTab
+            trip={trip}
+            documents={documents}
+            tripId={tripId}
+            onOpen={(docId) => openFile(undefined, docId)}
+            onChanged={async () => { if (tripId) { await loadDetail(tripId); await loadBootstrap(); } }}
+            canWrite={canWrite}
+          />
+        )}
+      </div>
       <div className="panel">
         <div className="panel-head"><h2>Record a cost</h2></div>
         {!canWrite ? (
@@ -251,7 +375,7 @@ export default function DocketPage() {
               </div>
             </div>
           ) : null}
-          <div className="row3">
+          <div className="row">
             <div className="field">
               <label htmlFor="amt">Amount</label>
               <input id="amt" type="number" step="0.01" min="0" placeholder="0.00" inputMode="decimal" value={draft.amt} onChange={(e) => updateDraft({ amt: e.target.value })} />
@@ -265,10 +389,10 @@ export default function DocketPage() {
                 {curOpts.map((c) => <option key={c}>{c}</option>)}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="when">Date</label>
-              <input id="when" type="date" value={draft.when} onChange={(e) => updateDraft({ when: e.target.value })} />
-            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="when">Date</label>
+            <input id="when" type="date" value={draft.when} onChange={(e) => updateDraft({ when: e.target.value })} />
           </div>
           <div className={"stamp" + (Number.isFinite(amtNum) && amtNum > 0 ? " live" : "")}>
             <span className="native">{Number.isFinite(amtNum) && amtNum > 0 ? m2(amtNum, draft.cur) : "—"}</span>
@@ -288,11 +412,11 @@ export default function DocketPage() {
             <label htmlFor="desc">Description</label>
             <input id="desc" type="text" placeholder="e.g. Tunduma crossing charges" value={draft.desc} onChange={(e) => updateDraft({ desc: e.target.value })} />
           </div>
-          <div className="row3">
-            <div className="field">
-              <label htmlFor="loc">Location</label>
-              <input id="loc" type="text" placeholder="Nakonde" value={draft.loc} onChange={(e) => updateDraft({ loc: e.target.value })} />
-            </div>
+          <div className="field">
+            <label htmlFor="loc">Location</label>
+            <input id="loc" type="text" placeholder="Nakonde" value={draft.loc} onChange={(e) => updateDraft({ loc: e.target.value })} />
+          </div>
+          <div className="row">
             <div className="field">
               <label htmlFor="paid">Paid by</label>
               <select id="paid" value={draft.paid} onChange={(e) => updateDraft({ paid: e.target.value })}>
@@ -317,70 +441,6 @@ export default function DocketPage() {
           />
           <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save cost"}</button>
         </form>
-        )}
-      </div>
-      <div className="panel">
-        {trip ? (
-          <div className="d-head">
-            <div className="r-no">{trip.trip_no} · <span className="pill grey">{lab(trip.status)}</span></div>
-            <div className="r-title" style={{ fontSize: 18 }}>{trip.customer}</div>
-            <div className="r-sub">{trip.route}{trip.fleet_no ? " · " + trip.fleet_no : ""}</div>
-            <div className="d-figs">
-              <div><div className="k">Revenue</div><div className="v">{m2(trip.revenue_usd)}</div></div>
-              <div><div className="k">Costs</div><div className="v">{m2(trip.cost_usd)}</div></div>
-              <div><div className="k">Margin</div><div className={"v " + (Number(trip.margin_usd) >= 0 ? "pos" : "neg")}>{m2(trip.margin_usd)}</div></div>
-            </div>
-          </div>
-        ) : null}
-        <div className="tabs">
-          <button className={tab === "ledger" ? "on" : ""} onClick={() => setTab("ledger")}>
-            Ledger {costs.length ? <span className="c">({costs.length})</span> : null}
-          </button>
-          <button className={tab === "docs" ? "on" : ""} onClick={() => setTab("docs")}>
-            Documents {documents.filter((d) => d.status === "pending").length ? <span className="badge">{documents.filter((d) => d.status === "pending").length}</span> : null}
-          </button>
-        </div>
-        {tab === "ledger" ? (
-          editingCostId ? (
-            <EditCostForm
-              cost={costs.find((c) => c.id === editingCostId)!}
-              curOpts={curOpts}
-              fx={data.fx}
-              onSaved={async () => { setEditingCostId(null); if (tripId) { await loadDetail(tripId); await loadBootstrap(); } }}
-              onCancel={() => setEditingCostId(null)}
-            />
-          ) : (
-          <ul className="list">
-            {costs.length ? costs.map((c) => (
-              <li key={c.id}>
-                <div>
-                  <div className="r-no" style={{ color: "var(--stamp)" }}>{lab(c.category)}</div>
-                  <div style={{ fontSize: 13, marginTop: 1 }}>{c.description || "—"}</div>
-                  <div className="r-mono">
-                    {c.incurred_on}{c.location ? " · " + c.location : ""}{c.receipt_ref ? " · " + c.receipt_ref : ""}
-                    {c.liters ? ` · ${c.liters} L @ ${c.price_per_liter}` : ""}
-                    {c.receipt_path ? <> · <a href="#" onClick={(e) => { e.preventDefault(); openFile(c.id); }}>receipt</a></> : null}
-                  </div>
-                </div>
-                <div className="r-right">
-                  <div className="r-amt">{m2(c.amount_usd)}</div>
-                  <div className="r-min">{c.currency !== "USD" ? m2(c.amount, c.currency) : " "}</div>
-                </div>
-                {canOverride ? <button className="x" style={{ color: "var(--stamp)" }} onClick={() => setEditingCostId(c.id)}>✎</button> : null}
-                {canWrite ? <button className="x" onClick={() => handleDeleteCost(c.id)}>✕</button> : null}
-              </li>
-            )) : <li className="empty">No costs recorded on this trip yet.</li>}
-          </ul>
-          )
-        ) : (
-          <DocsTab
-            trip={trip}
-            documents={documents}
-            tripId={tripId}
-            onOpen={(docId) => openFile(undefined, docId)}
-            onChanged={async () => { if (tripId) { await loadDetail(tripId); await loadBootstrap(); } }}
-            canWrite={canWrite}
-          />
         )}
       </div>
       </div>
@@ -752,7 +812,7 @@ function DocsTab({
         )) : <li className="empty">No documents on this trip yet.</li>}
       </ul>
       {canWrite ? (
-        <form className="panel-body" style={{ background: "#F2F3EE", borderTop: "1px solid var(--rule)" }} onSubmit={handleUpload}>
+        <form className="panel-body" style={{ background: "var(--ground)", borderTop: "1px solid var(--rule)" }} onSubmit={handleUpload}>
           {note ? <div className="note bad">{note}</div> : null}
           <div className="field">
             <label htmlFor="dType">Add or replace a document</label>

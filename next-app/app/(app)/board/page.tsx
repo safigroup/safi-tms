@@ -394,6 +394,9 @@ function TripEditForm({
 }) {
   const [customerId, setCustomerId] = useState(trip.customer_id);
   const [routeId, setRouteId] = useState(trip.route_id);
+  const [borderPathId, setBorderPathId] = useState(
+    data.routeBorderPaths.find((p) => p.route_id === trip.route_id && JSON.stringify(p.borders) === JSON.stringify(trip.borders))?.id ?? "",
+  );
   const [truckId, setTruckId] = useState(trip.truck_id ?? "");
   const [driverId, setDriverId] = useState(trip.driver_id ?? "");
   const [commodity, setCommodity] = useState(trip.commodity ?? "");
@@ -418,11 +421,14 @@ function TripEditForm({
   const activeRoutes = data.routes.filter((r) => r.is_active !== false);
   const activeTrucks = data.trucks.filter((t) => t.is_active !== false);
   const activeDrivers = data.drivers.filter((d) => d.is_active !== false);
+  const pathsForRoute = data.routeBorderPaths.filter((p) => p.route_id === routeId);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const rev = parseFloat(revenue);
     if (isNaN(rev) || rev <= 0) return setError("Enter a valid revenue amount.");
+
+    const chosenPath = data.routeBorderPaths.find((p) => p.id === borderPathId);
 
     setSaving(true);
     setError(null);
@@ -438,6 +444,7 @@ function TripEditForm({
         tonnage: tonnage ? Number(tonnage) : null,
         container_no: containerNo.trim() || null,
         seal_no: sealNo.trim() || null,
+        borders: chosenPath ? chosenPath.borders : null,
         revenue_amount: rev,
         actual_load_date: actualLoadDate || null,
         planned_eta: plannedEta || null,
@@ -467,10 +474,19 @@ function TripEditForm({
         </div>
         <div className="field">
           <label htmlFor="eRoute">Route</label>
-          <select id="eRoute" value={routeId} onChange={(e) => setRouteId(e.target.value)}>
+          <select id="eRoute" value={routeId} onChange={(e) => { setRouteId(e.target.value); setBorderPathId(""); }}>
             {activeRoutes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
         </div>
+        {pathsForRoute.length ? (
+          <div className="field">
+            <label htmlFor="eBorderPath">Border route</label>
+            <select id="eBorderPath" value={borderPathId} onChange={(e) => setBorderPathId(e.target.value)}>
+              <option value="">Default ({(activeRoutes.find((r) => r.id === routeId)?.borders || []).join(" → ") || "route's own path"})</option>
+              {pathsForRoute.map((p) => <option key={p.id} value={p.id}>{p.label} ({p.borders.join(" → ")})</option>)}
+            </select>
+          </div>
+        ) : null}
         <div className="row">
           <div className="field">
             <label htmlFor="eTruck">Truck</label>

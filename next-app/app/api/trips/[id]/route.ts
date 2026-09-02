@@ -6,7 +6,7 @@ import { diffFields, writeAuditLog, getAuditLog } from "@/lib/auditLog";
 
 const EDITABLE_FIELDS = [
   "customer_id", "route_id", "truck_id", "driver_id",
-  "commodity", "tonnage", "container_no", "seal_no",
+  "commodity", "tonnage", "container_no", "seal_no", "borders",
   "revenue_amount", "actual_load_date", "planned_eta", "actual_delivery_at",
 ];
 

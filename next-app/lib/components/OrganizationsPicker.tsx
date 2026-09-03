@@ -15,6 +15,21 @@ export function OrganizationsPicker() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
+
+  async function switchOrg(id: string) {
+    setSwitchingId(id);
+    try {
+      await setActiveOrg(id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't switch organization");
+      setSwitchingId(null);
+      return;
+    }
+    // Full navigation -- see the identical comment in lib/components/Nav.tsx.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- deliberate: a router.push transition would leave stale client-fetched state behind
+    window.location.assign("/board");
+  }
 
   async function load() {
     const res = await fetch("/api/platform/organizations");
@@ -76,9 +91,9 @@ export function OrganizationsPicker() {
                   <button className="ghost" type="button" style={{ marginTop: 0, width: "auto" }} onClick={() => setEditingId(o.id)}>
                     Edit
                   </button>
-                  <form action={setActiveOrg.bind(null, o.id)}>
-                    <button className="act" type="submit">Switch to</button>
-                  </form>
+                  <button className="act" type="button" disabled={switchingId === o.id} onClick={() => switchOrg(o.id)}>
+                    {switchingId === o.id ? "Switching…" : "Switch to"}
+                  </button>
                 </div>
               </li>
             )

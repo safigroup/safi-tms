@@ -70,7 +70,13 @@ export function Nav({
       await setActiveOrg(id);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't switch organization");
+      return;
     }
+    // Full navigation, not router.push/refresh -- every client component
+    // on the page (this one included) fetches its own data in a
+    // mount-once effect, which a client-side transition wouldn't re-run.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- deliberate: a router.push transition would leave stale client-fetched state (nav badges, bootstrap data) behind
+    window.location.assign("/board");
   }
 
   const views = isPlatformAdmin ? [...VIEWS, { href: "/organizations", label: "Organizations" }] : VIEWS;

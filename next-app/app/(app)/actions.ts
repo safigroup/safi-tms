@@ -15,6 +15,15 @@ export async function signOut() {
 // Re-checks platform-admin status itself rather than trusting that the
 // dropdown calling this was only ever rendered for one -- a server action
 // is reachable directly, not just through the UI that happens to render it.
+//
+// Deliberately does NOT call redirect(): this is invoked directly from a
+// plain event handler (not a <form action>), and redirect() works by
+// throwing -- a caller wrapping the call in try/catch (to report real
+// errors) would catch that throw too and show it as if it were a failure.
+// The caller does a full page navigation itself once this resolves, which
+// also sidesteps every client component's own useEffect-fetched state
+// (nav badges, bootstrap data, etc.) staying stale after just a cookie
+// change with no full reload.
 export async function setActiveOrg(orgId: string) {
   const ctx = await getAuthedPlatformAdmin();
   if (!ctx.ok) {
@@ -32,6 +41,4 @@ export async function setActiveOrg(orgId: string) {
     secure: process.env.NODE_ENV === "production",
     path: "/",
   });
-
-  redirect("/board");
 }

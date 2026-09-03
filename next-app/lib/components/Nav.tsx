@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ThemeToggle } from "@/lib/components/ThemeToggle";
 import type { BootstrapPayload } from "@/lib/types";
 
 const VIEWS = [
@@ -13,10 +14,22 @@ const VIEWS = [
   { href: "/admin", label: "Admin" },
 ];
 
-// Ported from renderNav()/renderWarn() (index.html) -- one shared fetch for
-// both the per-tab counts and the stale-FX-rate check, since both need the
-// same bootstrap payload and neither is worth a dedicated endpoint.
-export function Nav() {
+// Renders the masthead (brand/who) together with the nav so the mobile
+// hamburger button can live inside the header row itself -- the standard
+// place users expect a menu trigger -- and its dropdown can anchor directly
+// under the header. AppLayout stays a server component and just forwards
+// the auth context plus the signOut server action as props.
+export function Nav({
+  orgTitle,
+  email,
+  role,
+  signOutAction,
+}: {
+  orgTitle: string;
+  email: string;
+  role: string;
+  signOutAction: () => Promise<void>;
+}) {
   const pathname = usePathname();
   const [data, setData] = useState<BootstrapPayload | null>(null);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
@@ -58,34 +71,32 @@ export function Nav() {
   });
   const staleDays = (d: string) => ((fetchedAt ?? 0) - new Date(d).getTime()) / 86_400_000;
   const stale = fetchedAt ? Object.entries(latest).filter(([, d]) => staleDays(d) > 14) : [];
-  const current = VIEWS.find((v) => pathname === v.href || pathname.startsWith(v.href + "/"));
   const anyAlert = VIEWS.some((v) => (counts[v.href] ?? [0, false])[1]);
 
   return (
     <>
-      <nav className="nav-top">
-        {VIEWS.map((v) => {
-          const on = pathname === v.href || pathname.startsWith(v.href + "/");
-          const [count, alert] = counts[v.href] ?? [0, false];
-          return (
-            <Link key={v.href} href={v.href} className={on ? "on" : undefined}>
-              {v.label}
-              {count > 0 ? <span className={"n" + (alert ? " alert" : "")}>{count}</span> : null}
-            </Link>
-          );
-        })}
-      </nav>
-      <div className="nav-mobile-bar">
-        <button
-          type="button"
-          className="nav-hamburger"
-          onClick={() => setMenuOpen((o) => !o)}
-          aria-expanded={menuOpen}
-        >
-          <span className="nav-hamburger-icon">☰</span>
-          {current?.label ?? "Menu"}
-          {anyAlert ? <span className="n alert">●</span> : null}
-        </button>
+      <header>
+        <div className="brand">
+          <button
+            type="button"
+            className="nav-hamburger"
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-expanded={menuOpen}
+            aria-label="Menu"
+          >
+            ☰
+            {anyAlert ? <span className="nav-hamburger-dot" /> : null}
+          </button>
+          <h1>{orgTitle || "Safi TMS"}</h1>
+        </div>
+        <div className="who">
+          {email} · {role} ·{" "}
+          <form action={signOutAction} style={{ display: "inline" }}>
+            <button type="submit">sign out</button>
+          </form>
+          {" "}
+          <ThemeToggle />
+        </div>
         {menuOpen ? (
           <nav className="nav-drawer">
             {VIEWS.map((v) => {
@@ -100,8 +111,20 @@ export function Nav() {
             })}
           </nav>
         ) : null}
-      </div>
+      </header>
       {menuOpen ? <div className="nav-drawer-backdrop" onClick={() => setMenuOpen(false)} /> : null}
+      <nav className="nav-top">
+        {VIEWS.map((v) => {
+          const on = pathname === v.href || pathname.startsWith(v.href + "/");
+          const [count, alert] = counts[v.href] ?? [0, false];
+          return (
+            <Link key={v.href} href={v.href} className={on ? "on" : undefined}>
+              {v.label}
+              {count > 0 ? <span className={"n" + (alert ? " alert" : "")}>{count}</span> : null}
+            </Link>
+          );
+        })}
+      </nav>
       {stale.length ? (
         <div className="note warn">
           Exchange rates for {stale.map(([c]) => c).join(", ")} are more than two weeks old. Every cost entered

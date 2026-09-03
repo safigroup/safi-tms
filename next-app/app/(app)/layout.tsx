@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
 import { Nav } from "@/lib/components/Nav";
-import { ThemeToggle } from "@/lib/components/ThemeToggle";
 import { signOut } from "./actions";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
@@ -15,20 +14,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
 
   return (
     <div className="wrap">
-      <header>
-        <div className="brand">
-          <h1>{orgTitle || "Safi TMS"}</h1>
-        </div>
-        <div className="who">
-          {ctx.email} · {ctx.role} ·{" "}
-          <form action={signOut} style={{ display: "inline" }}>
-            <button type="submit">sign out</button>
-          </form>
-          {" "}
-          <ThemeToggle />
-        </div>
-      </header>
-      <Nav />
+      <Nav orgTitle={orgTitle} email={ctx.email} role={ctx.role} signOutAction={signOut} />
       {children}
     </div>
   );

@@ -77,6 +77,7 @@ export type Truck = {
   fleet_no: string;
   horse_reg: string;
   is_active: boolean;
+  purchase_date: string | null;
 };
 
 export type Driver = {
@@ -203,6 +204,27 @@ export type CategoryAmount = {
   avgPricePerLiterUsd?: number;
 };
 
+export type BreakevenMonth = {
+  month: string; // "YYYY-MM"
+  revenue: number;
+  tripCosts: number;
+  operatingCosts: number;
+  net: number;
+  cumulative: number;
+};
+
+// Discriminated on `status`: "no_data" means no purchase date and no
+// recorded activity to derive one from; "reached" means cumulative net
+// cashflow (starting at -investment) has crossed zero; "not_on_track"
+// means the trailing average monthly net is zero or negative, so no
+// projection date is offered; "projected" gives a naive linear-extrapolation
+// date based on that trailing average.
+export type Breakeven =
+  | { investment: number; startDate: null; months: []; status: "no_data" }
+  | { investment: number; startDate: string; months: BreakevenMonth[]; status: "reached"; reachedOn: string }
+  | { investment: number; startDate: string; months: BreakevenMonth[]; status: "not_on_track"; avgMonthlyNet: number }
+  | { investment: number; startDate: string; months: BreakevenMonth[]; status: "projected"; projectedOn: string; avgMonthlyNet: number };
+
 export type TruckReport = {
   truck: Truck;
   from: string | null;
@@ -216,6 +238,7 @@ export type TruckReport = {
   margin: number;
   tripExpensesByCategory: CategoryAmount[];
   standingExpensesByCategory: CategoryAmount[];
+  breakeven: Breakeven;
 };
 
 export type BootstrapPayload = {

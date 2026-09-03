@@ -63,6 +63,7 @@ const ENT_UI: Record<string, { label: string; permission: "fleet" | "commercial"
       { k: "horse_reg", label: "Horse registration", type: "text", req: true, half: true },
       { k: "trailer_reg", label: "Trailer registration", type: "text", half: true },
       { k: "tank_capacity_l", label: "Tank capacity (litres)", type: "number" },
+      { k: "purchase_date", label: "Purchase date", type: "date", hint: "Anchors the breakeven projection on the Reports page." },
       { k: "is_active", label: "Active", type: "bool", def: true },
     ],
     row: (r) => ({

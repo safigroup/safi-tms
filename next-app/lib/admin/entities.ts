@@ -16,7 +16,7 @@ export const ADMIN_ENTITIES = {
   },
   trucks: {
     table: "trucks",
-    columns: ["fleet_no", "make_model", "horse_reg", "trailer_reg", "tank_capacity_l", "is_active"],
+    columns: ["fleet_no", "make_model", "horse_reg", "trailer_reg", "tank_capacity_l", "purchase_date", "is_active"],
     hasToggle: true,
     permission: "fleet",
   },

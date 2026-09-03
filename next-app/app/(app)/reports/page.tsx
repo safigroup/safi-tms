@@ -7,13 +7,13 @@ import { toast } from "sonner";
 import { m0, m2, num, lab, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
 import { Spinner } from "@/lib/components/Spinner";
-import type { BootstrapPayload, TruckReport } from "@/lib/types";
+import type { BootstrapPayload, Breakeven, TruckReport } from "@/lib/types";
 
 // Mirrors lib/auth/permissions.ts's CAN_EDIT_COMMERCIAL -- UI convenience
 // only (hides actions a role can't use), the route handlers are the real check.
 const CAN_EDIT_COMMERCIAL = ["owner", "admin", "finance"];
 
-const CATS = ["maintenance", "insurance", "licensing", "depreciation", "tyres", "repairs", "other"];
+const CATS = ["purchase", "clearing", "registration", "maintenance", "insurance", "licensing", "depreciation", "tyres", "repairs", "other"];
 
 // Accounting convention: a loss is shown in parentheses rather than with a
 // leading minus sign.
@@ -27,6 +27,77 @@ const subheadStyle: CSSProperties = {
   color: "var(--ink-soft)",
   marginBottom: 4,
 };
+
+function monthLabel(key: string) {
+  const [y, m] = key.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+}
+
+function BreakevenPanel({ breakeven }: { breakeven: Breakeven }) {
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head"><h2>Asset breakeven</h2></div>
+      <div className="panel-body">
+        {breakeven.status === "no_data" ? (
+          <div className="d-hint">
+            No purchase date set and no cost or trip history yet. Set a purchase date for this truck under Admin → Fleet to start tracking breakeven.
+          </div>
+        ) : (
+          <>
+            <div className="d-kv"><span>Total investment</span><span>{m2(breakeven.investment)}</span></div>
+            <div className="d-kv"><span>Purchase date</span><span>{breakeven.startDate}</span></div>
+            <div
+              className="d-kv"
+              style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--rule-soft)", fontWeight: 600 }}
+            >
+              <span>Status</span>
+              <span
+                style={{
+                  color: breakeven.status === "reached"
+                    ? "var(--settled)"
+                    : breakeven.status === "not_on_track"
+                      ? "var(--alert)"
+                      : "var(--waiting)",
+                }}
+              >
+                {breakeven.status === "reached"
+                  ? `Broke even ${monthLabel(breakeven.reachedOn)}`
+                  : breakeven.status === "projected"
+                    ? `Projected ${monthLabel(breakeven.projectedOn)}`
+                    : "Not on track at current pace"}
+              </span>
+            </div>
+            {breakeven.status !== "reached" ? (
+              <div className="d-hint" style={{ marginTop: 4 }}>
+                Based on an average net of {m2(breakeven.avgMonthlyNet)}/month over the trailing 6 months.{" "}
+                {breakeven.status === "not_on_track"
+                  ? "Costs have outpaced revenue recently, so no breakeven date is projected."
+                  : "This is a straight-line estimate from recent performance, not a forecast."}
+              </div>
+            ) : null}
+            <div style={{ marginTop: 13 }}>
+              <div style={subheadStyle}>Monthly cashflow since purchase</div>
+              <ul className="list" style={{ maxHeight: 260 }}>
+                {breakeven.months.map((mo) => (
+                  <li key={mo.month}>
+                    <div>
+                      <div className="r-no">{monthLabel(mo.month)}</div>
+                      <div className="r-mono">rev {m0(mo.revenue)} · trip {m0(mo.tripCosts)} · other {m0(mo.operatingCosts)}</div>
+                    </div>
+                    <div className="r-right">
+                      <div className={"r-amt " + (mo.net >= 0 ? "pos" : "neg")}>{pl(mo.net)}</div>
+                      <div className="r-min">cum {pl(mo.cumulative)}</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function ReportsPage() {
   const router = useRouter();
@@ -195,6 +266,8 @@ export default function ReportsPage() {
               </div>
             </div>
           </div>
+
+          <BreakevenPanel breakeven={report.breakeven} />
 
           <div className="grid">
             {canEdit ? (
@@ -457,6 +530,29 @@ function ReportPrintSheet({ report, onDone }: { report: TruckReport; onDone: () 
         <div><span>Total expenses</span><span>− {m2(report.totalExpenses)}</span></div>
         <div className="due"><span>Net profit / (loss)</span><span>{pl(report.margin)}</span></div>
       </div>
+      {report.breakeven.status !== "no_data" ? (
+        <>
+          <h4 style={{ fontFamily: "var(--mono)", fontSize: 9.5, letterSpacing: ".14em", textTransform: "uppercase", color: "#666", marginTop: 26 }}>
+            Asset breakeven
+          </h4>
+          <table style={{ marginTop: 8 }}>
+            <tbody>
+              <tr><td>Total investment</td><td className="num">{m2(report.breakeven.investment)}</td></tr>
+              <tr><td>Purchase date</td><td className="num">{report.breakeven.startDate}</td></tr>
+              <tr>
+                <td>Status</td>
+                <td className="num">
+                  {report.breakeven.status === "reached"
+                    ? `Broke even ${monthLabel(report.breakeven.reachedOn)}`
+                    : report.breakeven.status === "projected"
+                      ? `Projected ${monthLabel(report.breakeven.projectedOn)}`
+                      : "Not on track at current pace"}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </>
+      ) : null}
     </div>,
     document.body,
   );

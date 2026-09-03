@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { m2, lab, today } from "@/lib/format";
 import { prepareFile } from "@/lib/imagePrep";
 import { saveCostDraft, loadCostDraft, clearCostDraft, type CostDraft } from "@/lib/costDraft";
 import { Spinner } from "@/lib/components/Spinner";
+import { COMPANY } from "@/lib/company";
 import type { AuditLogEntry, BootstrapPayload, BoardTrip, TripCost, TripDocument } from "@/lib/types";
 
 const CATS = [
@@ -43,6 +45,11 @@ export default function DocketPage() {
   const [formNote, setFormNote] = useState<string | null>(null);
   const [editingCostId, setEditingCostId] = useState<string | null>(null);
   const [selectedCostIds, setSelectedCostIds] = useState<Set<string>>(new Set());
+  const [printJob, setPrintJob] = useState<{ trip: BoardTrip; costs: TripCost[] } | null>(null);
+
+  useEffect(() => {
+    if (printJob) window.print();
+  }, [printJob]);
 
   async function loadBootstrap() {
     const res = await fetch("/api/bootstrap");
@@ -254,7 +261,10 @@ export default function DocketPage() {
       <div className="panel">
         {trip ? (
           <div className="d-head">
-            <div className="r-no">{trip.trip_no} · <span className="pill grey">{lab(trip.status)}</span></div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+              <div className="r-no">{trip.trip_no} · <span className="pill grey">{lab(trip.status)}</span></div>
+              <button type="button" className="act" onClick={() => setPrintJob({ trip, costs })}>Print ledger</button>
+            </div>
             <div className="r-title" style={{ fontSize: 18 }}>{trip.customer}</div>
             <div className="r-sub">{trip.route}{trip.fleet_no ? " · " + trip.fleet_no : ""}</div>
             <div className="d-figs">
@@ -452,7 +462,94 @@ export default function DocketPage() {
           }}
         />
       ) : null}
+      {printJob ? <LedgerPrintSheet trip={printJob.trip} costs={printJob.costs} onDone={() => setPrintJob(null)} /> : null}
     </>
+  );
+}
+
+function LedgerPrintSheet({
+  trip,
+  costs,
+  onDone,
+}: {
+  trip: BoardTrip;
+  costs: TripCost[];
+  onDone: () => void;
+}) {
+  useEffect(() => {
+    const handler = () => onDone();
+    window.addEventListener("afterprint", handler);
+    return () => window.removeEventListener("afterprint", handler);
+  }, [onDone]);
+
+  const total = costs.reduce((s, c) => s + Number(c.amount_usd), 0);
+
+  return createPortal(
+    <div id="sheet">
+      <div className="ih">
+        <div className="co">
+          <h1>{COMPANY.name}</h1>
+          <p>{COMPANY.reg}<br />{COMPANY.address}<br />{COMPANY.phone} · {COMPANY.email}</p>
+        </div>
+        <div className="im">
+          <div className="big">Trip Ledger</div>
+          {trip.trip_no}<br />Printed {today()}
+        </div>
+      </div>
+      <div className="parties">
+        <div>
+          <h4>Trip</h4>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>{trip.customer}</div>
+          <div style={{ fontSize: 11.5, color: "#444" }}>
+            {trip.route}<br />
+            {trip.fleet_no ? <>Truck {trip.fleet_no}{trip.horse_reg ? " · " + trip.horse_reg : ""}<br /></> : null}
+            {trip.driver ? <>Driver {trip.driver}<br /></> : null}
+            {trip.commodity ? <>{trip.commodity}{trip.tonnage ? " · " + trip.tonnage + " t" : ""}<br /></> : null}
+            {trip.container_no ? <>Container {trip.container_no}</> : null}
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <h4>Status</h4>
+          <div style={{ fontSize: 13 }}>{lab(trip.status)}</div>
+          <div style={{ fontSize: 11.5, color: "#444", marginTop: 8 }}>
+            {trip.actual_load_date ? <>Loaded {trip.actual_load_date}<br /></> : null}
+            {trip.actual_delivery_at ? <>Delivered {trip.actual_delivery_at.slice(0, 10)}</> : null}
+          </div>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Category</th>
+            <th>Description</th>
+            <th>Currency</th>
+            <th className="num">Amount</th>
+            <th className="num">USD</th>
+          </tr>
+        </thead>
+        <tbody>
+          {costs.length ? costs.map((c) => (
+            <tr key={c.id}>
+              <td>{c.incurred_on}</td>
+              <td>{lab(c.category)}</td>
+              <td>{c.description || "—"}{c.location ? " · " + c.location : ""}</td>
+              <td>{c.currency}</td>
+              <td className="num">{c.currency !== "USD" ? m2(c.amount, c.currency) : "—"}</td>
+              <td className="num">{m2(c.amount_usd)}</td>
+            </tr>
+          )) : (
+            <tr><td colSpan={6} style={{ textAlign: "center", color: "#666" }}>No costs recorded on this trip.</td></tr>
+          )}
+        </tbody>
+      </table>
+      <div className="totals">
+        <div><span>Revenue</span><span>{m2(trip.revenue_usd)}</span></div>
+        <div><span>Total costs</span><span>{m2(total)}</span></div>
+        <div className="due"><span>Margin</span><span>{m2(Number(trip.revenue_usd) - total)}</span></div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

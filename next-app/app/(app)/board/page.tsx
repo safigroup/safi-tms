@@ -365,6 +365,7 @@ function TripDetail({
         <div className="d-kv"><span>Driver</span><span>{trip.driver || "—"}</span></div>
         <div className="d-kv"><span>Cargo</span><span>{trip.commodity || "—"}{trip.tonnage ? " · " + trip.tonnage + " t" : ""}</span></div>
         <div className="d-kv"><span>Container</span><span>{trip.container_no || "—"}</span></div>
+        <div className="d-kv"><span>Agent</span><span>{trip.agent_name || "—"}</span></div>
       </div>
       <div className="d-sec">
         <h3>Timing</h3>
@@ -403,6 +404,7 @@ function TripEditForm({
   const [tonnage, setTonnage] = useState(trip.tonnage != null ? String(trip.tonnage) : "");
   const [containerNo, setContainerNo] = useState(trip.container_no ?? "");
   const [sealNo, setSealNo] = useState(trip.seal_no ?? "");
+  const [agentName, setAgentName] = useState(trip.agent_name ?? "");
   const [revenue, setRevenue] = useState(String(trip.revenue_usd));
   const [actualLoadDate, setActualLoadDate] = useState(trip.actual_load_date ?? "");
   const [plannedEta, setPlannedEta] = useState(trip.planned_eta ?? "");
@@ -444,6 +446,7 @@ function TripEditForm({
         tonnage: tonnage ? Number(tonnage) : null,
         container_no: containerNo.trim() || null,
         seal_no: sealNo.trim() || null,
+        agent_name: agentName.trim() || null,
         borders: chosenPath ? chosenPath.borders : null,
         revenue_amount: rev,
         actual_load_date: actualLoadDate || null,
@@ -524,6 +527,10 @@ function TripEditForm({
           </div>
         </div>
         <div className="field">
+          <label htmlFor="eAgent">Agent</label>
+          <input id="eAgent" type="text" placeholder="Clearing/booking agent" value={agentName} onChange={(e) => setAgentName(e.target.value)} />
+        </div>
+        <div className="field">
           <label htmlFor="eRev">Revenue (USD)</label>
           <input id="eRev" type="number" step="0.01" min="0" value={revenue} onChange={(e) => setRevenue(e.target.value)} />
         </div>
@@ -588,6 +595,7 @@ function NewTripForm({
   const [tonnage, setTonnage] = useState("");
   const [containerNo, setContainerNo] = useState("");
   const [sealNo, setSealNo] = useState("");
+  const [agentName, setAgentName] = useState("");
   const [loadDate, setLoadDate] = useState(today());
   const [eta, setEta] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -641,6 +649,7 @@ function NewTripForm({
         tonnage: tonnage ? Number(tonnage) : null,
         containerNo: containerNo.trim() || null,
         sealNo: sealNo.trim() || null,
+        agentName: agentName.trim() || null,
         loadDate: loadDate || null,
         eta: eta || null,
         borders: chosenPath ? chosenPath.borders : null,
@@ -740,6 +749,10 @@ function NewTripForm({
           <label htmlFor="nSeal">Seal</label>
           <input id="nSeal" type="text" value={sealNo} onChange={(e) => setSealNo(e.target.value)} />
         </div>
+      </div>
+      <div className="field">
+        <label htmlFor="nAgent">Agent</label>
+        <input id="nAgent" type="text" placeholder="Clearing/booking agent" value={agentName} onChange={(e) => setAgentName(e.target.value)} />
       </div>
       <div className="row">
         <div className="field">

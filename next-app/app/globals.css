@@ -82,6 +82,7 @@ body {
 
 /* masthead + nav */
 header {
+  position: relative;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -96,6 +97,33 @@ header {
   display: flex;
   align-items: baseline;
   gap: 11px
+}
+
+.nav-hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 32px;
+  height: 32px;
+  background: var(--stamp-wash);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--stamp);
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0
+}
+
+.nav-hamburger-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--waiting);
+  border: 1.5px solid var(--card)
 }
 
 .brand h1 {
@@ -199,67 +227,73 @@ nav a.on .n {
   color: #fff
 }
 
-/* bottom tab bar (mobile nav) */
-.nav-mobile {
-  display: none
-}
-
+/* hamburger menu (mobile nav) -- trigger lives in the header itself, next
+   to the brand, since that's where users expect a menu control; its
+   dropdown anchors to the header and spans full width below it. */
 @media(max-width:760px) {
   nav.nav-top {
     display: none
   }
 
-  .nav-mobile {
-    display: flex;
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 40;
-    background: var(--card);
-    border-top: 1px solid var(--rule);
-    box-shadow: var(--shadow-pop);
-    padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px))
+  .nav-hamburger {
+    display: flex
   }
 
-  .nav-mobile a {
-    flex: 1;
+  .nav-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgba(20, 22, 26, .28)
+  }
+
+  .nav-drawer {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 51;
     display: flex;
     flex-direction: column;
-    align-items: center;
     gap: 2px;
-    padding: 6px 4px;
+    padding: 6px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-pop)
+  }
+
+  .nav-drawer a {
+    display: flex;
+    align-items: center;
+    padding: 12px 12px;
     border-radius: var(--radius-sm);
     color: var(--ink-soft);
     text-decoration: none;
     font-family: var(--sans);
-    font-size: 11px;
     font-weight: 600;
-    text-align: center
+    font-size: 14px
   }
 
-  .nav-mobile a.on {
+  .nav-drawer a.on {
+    background: var(--stamp-wash);
     color: var(--stamp)
   }
 
-  .nav-mobile .n {
+  .nav-drawer .n {
+    margin-left: auto;
     font-family: var(--mono);
-    font-size: 9.5px;
+    font-size: 10.5px;
     opacity: .7
   }
 
-  .nav-mobile a.on .n,
-  .nav-mobile .n.alert {
+  .nav-drawer a.on .n,
+  .nav-drawer .n.alert {
     opacity: 1;
     color: var(--waiting)
   }
 
-  .nav-mobile a.on .n {
+  .nav-drawer a.on .n {
     color: var(--stamp)
-  }
-
-  .wrap {
-    padding-bottom: 78px
   }
 
   header {

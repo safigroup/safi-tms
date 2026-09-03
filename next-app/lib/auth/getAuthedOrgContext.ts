@@ -1,9 +1,17 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClientInternal } from "@/lib/supabase/admin";
+import { checkPlatformAdmin } from "./platformAdmin";
 
 export type OrgRole = "owner" | "admin" | "ops" | "finance" | "viewer";
+
+// Set by the setActiveOrg server action (app/(app)/actions.ts) -- a
+// platform admin's choice of which org to view/edit. Deliberately a
+// session cookie (no maxAge): a fresh browser session always re-resolves
+// rather than silently persisting a "viewing org X" state indefinitely.
+export const ACTIVE_ORG_COOKIE = "safi:activeOrg";
 
 type AuthedOrgContext = {
   ok: true;
@@ -13,12 +21,14 @@ type AuthedOrgContext = {
   orgName: string;
   role: OrgRole;
   admin: SupabaseClient;
+  isPlatformAdmin: boolean;
 };
 
 type UnauthedResult = {
   ok: false;
   status: 401 | 403;
   reason: string;
+  isPlatformAdmin?: boolean;
 };
 
 /**
@@ -41,6 +51,14 @@ type UnauthedResult = {
  *    membership row, because Postgres won't let the query see it.
  * 3. Only after both checks pass does this function hand back a
  *    service-role client at all.
+ *
+ * Platform admins (lib/auth/platformAdmin.ts) are the one exception to
+ * "one user, one org": if the caller is a platform admin AND has an active
+ * org selected (the ACTIVE_ORG_COOKIE, set via setActiveOrg), that org is
+ * resolved directly with a synthetic "owner" role, reusing every existing
+ * permission check as-is instead of introducing a parallel one. This
+ * function's return shape is otherwise unchanged, so no existing route
+ * needs to know platform admins exist at all.
  */
 export async function getAuthedOrgContext(): Promise<
   AuthedOrgContext | UnauthedResult
@@ -55,6 +73,34 @@ export async function getAuthedOrgContext(): Promise<
   if (userError || !user) {
     console.error("[getAuthedOrgContext] auth.getUser() failed:", userError?.message ?? "no user in session");
     return { ok: false, status: 401, reason: "not signed in" };
+  }
+
+  const isPlatformAdmin = await checkPlatformAdmin(supabase, user.id);
+
+  if (isPlatformAdmin) {
+    const activeOrgId = (await cookies()).get(ACTIVE_ORG_COOKIE)?.value;
+    if (activeOrgId) {
+      const admin = createAdminClientInternal();
+      const { data: org } = await admin
+        .from("organizations")
+        .select("id, name")
+        .eq("id", activeOrgId)
+        .maybeSingle();
+      if (org) {
+        return {
+          ok: true,
+          userId: user.id,
+          email: user.email ?? "",
+          orgId: org.id,
+          orgName: org.name,
+          role: "owner",
+          admin,
+          isPlatformAdmin: true,
+        };
+      }
+      // Stale/deleted org id in the cookie -- fall through to the
+      // membership lookup below rather than failing outright.
+    }
   }
 
   const { data: membership, error: membershipError } = await supabase
@@ -78,6 +124,7 @@ export async function getAuthedOrgContext(): Promise<
       ok: false,
       status: 403,
       reason: "not a member of any organisation",
+      isPlatformAdmin,
     };
   }
 
@@ -89,5 +136,6 @@ export async function getAuthedOrgContext(): Promise<
     orgName: membership.organizations?.name ?? "",
     role: membership.role,
     admin: createAdminClientInternal(),
+    isPlatformAdmin,
   };
 }

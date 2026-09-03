@@ -178,16 +178,24 @@ header {
 }
 
 .org-switch {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   width: auto;
   font-family: var(--sans);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
   color: var(--stamp);
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer
+  background: var(--stamp-wash);
+  border: 1px solid var(--stamp);
+  border-radius: 999px;
+  padding: 5px 11px;
+  cursor: pointer;
+  transition: background-color .12s ease, color .12s ease
+}
+
+.org-switch:hover {
+  background: var(--stamp);
+  color: #fff
 }
 
 nav {

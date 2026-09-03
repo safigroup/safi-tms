@@ -505,7 +505,8 @@ function LedgerPrintSheet({
             {trip.fleet_no ? <>Truck {trip.fleet_no}{trip.horse_reg ? " · " + trip.horse_reg : ""}<br /></> : null}
             {trip.driver ? <>Driver {trip.driver}<br /></> : null}
             {trip.commodity ? <>{trip.commodity}{trip.tonnage ? " · " + trip.tonnage + " t" : ""}<br /></> : null}
-            {trip.container_no ? <>Container {trip.container_no}</> : null}
+            {trip.container_no ? <>Container {trip.container_no}<br /></> : null}
+            {trip.agent_name ? <>Agent {trip.agent_name}</> : null}
           </div>
         </div>
         <div style={{ textAlign: "right" }}>

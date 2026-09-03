@@ -48,6 +48,7 @@ export type BoardTrip = {
   driver_id: string | null;
   truck_id: string | null;
   seal_no: string | null;
+  agent_name: string | null;
 };
 
 export type Customer = {

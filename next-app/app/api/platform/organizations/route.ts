@@ -24,6 +24,14 @@ export async function GET() {
 // app/api/admin/invites/route.ts, just parameterized by the org just
 // created here instead of the caller's own ctx.orgId, and always role
 // "owner" since this is the org's very first member.
+//
+// Order matters: the invite is generated *before* the organization is
+// created. generateLink() is the step most likely to fail (most commonly
+// because ownerEmail already has an account), and failing there first means
+// nothing has been written yet -- no orphaned organization left behind for
+// the caller to clean up by hand. The remaining membership-insert step
+// essentially can't fail (both ids were just created), but if it somehow
+// does, the organization is deleted again rather than left ownerless.
 export async function POST(request: Request) {
   const ctx = await getAuthedPlatformAdmin();
   if (!ctx.ok) {
@@ -38,6 +46,15 @@ export async function POST(request: Request) {
   }
   if (!ownerEmail?.trim()) {
     return NextResponse.json({ error: "The new organization's owner email is required." }, { status: 400 });
+  }
+
+  const { data, error } = await ctx.admin.auth.admin.generateLink({
+    type: "invite",
+    email: ownerEmail.trim(),
+  });
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
   const { data: org, error: orgError } = await ctx.admin
@@ -56,15 +73,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: orgError.message }, { status: 400 });
   }
 
-  const { data, error } = await ctx.admin.auth.admin.generateLink({
-    type: "invite",
-    email: ownerEmail.trim(),
-  });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
-  }
-
   const { error: membershipError } = await ctx.admin.from("memberships").insert({
     org_id: org.id,
     user_id: data.user.id,
@@ -72,6 +80,7 @@ export async function POST(request: Request) {
   });
 
   if (membershipError) {
+    await ctx.admin.from("organizations").delete().eq("id", org.id);
     return NextResponse.json({ error: membershipError.message }, { status: 400 });
   }
 

@@ -3,6 +3,18 @@
 
 export type OrgRole = "owner" | "admin" | "ops" | "finance" | "viewer";
 
+// Returned by /api/platform/organizations -- platform-admin only, unrelated
+// to any single org's own bootstrap payload.
+export type Organization = {
+  id: string;
+  name: string;
+  country: string;
+  base_currency: string;
+  trip_prefix: string;
+  invoice_prefix: string;
+  created_at: string;
+};
+
 export type TripStatus =
   | "draft"
   | "allocated"

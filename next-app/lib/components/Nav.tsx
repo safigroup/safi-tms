@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { toast } from "sonner";
 import { ThemeToggle } from "@/lib/components/ThemeToggle";
-import type { BootstrapPayload } from "@/lib/types";
+import { setActiveOrg } from "@/app/(app)/actions";
+import type { BootstrapPayload, Organization } from "@/lib/types";
 
 const VIEWS = [
   { href: "/board", label: "Board" },
@@ -21,19 +23,24 @@ const VIEWS = [
 // the auth context plus the signOut server action as props.
 export function Nav({
   orgTitle,
+  orgId,
   email,
   role,
+  isPlatformAdmin,
   signOutAction,
 }: {
   orgTitle: string;
+  orgId: string;
   email: string;
   role: string;
+  isPlatformAdmin: boolean;
   signOutAction: () => Promise<void>;
 }) {
   const pathname = usePathname();
   const [data, setData] = useState<BootstrapPayload | null>(null);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [orgs, setOrgs] = useState<Organization[] | null>(null);
 
   useEffect(() => {
     fetch("/api/bootstrap")
@@ -44,12 +51,35 @@ export function Nav({
       });
   }, []);
 
+  useEffect(() => {
+    if (!isPlatformAdmin) return;
+    fetch("/api/platform/organizations")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body: { organizations: Organization[] } | null) => setOrgs(body?.organizations ?? []));
+  }, [isPlatformAdmin]);
+
   // Closes the mobile drawer after a link click navigates (Link doesn't
   // remount Nav, so without this the menu would stay open on the new page).
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- closing the drawer is a reaction to navigation having already happened, not derived render state
     setMenuOpen(false);
   }, [pathname]);
+
+  async function switchOrg(id: string) {
+    try {
+      await setActiveOrg(id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't switch organization");
+      return;
+    }
+    // Full navigation, not router.push/refresh -- every client component
+    // on the page (this one included) fetches its own data in a
+    // mount-once effect, which a client-side transition wouldn't re-run.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- deliberate: a router.push transition would leave stale client-fetched state (nav badges, bootstrap data) behind
+    window.location.assign("/board");
+  }
+
+  const views = isPlatformAdmin ? [...VIEWS, { href: "/organizations", label: "Organizations" }] : VIEWS;
 
   const rolling = data?.board.filter((t) => ["loading", "in_transit", "at_border"].includes(t.status)).length ?? 0;
   const pod = data?.board.filter((t) => t.status === "delivered" && !t.pod_in_hand).length ?? 0;
@@ -71,7 +101,7 @@ export function Nav({
   });
   const staleDays = (d: string) => ((fetchedAt ?? 0) - new Date(d).getTime()) / 86_400_000;
   const stale = fetchedAt ? Object.entries(latest).filter(([, d]) => staleDays(d) > 14) : [];
-  const anyAlert = VIEWS.some((v) => (counts[v.href] ?? [0, false])[1]);
+  const anyAlert = views.some((v) => (counts[v.href] ?? [0, false])[1]);
 
   return (
     <>
@@ -88,9 +118,20 @@ export function Nav({
             {anyAlert ? <span className="nav-hamburger-dot" /> : null}
           </button>
           <h1>{orgTitle || "Safi TMS"}</h1>
+          {isPlatformAdmin ? (
+            <select
+              className="org-switch"
+              value={orgId}
+              onChange={(e) => switchOrg(e.target.value)}
+              aria-label="Viewing organization"
+            >
+              {(orgs ?? []).map((o) => <option key={o.id} value={o.id}>🏢 {o.name.replace(/ Limited$/, "")}</option>)}
+            </select>
+          ) : null}
         </div>
         <div className="who">
-          {email} · {role} ·{" "}
+          {email} · {role}
+          {" "}·{" "}
           <form action={signOutAction} style={{ display: "inline" }}>
             <button type="submit">sign out</button>
           </form>
@@ -99,7 +140,7 @@ export function Nav({
         </div>
         {menuOpen ? (
           <nav className="nav-drawer">
-            {VIEWS.map((v) => {
+            {views.map((v) => {
               const on = pathname === v.href || pathname.startsWith(v.href + "/");
               const [count, alert] = counts[v.href] ?? [0, false];
               return (
@@ -114,7 +155,7 @@ export function Nav({
       </header>
       {menuOpen ? <div className="nav-drawer-backdrop" onClick={() => setMenuOpen(false)} /> : null}
       <nav className="nav-top">
-        {VIEWS.map((v) => {
+        {views.map((v) => {
           const on = pathname === v.href || pathname.startsWith(v.href + "/");
           const [count, alert] = counts[v.href] ?? [0, false];
           return (

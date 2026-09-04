@@ -96,6 +96,7 @@ header {
 .brand {
   display: flex;
   align-items: baseline;
+  flex-wrap: wrap;
   gap: 11px
 }
 
@@ -177,6 +178,39 @@ header {
   background: var(--stamp-wash)
 }
 
+.org-switch {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--stamp);
+  background: var(--stamp-wash);
+  border: 1px solid var(--stamp);
+  border-radius: var(--radius-sm);
+  padding: 5px 11px;
+  cursor: pointer;
+  transition: background-color .12s ease, color .12s ease
+}
+
+@media(max-width:760px) {
+  .org-switch {
+    max-width: 200px
+  }
+}
+
+.org-switch:hover {
+  background: var(--stamp);
+  color: #fff
+}
+
 nav {
   display: flex;
   gap: 4px;
@@ -236,7 +270,9 @@ nav a.on .n {
   }
 
   .nav-hamburger {
-    display: flex
+    display: flex;
+    order: 2;
+    margin-left: auto
   }
 
   .nav-drawer-backdrop {

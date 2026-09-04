@@ -125,7 +125,7 @@ export function Nav({
               onChange={(e) => switchOrg(e.target.value)}
               aria-label="Viewing organization"
             >
-              {(orgs ?? []).map((o) => <option key={o.id} value={o.id}>🏢 {o.name}</option>)}
+              {(orgs ?? []).map((o) => <option key={o.id} value={o.id}>🏢 {o.name.replace(/ Limited$/, "")}</option>)}
             </select>
           ) : null}
         </div>

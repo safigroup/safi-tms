@@ -270,7 +270,9 @@ nav a.on .n {
   }
 
   .nav-hamburger {
-    display: flex
+    display: flex;
+    order: 2;
+    margin-left: auto
   }
 
   .nav-drawer-backdrop {

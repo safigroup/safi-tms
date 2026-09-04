@@ -118,22 +118,19 @@ export function Nav({
             {anyAlert ? <span className="nav-hamburger-dot" /> : null}
           </button>
           <h1>{orgTitle || "Safi TMS"}</h1>
+          {isPlatformAdmin ? (
+            <select
+              className="org-switch"
+              value={orgId}
+              onChange={(e) => switchOrg(e.target.value)}
+              aria-label="Viewing organization"
+            >
+              {(orgs ?? []).map((o) => <option key={o.id} value={o.id}>🏢 {o.name}</option>)}
+            </select>
+          ) : null}
         </div>
         <div className="who">
           {email} · {role}
-          {isPlatformAdmin ? (
-            <>
-              {" "}
-              <select
-                className="org-switch"
-                value={orgId}
-                onChange={(e) => switchOrg(e.target.value)}
-                aria-label="Viewing organization"
-              >
-                {(orgs ?? []).map((o) => <option key={o.id} value={o.id}>🏢 {o.name}</option>)}
-              </select>
-            </>
-          ) : null}
           {" "}·{" "}
           <form action={signOutAction} style={{ display: "inline" }}>
             <button type="submit">sign out</button>

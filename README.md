@@ -1,72 +1,86 @@
 # Safi TMS
 
-A single-page transport management system for **Safi Transport and Logistics Limited** — trip tracking, cost capture, document management, and invoicing for cross-border freight (Zambia / Tanzania / DRC corridor).
+A transport management system for **Safi Transport and Logistics Limited** — trip tracking, cost capture, document management, billing, and per-truck financial reporting for cross-border freight (Zambia / Tanzania / DRC corridor).
 
-Live at: https://safigroup.github.io/safi-tms/
+Production: https://next-app-mocha-psi.vercel.app (no custom domain configured yet) — the app lives in `next-app/`.
 
 ## What this is
 
-One HTML file (`index.html`, ~2,300 lines) — no build step, no framework, no bundler. Plain JS renders everything client-side against a [Supabase](https://supabase.com) backend (Postgres + Auth + Storage). Deployed as-is to GitHub Pages: edit `index.html`, commit, push to `main`, and the live site updates within a minute or two.
+A Next.js 16 (App Router, TypeScript) application, deployed on Vercel. All database and storage access goes through server-side API routes using a Supabase `service_role` key — the browser never talks to Supabase directly, and every route resolves the caller's organization and role first (`lib/auth/getAuthedOrgContext.ts`) before touching any data. This replaced an earlier single-file `index.html` app that talked to Supabase directly from the browser with the anon key; that file, `vendor/`, and `archives/` at the repo root are leftover from that architecture and are no longer where active development happens (see **Legacy `index.html` app** below — it is, as of this writing, still technically live).
 
-Four views, driven by trip status:
+### Views
 
-- **Board** — trip lifecycle: draft → allocated → loading → in transit → at border → delivered → POD received → invoiced → closed
-- **Cost docket** — record trip costs (fuel, border fees, tolls, etc.) with receipt photos; manage trip documents (POD, consignment note, T1 transit, etc.)
-- **Billing** — raise invoices (50% on loading / 50% on delivery, gated on POD being in hand), record payments, track receivables ageing
-- **Admin** — master data: customers, trucks, drivers, routes, rate cards, FX rates
+- **Board** — trip lifecycle: draft → allocated → loading → in transit → at border → delivered → POD received → invoiced → closed. Routes can have multiple alternate border-crossing paths (e.g. via Kasumbalesa or via Mokambo); owner/admin can retroactively edit trip details with a field-level audit trail.
+- **Cost docket** — record trip costs (fuel with liters/price-per-liter auto-costing, border fees, tolls, etc.) with receipt photos; bulk-import costs from CSV/Excel; bulk-select and delete ledger entries; print a trip's full cost ledger; manage trip documents (POD, consignment note, T1 transit, etc.).
+- **Billing** — raise invoices (50% on loading / 50% on delivery, delivery half gated on POD being in hand), record payments, track receivables ageing, cancel invoices.
+- **Reports** — per-truck revenue/expense P&L with a category breakdown, a standing-cost ledger (maintenance, insurance, tyres, licensing, etc.), and asset breakeven tracking: purchase/clearing/registration costs are kept separate from running costs so the app can show cumulative net cashflow since a truck's purchase date and either when it broke even or a projected date at its recent pace.
+- **Admin** — master data (customers, trucks, drivers, routes with border paths, rate cards, FX rates), team management via email invites, and the same audit-trailed record-override capability as Board.
+- **Organizations** (platform-admin only) — create new, fully isolated organizations and invite their first owner in one step; switch which organization you're currently viewing/editing via a header dropdown. See **Platform admins** below.
+
+Roles are per-organization — owner, admin, ops, finance, viewer — and enforced server-side (`lib/auth/permissions.ts`), not just hidden in the UI.
 
 ## Structure
 
 ```
-index.html                          the app
-vendor/
-  supabase-js.min.js                vendored @supabase/supabase-js UMD bundle
-  migration-cancel-invoice.sql      DB migration for invoice cancellation (see Database below)
-archives/                           earlier split-view drafts, kept for reference — not part of the live app
-.nojekyll                           tells GitHub Pages not to run this through Jekyll
+next-app/                     the application — see next-app/README.md for local dev setup
+  app/(app)/                  authenticated pages: board, docket, billing, reports, admin, organizations
+  app/api/                    server route handlers — the only code allowed to hold a service-role client
+  app/login/, accept-invite/, forgot-password/, reset-password/   public auth pages
+  lib/auth/                   getAuthedOrgContext (per-org), getAuthedPlatformAdmin (cross-org), permissions.ts
+  lib/components/             shared client components (Nav, ThemeToggle, OrganizationsPicker, Spinner)
+  supabase/migrations/        tracked schema history — applied to staging, then production, explicitly
+  supabase/seed.sql           staging-only reference data, deliberately not in migrations/
+index.html, vendor/, archives/   the pre-Next.js single-file app — legacy, see below
 ```
 
-## Configuration
+## Environments
 
-Near the top of `index.html`'s `<script>` block:
+Two separate Supabase projects — **staging** and **production** — that never share data. A schema change is written once as a migration and applied to both explicitly, one at a time (`supabase link --project-ref <ref>` then `supabase db push --linked`); nothing auto-syncs between them.
 
-```js
-const SUPABASE_URL = "https://shvvpcmcezkfzdvelhpl.supabase.co/";
-const SUPABASE_KEY = "sb_publishable_...";   // the PUBLISHABLE/anon key — safe to be public, see Security notes below
-const COMPANY = { name, reg, address, phone, email, bank };  // printed on every invoice
+Vercel deploys a Preview on every push. `safi-tms-staging.vercel.app` is a stable alias kept pointed at whichever preview is current, so there's always one URL to test against while iterating. Production is whatever's on `main`.
+
+## Roles & permissions
+
+| Capability | Roles |
+|---|---|
+| Manage trips (create/advance/log border events/costs) | owner, admin, ops |
+| Manage billing (raise invoices, record payments) | owner, admin, finance |
+| Edit fleet data (trucks, drivers, routes) | owner, admin, ops |
+| Edit commercial data (customers, rate cards, FX rates) | owner, admin, finance |
+| Manage team (invite/remove members) | owner, admin |
+| Override an already-recorded trip/ledger entry | owner, admin |
+| Cross-organization access (create orgs, switch active org) | platform admins only — separate from the table above |
+
+### Platform admins
+
+A tier above the per-org role model, for the handful of people who need to see across every organization rather than just their own. Backed by a `platform_admins` table with exactly one RLS policy (`select using (user_id = auth.uid())`) and **no insert/update/delete policy at all** — nothing in the app can grant this access. It is only ever granted by running SQL directly against a project:
+
+```sql
+insert into platform_admins (user_id) select id from auth.users where email = '...';
 ```
 
-There's currently only one Supabase project (production) — no separate dev/staging environment exists yet (see Known gaps).
-
-## Why `vendor/supabase-js.min.js` exists
-
-`@supabase/supabase-js` used to load from `cdn.jsdelivr.net`. It's now vendored locally so the app still boots on networks that block third-party CDNs — border-post and corporate wifi being the two that actually matter for this app's users. Currently pinned to **v2.112.3**.
-
-To update it: re-download from `https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2` and replace `vendor/supabase-js.min.js`. If it ever fails to load (missing file, wrong deploy path), the app shows a clear error on the sign-in screen instead of hanging blank.
+A platform admin with an organization selected (via the header dropdown) is resolved with a synthetic `owner` role for that org, reusing every existing permission check as-is — every page works against whichever org is currently selected, completely unmodified.
 
 ## Database
 
-Supabase project ref: `shvvpcmcezkfzdvelhpl`. Schema, RLS policies, and functions live in Supabase itself, not in this repo — there's no Supabase CLI link or migration history set up yet (see Known gaps).
+Schema, RLS policies, and Postgres functions are tracked as migrations in `next-app/supabase/migrations/` and applied via the Supabase CLI — there is no schema drift between what's in the repo and what's live. Notable pitfalls documented inline in the migrations themselves:
 
-**`vendor/migration-cancel-invoice.sql`** adds invoice cancellation: audit columns (`cancelled_at`, `cancel_reason`) on `invoices`, a `cancel_invoice(p_invoice, p_reason)` RPC, and an `invoice_ar` view update so cancelled invoices stay visible instead of disappearing. **Not yet confirmed applied** — run it once via the Supabase SQL editor before relying on the "Cancel invoice" button in Billing.
+- `CREATE OR REPLACE FUNCTION` does not replace a function whose **argument count** changes — Postgres creates a second overload instead, which shows up as a `PGRST203` ambiguous-function error. `DROP FUNCTION IF EXISTS <old signature>` first whenever a function gains or loses a parameter.
+- A PL/pgSQL function declared `RETURNS TABLE (id uuid, ...)` puts `id` in scope as a variable for the whole function body — any *unqualified* `id` (or other shared column name) in the function's own SQL collides with it and raises "column reference is ambiguous". Every such reference needs a table alias.
 
-### Security notes worth knowing before touching views or RLS
+### Security notes
 
-- `SUPABASE_KEY` is the **publishable/anon key** — it's meant to be public and ships in the page source by design. Anonymous access is controlled entirely by RLS policies and grants on the Supabase side, not by keeping the key secret.
-- **Postgres views bypass RLS by default** unless created with `security_invoker = on`. This bit us once already: `trip_board`, `billable`, and `invoice_ar` were leaking full customer and financial data to unauthenticated requests until that was fixed (Aug 2026). Any new view built on top of RLS-protected tables needs `security_invoker = on` explicitly, plus `revoke select ... from anon` as defense in depth.
-- Fastest way to check for an RLS gap: hit the table/view with `curl`, just the anon key, no session —
-  ```
-  curl "$SUPABASE_URL/rest/v1/<table_or_view>?select=*&limit=3" -H "apikey: $SUPABASE_KEY" -H "Authorization: Bearer $SUPABASE_KEY"
-  ```
-  Should come back `[]` or `401` for anything not meant to be public.
+- RLS is enabled on every table, but the real security boundary in the Next.js app is server-side: `getAuthedOrgContext()` resolves the caller's `org_id` and role, and every route filters by it explicitly — RLS is defense-in-depth, not the primary gate. (This is the opposite of the old `index.html` app, where the anon key + RLS *was* the only gate — see below.)
+- The service-role client is only ever obtained through `getAuthedOrgContext()` or `getAuthedPlatformAdmin()` (`lib/auth/`). Nothing else should import `lib/supabase/admin.ts` directly — a route handler that did would have no guarantee an org or platform-admin check ever ran.
+- Platform-admin access has no in-app grant path at all, by design (see above).
 
-## Deployment
+## Legacy `index.html` app
 
-GitHub Pages, deploying from the `main` branch root. Push to `main` → live in about a minute. No CI, no build step, no preview environment — what's on `main` is what's live.
+The repo root still contains the original single-file, client-side app (`index.html`, `vendor/supabase-js.min.js`, `archives/`) that this Next.js app replaced. **As of this writing, GitHub Pages is still building and serving it from `main` at https://safigroup.github.io/safi-tms/**, pointed directly at the *production* Supabase project via its publishable/anon key, with no role-based permission enforcement — anyone who finds that URL can still use the old app against real production data. It is not part of active development; decommissioning the GitHub Pages deployment (repo Settings → Pages) is worth doing deliberately rather than by accident.
 
 ## Known gaps / roadmap
 
-- **No staging environment** — every change, including database migrations, goes straight against production. A second free-tier Supabase project plus a second Pages deployment (or a branch) would let changes get tried safely first.
-- **No automated tests** — the FX conversion, invoice-splitting, and margin-calculation logic has zero test coverage. Worth extracting into testable functions.
-- **No Supabase CLI / migration history** — schema changes currently happen by hand in the SQL editor, with the SQL saved ad hoc under `vendor/`. Linking the Supabase CLI would give proper migration tracking instead.
-- **Role-based permissions** — `memberships.role` is fetched and shown in the header but not enforced anywhere in the UI; every signed-in user can currently do everything (raise invoices, edit master data, etc.).
+- **No automated tests** — FX conversion, invoice-splitting, margin, and breakeven-projection logic have zero test coverage.
+- **Company letterhead is still placeholder data** (`next-app/lib/company.ts`) — address, phone, email, and bank details printed on every invoice/report need replacing with real ones before those documents go out to customers.
+- **No cross-org audit trail** — creating an organization or switching a platform admin's active org isn't logged anywhere beyond Supabase's own request logs, unlike the field-level audit log that already covers trip/ledger overrides.
+- **Legacy GitHub Pages deployment** — see above.

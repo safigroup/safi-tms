@@ -16,7 +16,7 @@ export async function GET() {
 
   const { admin, orgId } = ctx;
 
-  const [board, billable, ar, fx, customers, routes, trucks, drivers, rateCards, routeBorderPaths, milestones, invoicedTotals] =
+  const [board, billable, ar, fx, customers, routes, trucks, drivers, rateCards, routeBorderPaths, milestones, nonCancelledInvoices] =
     await Promise.all([
       admin.from("trip_board").select("*").eq("org_id", orgId).order("actual_load_date", { ascending: false, nullsFirst: true }),
       admin.from("billable").select("*").eq("org_id", orgId).order("trip_no", { ascending: false }),
@@ -29,17 +29,27 @@ export async function GET() {
       admin.from("rate_cards").select("*").eq("org_id", orgId).order("valid_from", { ascending: false }),
       admin.from("route_border_paths").select("*").eq("org_id", orgId).order("label"),
       admin.from("payment_milestones").select("seq, customer_id, label, pct, requires_pod").eq("org_id", orgId),
-      admin.from("invoices").select("trip_id, total_due").eq("org_id", orgId).neq("status", "cancelled"),
+      // invoices has no trip_id of its own -- that lives on invoice_lines,
+      // which has no status of its own -- so this is resolved in two steps
+      // (the org-scoped, non-cancelled invoice ids, then their lines),
+      // mirroring the verify-parent-then-fetch-children pattern already
+      // used in app/api/invoices/[id]/route.ts.
+      admin.from("invoices").select("id").eq("org_id", orgId).neq("status", "cancelled"),
     ]);
 
-  const sources = { board, billable, ar, fx, customers, routes, trucks, drivers, rateCards, routeBorderPaths, milestones, invoicedTotals };
+  const nonCancelledInvoiceIds = (nonCancelledInvoices.data ?? []).map((i) => i.id);
+  const invoicedLines = nonCancelledInvoiceIds.length
+    ? await admin.from("invoice_lines").select("trip_id, line_total").in("invoice_id", nonCancelledInvoiceIds)
+    : { data: [] as { trip_id: string; line_total: number }[], error: null };
+
+  const sources = { board, billable, ar, fx, customers, routes, trucks, drivers, rateCards, routeBorderPaths, milestones, invoicedTotals: nonCancelledInvoices, invoicedLines };
   const fetchErrors = Object.entries(sources)
     .filter(([, r]) => r.error)
     .map(([name]) => name);
 
   const alreadyInvoicedByTrip = new Map<string, number>();
-  for (const inv of invoicedTotals.data ?? []) {
-    alreadyInvoicedByTrip.set(inv.trip_id, (alreadyInvoicedByTrip.get(inv.trip_id) ?? 0) + Number(inv.total_due));
+  for (const l of invoicedLines.data ?? []) {
+    alreadyInvoicedByTrip.set(l.trip_id, (alreadyInvoicedByTrip.get(l.trip_id) ?? 0) + Number(l.line_total));
   }
 
   const allMilestones: Milestone[] = milestones.data ?? [];

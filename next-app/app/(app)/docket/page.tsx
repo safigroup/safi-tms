@@ -257,6 +257,18 @@ export default function DocketPage() {
   return (
     <>
       {loadError ? <div className="note bad">{loadError}</div> : null}
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <div className="panel-body" style={{ display: "flex", gap: 11, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div className="field" style={{ marginBottom: 0, minWidth: 260 }}>
+            <label htmlFor="trip">Trip</label>
+            <select id="trip" value={tripId ?? ""} onChange={(e) => setTripId(e.target.value)}>
+              {open.map((t) => (
+                <option key={t.trip_id} value={t.trip_id}>{t.trip_no} — {t.customer} — {t.route}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
       <div className="grid">
       <div className="panel">
         {trip ? (
@@ -359,14 +371,6 @@ export default function DocketPage() {
         <form className="panel-body" onSubmit={handleSaveCost}>
           {formNote ? <div className="note bad">{formNote}</div> : null}
           {restoredNote ? <div className="note warn">Restored an unsaved draft from earlier — the receipt photo wasn&apos;t kept, re-attach it if needed.</div> : null}
-          <div className="field">
-            <label htmlFor="trip">Trip</label>
-            <select id="trip" value={tripId ?? ""} onChange={(e) => setTripId(e.target.value)}>
-              {open.map((t) => (
-                <option key={t.trip_id} value={t.trip_id}>{t.trip_no} — {t.customer} — {t.route}</option>
-              ))}
-            </select>
-          </div>
           <div className="field">
             <label htmlFor="cat">Category</label>
             <select id="cat" value={draft.cat} onChange={(e) => updateDraft({ cat: e.target.value })}>

@@ -46,6 +46,7 @@ export async function POST(request: Request) {
       p_user: ctx.userId,
       p_borders: Array.isArray(body.borders) && body.borders.length ? body.borders : null,
       p_agent_name: body.agentName?.trim() || null,
+      p_volume_cbm: body.volumeCbm ? Number(body.volumeCbm) : null,
     })
     .single();
 

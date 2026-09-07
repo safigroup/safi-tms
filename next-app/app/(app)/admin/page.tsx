@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { num, today } from "@/lib/format";
 import { Spinner } from "@/lib/components/Spinner";
-import type { BootstrapPayload, Customer, Route, FxRate, RouteBorderPath } from "@/lib/types";
+import type { BootstrapPayload, Customer, Route, FxRate, RouteBorderPath, PaymentMilestone } from "@/lib/types";
 
 type FieldType = "text" | "number" | "date" | "bool" | "select" | "fk" | "tags";
 
@@ -127,10 +127,11 @@ const ENT_UI: Record<string, { label: string; permission: "fleet" | "commercial"
   },
 };
 
-const VIEWS = ["fx", "team", "customers", "trucks", "drivers", "routes", "rate_cards"] as const;
+const VIEWS = ["fx", "team", "customers", "trucks", "drivers", "routes", "rate_cards", "payment_schedule"] as const;
 type ViewKey = (typeof VIEWS)[number];
 const VIEW_LABELS: Record<ViewKey, string> = {
   fx: "Exchange rates", team: "Team", customers: "Customers", trucks: "Trucks", drivers: "Drivers", routes: "Routes", rate_cards: "Rate cards",
+  payment_schedule: "Payment schedule",
 };
 
 type TeamMember = { userId: string; email: string; role: string; createdAt: string };
@@ -187,7 +188,7 @@ export default function AdminPage() {
 
   const canEditView = (v: ViewKey): boolean => {
     if (v === "team") return false;
-    const permission = v === "fx" ? "commercial" : ENT_UI[v].permission;
+    const permission = v === "fx" || v === "payment_schedule" ? "commercial" : ENT_UI[v].permission;
     return (permission === "fleet" ? CAN_EDIT_FLEET : CAN_EDIT_COMMERCIAL).includes(data.role);
   };
   const canEdit = canEditView(view);
@@ -202,7 +203,10 @@ export default function AdminPage() {
             className={"chip" + (view === v ? " on" : "")}
             onClick={() => { setView(v); setSelected(null); setCreating(false); }}
           >
-            {VIEW_LABELS[v]}<span className="c">{v === "fx" ? data.fx.length : v === "team" ? team?.length ?? 0 : masters[v].length}</span>
+            {VIEW_LABELS[v]}
+            {v === "payment_schedule" ? null : (
+              <span className="c">{v === "fx" ? data.fx.length : v === "team" ? team?.length ?? 0 : masters[v].length}</span>
+            )}
           </button>
         ))}
       </div>
@@ -210,7 +214,7 @@ export default function AdminPage() {
         <div className="panel">
           <div className="panel-head">
             <h2>{VIEW_LABELS[view]}</h2>
-            {view !== "fx" && view !== "team" && canEdit ? <button className="act" onClick={() => { setSelected(null); setCreating(true); }}>+ New</button> : null}
+            {view !== "fx" && view !== "team" && view !== "payment_schedule" && canEdit ? <button className="act" onClick={() => { setSelected(null); setCreating(true); }}>+ New</button> : null}
             {view === "team" ? <button className="act" onClick={() => { setSelected(null); setCreating(true); }}>+ Invite</button> : null}
           </div>
           {view === "fx" ? (
@@ -223,6 +227,8 @@ export default function AdminPage() {
             ) : (
               <Spinner />
             )
+          ) : view === "payment_schedule" ? (
+            <div className="empty">Configure how customers without their own schedule are invoiced, on the right.</div>
           ) : (
             <EntityList
               entity={view}
@@ -234,10 +240,12 @@ export default function AdminPage() {
           )}
         </div>
         <div className="panel">
-          <div className="panel-head"><h2>{view === "fx" ? "Add a rate" : view === "team" ? (creating ? "Invite" : "Team member") : selected ? "Edit" : creating ? "New" : "Detail"}</h2></div>
+          <div className="panel-head"><h2>{view === "fx" ? "Add a rate" : view === "team" ? (creating ? "Invite" : "Team member") : view === "payment_schedule" ? "Default schedule" : selected ? "Edit" : creating ? "New" : "Detail"}</h2></div>
           <div className="panel-body">
             {view === "fx" ? (
               canEdit ? <FxForm onSaved={load} /> : <div className="empty">You have read-only access to exchange rates.</div>
+            ) : view === "payment_schedule" ? (
+              <PaymentScheduleEditor canEdit={canEdit} />
             ) : view === "team" ? (
               creating ? (
                 <InviteForm
@@ -627,6 +635,9 @@ function EntityForm({
           onChanged={onSaved}
         />
       ) : null}
+      {entity === "customers" && id ? (
+        <CustomerPaymentSchedule customerId={id} canEdit={canEdit} />
+      ) : null}
     </>
   );
 }
@@ -723,6 +734,175 @@ function RouteBorderPaths({
             <button className="act" type="button" onClick={() => setAdding(true)}>+ Add alternate path</button>
           )
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+// Shared row-editor for a payment schedule: an ordered list of named,
+// percentage milestones. Used both for the organization's default (which
+// can never be empty -- allowEmpty false) and a customer's own override
+// (empty means "stop overriding, fall back to the default" -- allowEmpty
+// true). The whole list is replaced atomically on save, not edited
+// incrementally, since percentages only make sense validated as a set.
+function MilestoneEditor({
+  initial,
+  allowEmpty,
+  canEdit,
+  onSave,
+}: {
+  initial: PaymentMilestone[];
+  allowEmpty: boolean;
+  canEdit: boolean;
+  onSave: (rows: PaymentMilestone[]) => Promise<void>;
+}) {
+  const [rows, setRows] = useState<PaymentMilestone[]>(initial);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing local edit state when the parent's fetch resolves or the selected customer changes
+    setRows(initial);
+  }, [initial]);
+
+  const total = rows.reduce((s, r) => s + (Number(r.pct) || 0), 0);
+  const totalOk = Math.abs(total - 100) < 0.01;
+  const rowsValid = rows.every((r) => r.label.trim() && Number(r.pct) > 0);
+  const valid = rows.length === 0 ? allowEmpty : totalOk && rowsValid;
+
+  function update(i: number, patch: Partial<PaymentMilestone>) {
+    setRows((cur) => cur.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(rows);
+      toast.success("Payment schedule saved");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div>
+      {error ? <div className="note bad">{error}</div> : null}
+      {rows.map((r, i) => (
+        <div key={i} style={{ display: "flex", gap: 9, alignItems: "flex-end", marginBottom: 11 }}>
+          <div className="field" style={{ marginBottom: 0, flex: 1 }}>
+            <label htmlFor={`msLabel${i}`}>Label</label>
+            <input id={`msLabel${i}`} type="text" placeholder="e.g. On loading" value={r.label} disabled={!canEdit} onChange={(e) => update(i, { label: e.target.value })} />
+          </div>
+          <div className="field" style={{ marginBottom: 0, width: 90 }}>
+            <label htmlFor={`msPct${i}`}>%</label>
+            <input id={`msPct${i}`} type="number" step="0.01" min="0" max="100" value={r.pct} disabled={!canEdit} onChange={(e) => update(i, { pct: Number(e.target.value) })} />
+          </div>
+          <div className="check" style={{ marginBottom: 10 }}>
+            <input type="checkbox" id={`msPod${i}`} checked={r.requires_pod} disabled={!canEdit} onChange={(e) => update(i, { requires_pod: e.target.checked })} />
+            <label htmlFor={`msPod${i}`}>Needs POD</label>
+          </div>
+          {canEdit ? <button className="x" type="button" onClick={() => setRows((cur) => cur.filter((_, idx) => idx !== i))}>✕</button> : null}
+        </div>
+      ))}
+      {canEdit ? (
+        <>
+          <button className="ghost" type="button" style={{ width: "auto", marginTop: 0 }} onClick={() => setRows((cur) => [...cur, { label: "", pct: 0, requires_pod: false }])}>
+            + Add milestone
+          </button>
+          <div className="hint" style={{ margin: "11px 0" }}>
+            {rows.length === 0
+              ? (allowEmpty ? "No rows — using the organization's default schedule." : "At least one milestone is required.")
+              : `Total: ${total.toFixed(2)}%${totalOk ? " ✓" : " — must total exactly 100%"}`}
+          </div>
+          <button className="primary" type="button" disabled={saving || !valid} onClick={handleSave}>
+            {saving ? "Saving…" : "Save schedule"}
+          </button>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function PaymentScheduleEditor({ canEdit }: { canEdit: boolean }) {
+  const [milestones, setMilestones] = useState<PaymentMilestone[] | null>(null);
+
+  async function load() {
+    const res = await fetch("/api/admin/payment-schedule");
+    const body = res.ok ? await res.json() : { milestones: [] };
+    setMilestones(body.milestones);
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount
+    load();
+  }, []);
+
+  async function save(rows: PaymentMilestone[]) {
+    const res = await fetch("/api/admin/payment-schedule", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ milestones: rows }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || res.statusText);
+    }
+    await load();
+  }
+
+  if (!milestones) return <Spinner />;
+  return (
+    <div>
+      <div className="hint" style={{ marginBottom: 13 }}>
+        How customers without their own custom schedule are invoiced — any number of named, percentage-based milestones, not just loading/delivery.
+      </div>
+      <MilestoneEditor initial={milestones} allowEmpty={false} canEdit={canEdit} onSave={save} />
+    </div>
+  );
+}
+
+function CustomerPaymentSchedule({ customerId, canEdit }: { customerId: string; canEdit: boolean }) {
+  const [milestones, setMilestones] = useState<PaymentMilestone[] | null>(null);
+
+  async function load() {
+    const res = await fetch(`/api/admin/customers/${customerId}/payment-schedule`);
+    const body = res.ok ? await res.json() : { milestones: [] };
+    setMilestones(body.milestones);
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching this customer's schedule override when the selected customer changes
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally re-runs only when customerId changes; load is recreated every render
+  }, [customerId]);
+
+  async function save(rows: PaymentMilestone[]) {
+    const res = await fetch(`/api/admin/customers/${customerId}/payment-schedule`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ milestones: rows }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || res.statusText);
+    }
+    await load();
+  }
+
+  if (!milestones) return null;
+  return (
+    <div className="panel" style={{ marginTop: 16 }}>
+      <div className="panel-head"><h2>Payment schedule</h2></div>
+      <div className="panel-body">
+        <div className="hint" style={{ marginBottom: 13 }}>
+          {milestones.length
+            ? "This customer has a custom schedule, overriding the organization's default."
+            : "Using the organization's default schedule — add rows below to override it just for this customer."}
+        </div>
+        <MilestoneEditor initial={milestones} allowEmpty canEdit={canEdit} onSave={save} />
       </div>
     </div>
   );

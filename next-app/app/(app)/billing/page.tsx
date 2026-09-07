@@ -87,11 +87,11 @@ export default function BillingPage() {
   const totalOut = out.reduce((s, i) => s + Number(i.outstanding), 0);
   const totalOver = overdue.reduce((s, i) => s + Number(i.outstanding), 0);
   const raisable = data.billable.reduce(
-    (s, t) => s + (!t.loading_invoiced ? Number(t.half_usd) : 0) + (t.pod_in_hand && !t.delivery_invoiced ? Number(t.half_usd) : 0),
+    (s, t) => s + t.milestones_due.filter((m) => m.raisable).reduce((s2, m) => s2 + m.amount_usd, 0),
     0,
   );
-  const blocked = data.billable.filter((t) => !t.pod_in_hand && t.loading_invoiced);
-  const blockedVal = blocked.reduce((s, t) => s + Number(t.half_usd), 0);
+  const blocked = data.billable.filter((t) => t.milestones_due.length > 0 && !t.milestones_due.some((m) => m.raisable));
+  const blockedVal = blocked.reduce((s, t) => s + t.milestones_due.reduce((s2, m) => s2 + m.amount_usd, 0), 0);
 
   const bucketFn = BUCKETS.find((b) => b[0] === bucket)![2];
   const invRows = data.ar.filter(bucketFn);
@@ -135,11 +135,11 @@ export default function BillingPage() {
           <ul className="list">
             {tab === "bill" ? (
               data.billable.length ? data.billable.map((t) => {
-                const tags = [
-                  !t.loading_invoiced ? <span key="l" className="pill violet">loading half due</span> : null,
-                  t.pod_in_hand && !t.delivery_invoiced ? <span key="d" className="pill good">delivery half due</span> : null,
-                  !t.pod_in_hand && t.loading_invoiced ? <span key="w" className="pill warn">waiting on POD</span> : null,
-                ].filter(Boolean);
+                const raisableNow = t.milestones_due.filter((m) => m.raisable);
+                const tags = raisableNow.length
+                  ? raisableNow.map((m) => <span key={m.seq} className="pill violet">{m.label.toLowerCase()} due</span>)
+                  : [<span key="w" className="pill warn">waiting on POD</span>];
+                const nextAmount = (raisableNow[0] ?? t.milestones_due[0])?.amount_usd ?? 0;
                 return (
                   <li key={t.trip_id} className={"tap" + (selected === t.trip_id ? " sel" : "")} onClick={() => setSelected(t.trip_id)}>
                     <div>
@@ -150,7 +150,7 @@ export default function BillingPage() {
                     </div>
                     <div className="r-right">
                       <div className="r-amt">{m0(t.revenue_usd)}</div>
-                      <div className="r-min">half {m0(t.half_usd)}</div>
+                      <div className="r-min">next {m0(nextAmount)}</div>
                     </div>
                   </li>
                 );
@@ -221,13 +221,13 @@ function RaiseInvoicePanel({
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
-  async function raise(type: "loading" | "delivery" | "full") {
+  async function raise(seq: number) {
     setBusy(true);
     setNote(null);
     const res = await fetch("/api/invoices/raise", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tripId: trip.trip_id, type }),
+      body: JSON.stringify({ tripId: trip.trip_id, seq }),
     });
     setBusy(false);
     if (!res.ok) {
@@ -239,6 +239,8 @@ function RaiseInvoicePanel({
     await onRaised(id);
   }
 
+  const awaitingPod = trip.milestones_due.some((m) => m.blocked_reason === "awaiting_pod");
+
   return (
     <>
       <div className="d-head">
@@ -247,7 +249,7 @@ function RaiseInvoicePanel({
         <div className="r-sub">{trip.route}</div>
         <div className="d-figs">
           <div><div className="k">Freight</div><div className="v">{m2(trip.revenue_usd)}</div></div>
-          <div><div className="k">Each half</div><div className="v">{m2(trip.half_usd)}</div></div>
+          <div><div className="k">Remaining</div><div className="v">{m2(trip.milestones_due.reduce((s, m) => s + m.amount_usd, 0))}</div></div>
           <div><div className="k">POD</div><div className={"v" + (trip.pod_in_hand ? " pos" : "")}>{trip.pod_in_hand ? "in hand" : "—"}</div></div>
         </div>
       </div>
@@ -257,19 +259,20 @@ function RaiseInvoicePanel({
         {canWrite ? (
           <>
             <div className="acts">
-              <button className="act" disabled={busy || trip.loading_invoiced} onClick={() => raise("loading")}>
-                {trip.loading_invoiced ? "Loading half raised" : "Loading half"}
-              </button>
-              <button className="act go" disabled={busy || !trip.pod_in_hand || trip.delivery_invoiced} onClick={() => raise("delivery")}>
-                {trip.delivery_invoiced ? "Delivery half raised" : "Delivery half"}
-              </button>
-              <button className="act" disabled={busy || trip.loading_invoiced || trip.delivery_invoiced} onClick={() => raise("full")}>
-                Full amount
-              </button>
+              {trip.milestones_due.map((m) => (
+                <button
+                  key={m.seq}
+                  className={"act" + (m.blocked_reason === "awaiting_pod" ? " go" : "")}
+                  disabled={busy || !m.raisable}
+                  onClick={() => raise(m.seq)}
+                >
+                  {m.label} ({m2(m.amount_usd)})
+                </button>
+              ))}
             </div>
-            {!trip.pod_in_hand ? (
+            {awaitingPod ? (
               <div className="d-hint" style={{ marginTop: 10 }}>
-                The delivery half stays locked until the POD is marked received.
+                That milestone stays locked until the POD is marked received.
               </div>
             ) : null}
           </>
@@ -305,6 +308,20 @@ function InvoiceDetailPanel({
   const [payRef, setPayRef] = useState("");
   const [payNote, setPayNote] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
+  const [payments, setPayments] = useState<InvoiceDetail["payments"] | null>(null);
+
+  async function loadPayments() {
+    const res = await fetch(`/api/invoices/${invoiceId}`);
+    const body: InvoiceDetail | null = res.ok ? await res.json() : null;
+    setPayments(body?.payments ?? []);
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching this invoice's payment history when the selected invoice changes
+    setPayments(null);
+    loadPayments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally re-runs only when invoiceId changes; loadPayments is recreated every render
+  }, [invoiceId]);
 
   if (!i) return null;
 
@@ -348,6 +365,7 @@ function InvoiceDetailPanel({
     }
     toast.success("Payment recorded");
     await onChanged();
+    await loadPayments();
   }
 
   return (
@@ -399,6 +417,28 @@ function InvoiceDetailPanel({
         <div className="d-kv"><span>Issued</span><span>{i.issued_on}</span></div>
         <div className="d-kv"><span>Due</span><span>{i.due_on}{i.days_overdue > 0 ? ` · ${i.days_overdue}d overdue` : ""}</span></div>
         <div className="d-kv"><span>Ageing</span><span>{i.bucket}</span></div>
+      </div>
+      <div className="d-sec">
+        <h3>Payments received</h3>
+        {payments === null ? (
+          <div className="d-hint">Loading…</div>
+        ) : payments.length ? (
+          <ul className="list" style={{ maxHeight: 220 }}>
+            {payments.map((p, idx) => (
+              <li key={idx}>
+                <div>
+                  <div className="r-no">{p.method || "—"}</div>
+                  <div className="r-mono">{p.received_on}{p.reference ? " · " + p.reference : ""}</div>
+                </div>
+                <div className="r-right">
+                  <div className="r-amt pos">{m2(p.amount, p.currency)}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="d-hint">No payments recorded yet.</div>
+        )}
       </div>
       {!settled && canWrite ? (
         <form className="panel-body" onSubmit={recordPayment}>

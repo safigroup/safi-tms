@@ -155,17 +155,33 @@ export type TripDocument = {
   received_on: string | null;
 };
 
+// A row of a payment schedule as configured (Admin), before being resolved
+// against any particular trip -- see MilestoneDue for that.
+export type PaymentMilestone = {
+  label: string;
+  pct: number;
+  requires_pod: boolean;
+};
+
+export type MilestoneDue = {
+  seq: number;
+  label: string;
+  pct: number;
+  amount_usd: number;
+  raisable: boolean;
+  blocked_reason?: "not_started" | "awaiting_pod";
+};
+
 export type BillableTrip = {
   trip_id: string;
   trip_no: string;
   customer: string;
+  customer_id: string;
   route: string;
   status: TripStatus;
   revenue_usd: number;
-  half_usd: number;
   pod_in_hand: boolean;
-  loading_invoiced: boolean;
-  delivery_invoiced: boolean;
+  milestones_due: MilestoneDue[];
 };
 
 export type ArInvoice = {

@@ -73,6 +73,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: orgError.message }, { status: 400 });
   }
 
+  // Every org needs a default payment schedule for raise_invoice() to
+  // resolve -- seed the same 50/50 on-loading/on-delivery split every
+  // existing org was seeded with, in 20260906140302_payment_milestones.sql.
+  const { error: scheduleError } = await ctx.admin.from("payment_milestones").insert([
+    { org_id: org.id, customer_id: null, seq: 1, label: "On loading", pct: 50, requires_pod: false },
+    { org_id: org.id, customer_id: null, seq: 2, label: "On delivery", pct: 50, requires_pod: true },
+  ]);
+  if (scheduleError) {
+    await ctx.admin.from("organizations").delete().eq("id", org.id);
+    return NextResponse.json({ error: scheduleError.message }, { status: 400 });
+  }
+
   const { error: membershipError } = await ctx.admin.from("memberships").insert({
     org_id: org.id,
     user_id: data.user.id,

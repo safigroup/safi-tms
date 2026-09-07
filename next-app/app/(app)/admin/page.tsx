@@ -59,6 +59,7 @@ const ENT_UI: Record<string, { label: string; permission: "fleet" | "commercial"
     permission: "fleet",
     fields: [
       { k: "fleet_no", label: "Fleet number", type: "text", req: true, half: true },
+      { k: "truck_type", label: "Type", type: "select", opts: ["flatbed", "tanker", "tipper", "other"], def: "flatbed", half: true },
       { k: "make_model", label: "Make / model", type: "text", def: "SHACMAN X3000", half: true },
       { k: "horse_reg", label: "Horse registration", type: "text", req: true, half: true },
       { k: "trailer_reg", label: "Trailer registration", type: "text", half: true },
@@ -67,7 +68,7 @@ const ENT_UI: Record<string, { label: string; permission: "fleet" | "commercial"
       { k: "is_active", label: "Active", type: "bool", def: true },
     ],
     row: (r) => ({
-      t: String(r.fleet_no), s: String(r.make_model || ""), m: [r.horse_reg, r.trailer_reg].filter(Boolean).join(" / "),
+      t: String(r.fleet_no), s: [r.truck_type !== "flatbed" ? r.truck_type : null, r.make_model].filter(Boolean).join(" · "), m: [r.horse_reg, r.trailer_reg].filter(Boolean).join(" / "),
       r: r.tank_capacity_l ? r.tank_capacity_l + " L" : "", off: !r.is_active,
     }),
   },
@@ -113,7 +114,7 @@ const ENT_UI: Record<string, { label: string; permission: "fleet" | "commercial"
       { k: "commodity", label: "Commodity", type: "text" },
       { k: "rate_amount", label: "Rate", type: "number", req: true, half: true },
       { k: "rate_currency", label: "Currency", type: "select", opts: ["USD"], def: "USD", half: true },
-      { k: "rate_basis", label: "Basis", type: "select", opts: ["per_trip", "per_tonne"], def: "per_trip", half: true },
+      { k: "rate_basis", label: "Basis", type: "select", opts: ["per_trip", "per_tonne", "per_cbm"], def: "per_trip", half: true },
       { k: "valid_from", label: "Valid from", type: "date", def: today, half: true },
       { k: "valid_to", label: "Valid to", type: "date", hint: "Blank while it's current." },
     ],

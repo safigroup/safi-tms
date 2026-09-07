@@ -40,6 +40,7 @@ export type BoardTrip = {
   driver: string | null;
   commodity: string | null;
   tonnage: number | null;
+  volume_cbm: number | null;
   container_no: string | null;
   actual_load_date: string | null;
   planned_eta: string | null;
@@ -90,6 +91,7 @@ export type Truck = {
   horse_reg: string;
   is_active: boolean;
   purchase_date: string | null;
+  truck_type: string;
 };
 
 export type Driver = {
@@ -104,6 +106,8 @@ export type RateCard = {
   route_id: string;
   commodity: string | null;
   rate_amount: number;
+  rate_currency: string;
+  rate_basis: string;
   valid_from: string;
   valid_to: string | null;
 };

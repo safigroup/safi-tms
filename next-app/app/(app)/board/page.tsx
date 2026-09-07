@@ -363,7 +363,7 @@ function TripDetail({
         <h3>Assignment</h3>
         <div className="d-kv"><span>Truck</span><span>{trip.fleet_no || "—"}{trip.horse_reg ? " · " + trip.horse_reg : ""}</span></div>
         <div className="d-kv"><span>Driver</span><span>{trip.driver || "—"}</span></div>
-        <div className="d-kv"><span>Cargo</span><span>{trip.commodity || "—"}{trip.tonnage ? " · " + trip.tonnage + " t" : ""}</span></div>
+        <div className="d-kv"><span>Cargo</span><span>{trip.commodity || "—"}{trip.tonnage ? " · " + trip.tonnage + " t" : ""}{trip.volume_cbm ? " · " + trip.volume_cbm + " m³" : ""}</span></div>
         <div className="d-kv"><span>Container</span><span>{trip.container_no || "—"}</span></div>
         <div className="d-kv"><span>Agent</span><span>{trip.agent_name || "—"}</span></div>
       </div>
@@ -402,6 +402,7 @@ function TripEditForm({
   const [driverId, setDriverId] = useState(trip.driver_id ?? "");
   const [commodity, setCommodity] = useState(trip.commodity ?? "");
   const [tonnage, setTonnage] = useState(trip.tonnage != null ? String(trip.tonnage) : "");
+  const [volumeCbm, setVolumeCbm] = useState(trip.volume_cbm != null ? String(trip.volume_cbm) : "");
   const [containerNo, setContainerNo] = useState(trip.container_no ?? "");
   const [sealNo, setSealNo] = useState(trip.seal_no ?? "");
   const [agentName, setAgentName] = useState(trip.agent_name ?? "");
@@ -444,6 +445,7 @@ function TripEditForm({
         driver_id: driverId || null,
         commodity: commodity.trim() || null,
         tonnage: tonnage ? Number(tonnage) : null,
+        volume_cbm: volumeCbm ? Number(volumeCbm) : null,
         container_no: containerNo.trim() || null,
         seal_no: sealNo.trim() || null,
         agent_name: agentName.trim() || null,
@@ -506,14 +508,18 @@ function TripEditForm({
             </select>
           </div>
         </div>
+        <div className="field">
+          <label htmlFor="eComm">Commodity</label>
+          <input id="eComm" type="text" value={commodity} onChange={(e) => setCommodity(e.target.value)} />
+        </div>
         <div className="row">
-          <div className="field">
-            <label htmlFor="eComm">Commodity</label>
-            <input id="eComm" type="text" value={commodity} onChange={(e) => setCommodity(e.target.value)} />
-          </div>
           <div className="field">
             <label htmlFor="eTon">Tonnage</label>
             <input id="eTon" type="number" step="0.001" min="0" value={tonnage} onChange={(e) => setTonnage(e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="eVol">Volume (m³)</label>
+            <input id="eVol" type="number" step="0.001" min="0" value={volumeCbm} onChange={(e) => setVolumeCbm(e.target.value)} />
           </div>
         </div>
         <div className="row">
@@ -593,6 +599,7 @@ function NewTripForm({
   const [driverId, setDriverId] = useState("");
   const [commodity, setCommodity] = useState("");
   const [tonnage, setTonnage] = useState("");
+  const [volumeCbm, setVolumeCbm] = useState("");
   const [containerNo, setContainerNo] = useState("");
   const [sealNo, setSealNo] = useState("");
   const [agentName, setAgentName] = useState("");
@@ -601,14 +608,32 @@ function NewTripForm({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  function applyRate(cust: string, route: string) {
+  // Re-run on customer/route change (as before) and now also on
+  // tonnage/volume change, since a per_tonne/per_cbm rate card needs
+  // whichever quantity its basis calls for -- entered later in the form
+  // than customer/route, so this can't just be a one-shot lookup.
+  function applyRate(cust: string, route: string, ton: string, vol: string) {
     const hit = data.rateCards.find((r) => r.route_id === route && (r.customer_id === cust || !r.customer_id));
     if (hit) {
-      setRevenue(Number(hit.rate_amount).toFixed(2));
-      setRateHint({
-        text: "Filled from the rate card" + (hit.commodity ? " · " + hit.commodity : ""),
-        kind: "good",
-      });
+      const basis = hit.rate_basis;
+      const qty = basis === "per_tonne" ? parseFloat(ton) : basis === "per_cbm" ? parseFloat(vol) : 1;
+      if (basis !== "per_trip" && !(Number.isFinite(qty) && qty > 0)) {
+        setRateHint({
+          text: `${m2(hit.rate_amount)} ${basis === "per_tonne" ? "per tonne" : "per m³"}${hit.commodity ? " · " + hit.commodity : ""} — enter ${basis === "per_tonne" ? "tonnage" : "volume"} to calculate.`,
+          kind: "warn",
+        });
+        // Leave revenue as whatever the user already has -- don't stomp
+        // it with a wrong figure just because the quantity isn't in yet.
+      } else {
+        const amount = basis === "per_trip" ? Number(hit.rate_amount) : Number(hit.rate_amount) * qty;
+        setRevenue(amount.toFixed(2));
+        setRateHint({
+          text: "Filled from the rate card"
+            + (hit.commodity ? " · " + hit.commodity : "")
+            + (basis !== "per_trip" ? ` (${m2(hit.rate_amount)} × ${qty} ${basis === "per_tonne" ? "t" : "m³"})` : ""),
+          kind: "good",
+        });
+      }
       if (hit.commodity && !commodity) setCommodity(hit.commodity);
     } else if (cust && route) {
       setRateHint({ text: "No rate card for this pairing. Enter the agreed price.", kind: "warn" });
@@ -647,6 +672,7 @@ function NewTripForm({
         driverId: driverId || null,
         commodity: commodity.trim() || null,
         tonnage: tonnage ? Number(tonnage) : null,
+        volumeCbm: volumeCbm ? Number(volumeCbm) : null,
         containerNo: containerNo.trim() || null,
         sealNo: sealNo.trim() || null,
         agentName: agentName.trim() || null,
@@ -679,7 +705,7 @@ function NewTripForm({
         <select
           id="nCust"
           value={customerId}
-          onChange={(e) => { setCustomerId(e.target.value); applyRate(e.target.value, routeId); }}
+          onChange={(e) => { setCustomerId(e.target.value); applyRate(e.target.value, routeId, tonnage, volumeCbm); }}
         >
           <option value="">—</option>
           {activeCustomers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -690,7 +716,7 @@ function NewTripForm({
         <select
           id="nRoute"
           value={routeId}
-          onChange={(e) => { setRouteId(e.target.value); setBorderPathId(""); applyRate(customerId, e.target.value); applyEta(e.target.value, loadDate); }}
+          onChange={(e) => { setRouteId(e.target.value); setBorderPathId(""); applyRate(customerId, e.target.value, tonnage, volumeCbm); applyEta(e.target.value, loadDate); }}
         >
           <option value="">—</option>
           {activeRoutes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
@@ -730,14 +756,34 @@ function NewTripForm({
           </select>
         </div>
       </div>
+      <div className="field">
+        <label htmlFor="nComm">Commodity</label>
+        <input id="nComm" type="text" placeholder="General cargo" value={commodity} onChange={(e) => setCommodity(e.target.value)} />
+      </div>
       <div className="row">
         <div className="field">
-          <label htmlFor="nComm">Commodity</label>
-          <input id="nComm" type="text" placeholder="General cargo" value={commodity} onChange={(e) => setCommodity(e.target.value)} />
+          <label htmlFor="nTon">Tonnage</label>
+          <input
+            id="nTon"
+            type="number"
+            step="0.001"
+            min="0"
+            placeholder="28.500"
+            value={tonnage}
+            onChange={(e) => { setTonnage(e.target.value); applyRate(customerId, routeId, e.target.value, volumeCbm); }}
+          />
         </div>
         <div className="field">
-          <label htmlFor="nTon">Tonnage</label>
-          <input id="nTon" type="number" step="0.001" min="0" placeholder="28.500" value={tonnage} onChange={(e) => setTonnage(e.target.value)} />
+          <label htmlFor="nVol">Volume (m³)</label>
+          <input
+            id="nVol"
+            type="number"
+            step="0.001"
+            min="0"
+            placeholder="e.g. for tankers/tippers"
+            value={volumeCbm}
+            onChange={(e) => { setVolumeCbm(e.target.value); applyRate(customerId, routeId, tonnage, e.target.value); }}
+          />
         </div>
       </div>
       <div className="row">

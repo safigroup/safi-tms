@@ -73,6 +73,9 @@ export type Customer = {
 export type Route = {
   id: string;
   name: string;
+  origin: string | null;
+  destination: string | null;
+  distance_km: number | null;
   target_days: number | null;
   borders: string[] | null;
   is_active?: boolean;
@@ -83,6 +86,15 @@ export type RouteBorderPath = {
   route_id: string;
   label: string;
   borders: string[];
+};
+
+export type RouteCostTemplateLine = {
+  id: string;
+  route_id: string;
+  category: string;
+  amount: number;
+  currency: string;
+  basis: "per_trip" | "per_tonne" | "per_cbm" | "per_km";
 };
 
 export type Truck = {
@@ -287,4 +299,5 @@ export type BootstrapPayload = {
   drivers: Driver[];
   rateCards: RateCard[];
   routeBorderPaths: RouteBorderPath[];
+  routeCostTemplates: RouteCostTemplateLine[];
 };

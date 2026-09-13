@@ -98,37 +98,43 @@ export default function EstimatesPage() {
           </div>
           {!route ? (
             <div className="empty">Pick a route to see an estimate.</div>
-          ) : !templateLines.length ? (
-            <div className="empty">No cost template configured for this route yet — add one under Admin → Routes.</div>
           ) : (
             <div className="panel-body">
-              <ul className="list" style={{ marginBottom: 13 }}>
-                {estimate.lines.map((l) => (
-                  <li key={l.category}>
-                    <div>
-                      <div className="r-no" style={{ color: "var(--stamp)" }}>{lab(l.category)}</div>
-                      <div className="r-mono">
-                        {m2(l.rate)} {l.basis === "per_trip" ? "flat" : l.basis === "per_tonne" ? "/ tonne" : l.basis === "per_cbm" ? "/ m³" : "/ km"}
-                      </div>
-                    </div>
-                    <div className="r-right">
-                      {l.amount !== null ? (
-                        <div className="r-amt">{m2(l.amount)}</div>
-                      ) : (
-                        <div className="r-min" style={{ color: "var(--waiting)" }}>{NEEDS_LABEL[l.needsInput ?? ""]}</div>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              <div className="d-kv" style={{ fontWeight: 700, fontSize: 14.5, borderTop: "2px solid var(--ink)", paddingTop: 10 }}>
-                <span>Estimated total cost</span><span>{m2(estimate.total)}</span>
-              </div>
-              {estimate.incomplete ? (
-                <div className="d-hint" style={{ marginTop: 6 }}>Enter the missing quantities above to complete the estimate.</div>
-              ) : null}
+              {!templateLines.length ? (
+                <div className="d-hint" style={{ marginBottom: matchedRate ? 16 : 0 }}>
+                  No cost template configured for this route yet — add one under Admin → Routes.
+                </div>
+              ) : (
+                <>
+                  <ul className="list" style={{ marginBottom: 13 }}>
+                    {estimate.lines.map((l) => (
+                      <li key={l.category}>
+                        <div>
+                          <div className="r-no" style={{ color: "var(--stamp)" }}>{lab(l.category)}</div>
+                          <div className="r-mono">
+                            {m2(l.rate)} {l.basis === "per_trip" ? "flat" : l.basis === "per_tonne" ? "/ tonne" : l.basis === "per_cbm" ? "/ m³" : "/ km"}
+                          </div>
+                        </div>
+                        <div className="r-right">
+                          {l.amount !== null ? (
+                            <div className="r-amt">{m2(l.amount)}</div>
+                          ) : (
+                            <div className="r-min" style={{ color: "var(--waiting)" }}>{NEEDS_LABEL[l.needsInput ?? ""]}</div>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="d-kv" style={{ fontWeight: 700, fontSize: 14.5, borderTop: "2px solid var(--ink)", paddingTop: 10 }}>
+                    <span>Estimated total cost</span><span>{m2(estimate.total)}</span>
+                  </div>
+                  {estimate.incomplete ? (
+                    <div className="d-hint" style={{ marginTop: 6 }}>Enter the missing quantities above to complete the estimate.</div>
+                  ) : null}
+                </>
+              )}
               {matchedRate ? (
-                <div className="d-sec" style={{ marginTop: 16, paddingLeft: 0, paddingRight: 0, borderBottom: "none" }}>
+                <div className="d-sec" style={{ marginTop: templateLines.length ? 16 : 0, paddingLeft: 0, paddingRight: 0, borderBottom: "none" }}>
                   <h3>vs. {customer?.name}</h3>
                   <div className="d-kv"><span>Estimated revenue</span><span>{revenueAmount !== null ? m2(revenueAmount) : "—"}</span></div>
                   {margin !== null ? (
@@ -137,6 +143,10 @@ export default function EstimatesPage() {
                       <span style={{ color: margin >= 0 ? "var(--settled)" : "var(--alert)" }}>{m2(margin)}</span>
                     </div>
                   ) : null}
+                </div>
+              ) : customerId ? (
+                <div className="d-hint" style={{ marginTop: templateLines.length ? 16 : 0 }}>
+                  No rate card on file for this customer and route.
                 </div>
               ) : null}
             </div>

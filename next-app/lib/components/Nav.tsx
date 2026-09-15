@@ -13,6 +13,7 @@ const VIEWS = [
   { href: "/docket", label: "Cost docket" },
   { href: "/billing", label: "Billing" },
   { href: "/reports", label: "Reports" },
+  { href: "/estimates", label: "Estimator" },
   { href: "/admin", label: "Admin" },
 ];
 

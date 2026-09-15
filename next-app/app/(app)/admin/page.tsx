@@ -3,9 +3,21 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { num, today } from "@/lib/format";
+import { num, today, lab } from "@/lib/format";
 import { Spinner } from "@/lib/components/Spinner";
-import type { BootstrapPayload, Customer, Route, FxRate, RouteBorderPath, PaymentMilestone } from "@/lib/types";
+import type { BootstrapPayload, Customer, Route, FxRate, RouteBorderPath, PaymentMilestone, RouteCostTemplateLine } from "@/lib/types";
+
+// Mirrors lib/estimates/validateCostTemplate.ts's ESTIMATE_CATEGORIES --
+// duplicated client-side the same way the Cost Docket's own CATS list is
+// duplicated per file rather than shared across the server/client
+// boundary for a small constant array.
+const ESTIMATE_CATS = [
+  "fuel", "border_fees", "customs_duty", "clearing_agent", "tolls",
+  "weighbridge", "permits", "escort", "demurrage", "detention",
+  "repairs", "tyres", "police", "other",
+];
+
+type CostTemplateRow = Pick<RouteCostTemplateLine, "category" | "amount" | "currency" | "basis">;
 
 type FieldType = "text" | "number" | "date" | "bool" | "select" | "fk" | "tags";
 
@@ -636,6 +648,9 @@ function EntityForm({
           onChanged={onSaved}
         />
       ) : null}
+      {entity === "routes" && id ? (
+        <RouteCostTemplate routeId={id} canEdit={canEdit} />
+      ) : null}
       {entity === "customers" && id ? (
         <CustomerPaymentSchedule customerId={id} canEdit={canEdit} />
       ) : null}
@@ -736,6 +751,137 @@ function RouteBorderPaths({
           )
         ) : null}
       </div>
+    </div>
+  );
+}
+
+// A route's expected cost breakdown -- the cost-side counterpart to
+// rate_cards, used by the Estimator page. Unlike a payment schedule,
+// there's no org-wide fallback and no "must sum to something" constraint:
+// each line is independent, and a route with none just has no estimate yet.
+function RouteCostTemplate({ routeId, canEdit }: { routeId: string; canEdit: boolean }) {
+  const [lines, setLines] = useState<RouteCostTemplateLine[] | null>(null);
+
+  async function load() {
+    const res = await fetch(`/api/admin/routes/${routeId}/cost-template`);
+    const body = res.ok ? await res.json() : { lines: [] };
+    setLines(body.lines);
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching this route's cost template when the selected route changes
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally re-runs only when routeId changes; load is recreated every render
+  }, [routeId]);
+
+  async function save(rows: CostTemplateRow[]) {
+    const res = await fetch(`/api/admin/routes/${routeId}/cost-template`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lines: rows }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || res.statusText);
+    }
+    await load();
+  }
+
+  if (!lines) return null;
+  return (
+    <div className="panel" style={{ marginTop: 16 }}>
+      <div className="panel-head"><h2>Cost template</h2></div>
+      <div className="panel-body">
+        <div className="hint" style={{ marginBottom: 13 }}>
+          Expected costs for this route, used by the Estimator page. A route with no lines here just won&apos;t show an estimate yet.
+        </div>
+        <CostTemplateEditor initial={lines} canEdit={canEdit} onSave={save} />
+      </div>
+    </div>
+  );
+}
+
+function CostTemplateEditor({
+  initial,
+  canEdit,
+  onSave,
+}: {
+  initial: CostTemplateRow[];
+  canEdit: boolean;
+  onSave: (rows: CostTemplateRow[]) => Promise<void>;
+}) {
+  const [rows, setRows] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing local edit state when the parent's fetch resolves or the selected route changes
+    setRows(initial);
+  }, [initial]);
+
+  const valid = rows.every((r) => ESTIMATE_CATS.includes(r.category) && Number(r.amount) > 0);
+
+  function update(i: number, patch: Partial<CostTemplateRow>) {
+    setRows((cur) => cur.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(rows);
+      toast.success("Cost template saved");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div>
+      {error ? <div className="note bad">{error}</div> : null}
+      {rows.map((r, i) => (
+        <div key={i} style={{ display: "flex", gap: 9, alignItems: "flex-end", marginBottom: 11, flexWrap: "wrap" }}>
+          <div className="field" style={{ marginBottom: 0, flex: 1, minWidth: 150 }}>
+            <label htmlFor={`ctCat${i}`}>Category</label>
+            <select id={`ctCat${i}`} value={r.category} disabled={!canEdit} onChange={(e) => update(i, { category: e.target.value })}>
+              {ESTIMATE_CATS.map((c) => <option key={c} value={c}>{lab(c).replace(/^./, (x) => x.toUpperCase())}</option>)}
+            </select>
+          </div>
+          <div className="field" style={{ marginBottom: 0, width: 110 }}>
+            <label htmlFor={`ctAmt${i}`}>Amount (USD)</label>
+            <input id={`ctAmt${i}`} type="number" step="0.01" min="0" value={r.amount} disabled={!canEdit} onChange={(e) => update(i, { amount: Number(e.target.value) })} />
+          </div>
+          <div className="field" style={{ marginBottom: 0, width: 130 }}>
+            <label htmlFor={`ctBasis${i}`}>Basis</label>
+            <select id={`ctBasis${i}`} value={r.basis} disabled={!canEdit} onChange={(e) => update(i, { basis: e.target.value as RouteCostTemplateLine["basis"] })}>
+              <option value="per_trip">Per trip</option>
+              <option value="per_tonne">Per tonne</option>
+              <option value="per_cbm">Per m³</option>
+              <option value="per_km">Per km</option>
+            </select>
+          </div>
+          {canEdit ? <button className="x" type="button" onClick={() => setRows((cur) => cur.filter((_, idx) => idx !== i))}>✕</button> : null}
+        </div>
+      ))}
+      {canEdit ? (
+        <>
+          <button
+            className="ghost"
+            type="button"
+            style={{ width: "auto", marginTop: 0 }}
+            onClick={() => setRows((cur) => [...cur, { category: ESTIMATE_CATS[0], amount: 0, currency: "USD", basis: "per_trip" }])}
+          >
+            + Add cost line
+          </button>
+          <div style={{ marginTop: 11 }}>
+            <button className="primary" type="button" disabled={saving || !valid} onClick={handleSave}>
+              {saving ? "Saving…" : "Save cost template"}
+            </button>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

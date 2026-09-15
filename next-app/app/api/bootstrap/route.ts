@@ -16,7 +16,7 @@ export async function GET() {
 
   const { admin, orgId } = ctx;
 
-  const [board, billable, ar, fx, customers, routes, trucks, drivers, rateCards, routeBorderPaths, milestones, nonCancelledInvoices] =
+  const [board, billable, ar, fx, customers, routes, trucks, drivers, rateCards, routeBorderPaths, routeCostTemplates, milestones, nonCancelledInvoices] =
     await Promise.all([
       admin.from("trip_board").select("*").eq("org_id", orgId).order("actual_load_date", { ascending: false, nullsFirst: true }),
       admin.from("billable").select("*").eq("org_id", orgId).order("trip_no", { ascending: false }),
@@ -28,6 +28,7 @@ export async function GET() {
       admin.from("drivers").select("*").eq("org_id", orgId).order("full_name"),
       admin.from("rate_cards").select("*").eq("org_id", orgId).order("valid_from", { ascending: false }),
       admin.from("route_border_paths").select("*").eq("org_id", orgId).order("label"),
+      admin.from("route_cost_templates").select("id, route_id, category, amount, currency, basis").eq("org_id", orgId),
       admin.from("payment_milestones").select("seq, customer_id, label, pct, requires_pod").eq("org_id", orgId),
       // invoices has no trip_id of its own -- that lives on invoice_lines,
       // which has no status of its own -- so this is resolved in two steps
@@ -42,7 +43,7 @@ export async function GET() {
     ? await admin.from("invoice_lines").select("trip_id, line_total").in("invoice_id", nonCancelledInvoiceIds)
     : { data: [] as { trip_id: string; line_total: number }[], error: null };
 
-  const sources = { board, billable, ar, fx, customers, routes, trucks, drivers, rateCards, routeBorderPaths, milestones, invoicedTotals: nonCancelledInvoices, invoicedLines };
+  const sources = { board, billable, ar, fx, customers, routes, trucks, drivers, rateCards, routeBorderPaths, routeCostTemplates, milestones, invoicedTotals: nonCancelledInvoices, invoicedLines };
   const fetchErrors = Object.entries(sources)
     .filter(([, r]) => r.error)
     .map(([name]) => name);
@@ -78,5 +79,6 @@ export async function GET() {
     drivers: drivers.data ?? [],
     rateCards: rateCards.data ?? [],
     routeBorderPaths: routeBorderPaths.data ?? [],
+    routeCostTemplates: routeCostTemplates.data ?? [],
   });
 }

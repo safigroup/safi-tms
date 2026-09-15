@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     await Promise.all([
       ctx.admin
         .from("routes")
-        .select("id, name, origin, destination, distance_km, target_days, borders, is_active")
+        .select("id, name, origin, destination, distance_km, target_days, borders")
         .eq("org_id", ctx.orgId)
         .order("name"),
       ctx.admin
@@ -37,7 +37,6 @@ export async function GET(request: Request) {
     destination: r.destination,
     distanceKm: r.distance_km,
     targetDays: r.target_days,
-    isActive: r.is_active,
     defaultBorders: r.borders,
     alternateBorderPaths: (paths ?? []).filter((p) => p.route_id === r.id).map((p) => ({ label: p.label, borders: p.borders })),
     costTemplate: (templates ?? []).filter((t) => t.route_id === r.id).map((t) => ({ category: t.category, amount: t.amount, basis: t.basis })),

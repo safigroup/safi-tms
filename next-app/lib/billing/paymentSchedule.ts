@@ -43,10 +43,18 @@ export function resolveMilestonesDue(
 
   const due: MilestoneDue[] = [];
   let cumPct = 0;
+  // Advances after every milestone (skipped or not) so each amount is
+  // relative to what raising the prior ones in this same list would have
+  // left outstanding -- matching raise_invoice()'s own sequential math.
+  // Using the fixed alreadyInvoicedUsd for every milestone instead would
+  // make each one's amount overlap the others', so summing multiple
+  // simultaneously-due milestones (e.g. the "Remaining" total) overcounts.
+  let baseline = alreadyInvoicedUsd;
   for (const m of schedule) {
     cumPct += Number(m.pct);
     const cumTarget = Math.round(((trip.revenue_usd * cumPct) / 100) * 100) / 100;
-    const amount = Math.round((cumTarget - alreadyInvoicedUsd) * 100) / 100;
+    const amount = Math.round((cumTarget - baseline) * 100) / 100;
+    baseline = cumTarget;
     if (amount <= 0.01) continue;
 
     const raisable = m.requires_pod ? trip.pod_in_hand : !NOT_STARTED_STATUSES.has(trip.status);

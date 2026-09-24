@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -220,23 +220,34 @@ function RaiseInvoicePanel({
 }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // setBusy(true) doesn't disable the buttons until the next render commits,
+  // leaving a brief window where a second click (a different milestone's
+  // button, or an impatient double-click) could fire its own request before
+  // that happens. A ref updates immediately, closing that gap.
+  const raisingRef = useRef(false);
 
   async function raise(seq: number) {
+    if (raisingRef.current) return;
+    raisingRef.current = true;
     setBusy(true);
     setNote(null);
-    const res = await fetch("/api/invoices/raise", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tripId: trip.trip_id, seq }),
-    });
-    setBusy(false);
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      return setNote(body.error || res.statusText);
+    try {
+      const res = await fetch("/api/invoices/raise", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tripId: trip.trip_id, seq }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        return setNote(body.error || res.statusText);
+      }
+      const { id } = await res.json();
+      toast.success("Invoice raised");
+      await onRaised(id);
+    } finally {
+      raisingRef.current = false;
+      setBusy(false);
     }
-    const { id } = await res.json();
-    toast.success("Invoice raised");
-    await onRaised(id);
   }
 
   const awaitingPod = trip.milestones_due.some((m) => m.blocked_reason === "awaiting_pod");

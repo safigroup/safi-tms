@@ -175,6 +175,7 @@ export type TripDocument = {
 // against any particular trip -- see MilestoneDue for that.
 export type PaymentMilestone = {
   label: string;
+  amount: number | null;
   pct: number;
   requires_pod: boolean;
 };

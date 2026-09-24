@@ -16,7 +16,7 @@ export async function GET() {
 
   const { data, error } = await ctx.admin
     .from("payment_milestones")
-    .select("seq, label, pct, requires_pod")
+    .select("seq, label, amount, pct, requires_pod")
     .eq("org_id", ctx.orgId)
     .is("customer_id", null)
     .order("seq");
@@ -40,7 +40,7 @@ export async function PUT(request: Request) {
   const body = await request.json();
   const rows = validateMilestones(body.milestones);
   if (!rows) {
-    return NextResponse.json({ error: "Milestones must each have a label and a positive percentage, summing to exactly 100%." }, { status: 400 });
+    return NextResponse.json({ error: "Milestones must each have a label and a positive amount." }, { status: 400 });
   }
 
   const { error: deleteError } = await ctx.admin

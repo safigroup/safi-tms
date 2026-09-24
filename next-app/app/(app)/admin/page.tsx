@@ -908,14 +908,16 @@ function MilestoneEditor({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // A row saved before amounts existed has none -- fall back to its
+    // existing pct as a starting amount, which reproduces the exact same
+    // percentages if saved unchanged (sum of pct is already 100).
     // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing local edit state when the parent's fetch resolves or the selected customer changes
-    setRows(initial);
+    setRows(initial.map((r) => ({ ...r, amount: r.amount ?? r.pct })));
   }, [initial]);
 
-  const total = rows.reduce((s, r) => s + (Number(r.pct) || 0), 0);
-  const totalOk = Math.abs(total - 100) < 0.01;
-  const rowsValid = rows.every((r) => r.label.trim() && Number(r.pct) > 0);
-  const valid = rows.length === 0 ? allowEmpty : totalOk && rowsValid;
+  const total = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const rowsValid = rows.every((r) => r.label.trim() && Number(r.amount) > 0);
+  const valid = rows.length === 0 ? allowEmpty : total > 0 && rowsValid;
 
   function update(i: number, patch: Partial<PaymentMilestone>) {
     setRows((cur) => cur.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -943,9 +945,12 @@ function MilestoneEditor({
             <label htmlFor={`msLabel${i}`}>Label</label>
             <input id={`msLabel${i}`} type="text" placeholder="e.g. On loading" value={r.label} disabled={!canEdit} onChange={(e) => update(i, { label: e.target.value })} />
           </div>
-          <div className="field" style={{ marginBottom: 0, width: 90 }}>
-            <label htmlFor={`msPct${i}`}>%</label>
-            <input id={`msPct${i}`} type="number" step="0.01" min="0" max="100" value={r.pct} disabled={!canEdit} onChange={(e) => update(i, { pct: Number(e.target.value) })} />
+          <div className="field" style={{ marginBottom: 0, width: 110 }}>
+            <label htmlFor={`msAmt${i}`}>Amount (USD)</label>
+            <input id={`msAmt${i}`} type="number" step="0.01" min="0" value={r.amount ?? ""} disabled={!canEdit} onChange={(e) => update(i, { amount: e.target.value === "" ? null : Number(e.target.value) })} />
+          </div>
+          <div className="hint" style={{ marginBottom: 10, width: 56, textAlign: "right" }}>
+            {total > 0 && r.amount ? `${((Number(r.amount) / total) * 100).toFixed(2)}%` : ""}
           </div>
           <div className="check" style={{ marginBottom: 10 }}>
             <input type="checkbox" id={`msPod${i}`} checked={r.requires_pod} disabled={!canEdit} onChange={(e) => update(i, { requires_pod: e.target.checked })} />
@@ -956,13 +961,13 @@ function MilestoneEditor({
       ))}
       {canEdit ? (
         <>
-          <button className="ghost" type="button" style={{ width: "auto", marginTop: 0 }} onClick={() => setRows((cur) => [...cur, { label: "", pct: 0, requires_pod: false }])}>
+          <button className="ghost" type="button" style={{ width: "auto", marginTop: 0 }} onClick={() => setRows((cur) => [...cur, { label: "", amount: null, pct: 0, requires_pod: false }])}>
             + Add milestone
           </button>
           <div className="hint" style={{ margin: "11px 0" }}>
             {rows.length === 0
               ? (allowEmpty ? "No rows — using the organization's default schedule." : "At least one milestone is required.")
-              : `Total: ${total.toFixed(2)}%${totalOk ? " ✓" : " — must total exactly 100%"}`}
+              : `Total: $${total.toFixed(2)} — percentages are calculated from these amounts automatically.`}
           </div>
           <button className="primary" type="button" disabled={saving || !valid} onClick={handleSave}>
             {saving ? "Saving…" : "Save schedule"}
@@ -1004,7 +1009,7 @@ function PaymentScheduleEditor({ canEdit }: { canEdit: boolean }) {
   return (
     <div>
       <div className="hint" style={{ marginBottom: 13 }}>
-        How customers without their own custom schedule are invoiced — any number of named, percentage-based milestones, not just loading/delivery.
+        How customers without their own custom schedule are invoiced — any number of named milestones, not just loading/delivery. Type each one&apos;s typical dollar amount; the percentage of the total is calculated automatically.
       </div>
       <MilestoneEditor initial={milestones} allowEmpty={false} canEdit={canEdit} onSave={save} />
     </div>

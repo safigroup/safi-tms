@@ -330,6 +330,15 @@ function TripDetail({
           </div>
         </div>
       ) : null}
+      {trip.status === "closed" && canOverride ? (
+        <div className="d-sec">
+          <h3>Reopen</h3>
+          <div className="d-hint">Only if something needs correcting, e.g. a missed expense. Close it again once fixed.</div>
+          <div className="acts">
+            <button className="act" disabled={busy} onClick={() => advance("invoiced")}>Reopen trip</button>
+          </div>
+        </div>
+      ) : null}
       {canBorder && canWrite ? (
         <div className="d-sec">
           <h3>Border</h3>

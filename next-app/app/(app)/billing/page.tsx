@@ -490,7 +490,7 @@ function PrintSheet({ detail, onDone }: { detail: InvoiceDetail; onDone: () => v
       <div className="ih">
         <div className="co">
           <h1>{COMPANY.name}</h1>
-          <p>{COMPANY.reg}<br />{COMPANY.address}<br />{COMPANY.phone} · {COMPANY.email}</p>
+          <p>{COMPANY.reg}<br />TPIN {COMPANY.tpin}<br />{COMPANY.address}<br />{COMPANY.phone} · {COMPANY.email}</p>
         </div>
         <div className="im">
           <div className="big">Invoice</div>

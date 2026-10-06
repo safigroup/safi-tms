@@ -249,7 +249,7 @@ function EstimatePrintSheet({
         <div>
           <h4>Route</h4>
           <div style={{ fontSize: 14, fontWeight: 600 }}>{route.name}</div>
-          <div style={{ fontSize: 11.5, color: "#444" }}>
+          <div style={{ fontSize: 12, color: "#333" }}>
             {route.origin} → {route.destination}<br />
             {route.distance_km ? <>{route.distance_km} km<br /></> : null}
             {borderList?.length ? <>Via {borderLabel === "Default" ? "" : borderLabel + " — "}{borderList.join(" → ")}</> : null}

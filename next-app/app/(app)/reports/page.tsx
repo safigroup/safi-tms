@@ -509,7 +509,7 @@ function ReportPrintSheet({ report, onDone }: { report: TruckReport; onDone: () 
         </table>
       ) : null}
 
-      <h4 style={{ fontFamily: "var(--mono)", fontSize: 9.5, letterSpacing: ".14em", textTransform: "uppercase", color: "#666", marginTop: 26 }}>
+      <h4 style={{ fontFamily: "var(--mono)", fontSize: 10, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: "#555", marginTop: 26 }}>
         Profit &amp; loss
       </h4>
       <table style={{ marginTop: 8 }}>
@@ -532,7 +532,7 @@ function ReportPrintSheet({ report, onDone }: { report: TruckReport; onDone: () 
       </div>
       {report.breakeven.status !== "no_data" ? (
         <>
-          <h4 style={{ fontFamily: "var(--mono)", fontSize: 9.5, letterSpacing: ".14em", textTransform: "uppercase", color: "#666", marginTop: 26 }}>
+          <h4 style={{ fontFamily: "var(--mono)", fontSize: 10, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: "#555", marginTop: 26 }}>
             Asset breakeven
           </h4>
           <table style={{ marginTop: 8 }}>

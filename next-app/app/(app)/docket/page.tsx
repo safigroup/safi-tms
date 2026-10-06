@@ -504,7 +504,7 @@ function LedgerPrintSheet({
         <div>
           <h4>Trip</h4>
           <div style={{ fontSize: 14, fontWeight: 600 }}>{trip.customer}</div>
-          <div style={{ fontSize: 11.5, color: "#444" }}>
+          <div style={{ fontSize: 12, color: "#333" }}>
             {trip.route}<br />
             {trip.fleet_no ? <>Truck {trip.fleet_no}{trip.horse_reg ? " · " + trip.horse_reg : ""}<br /></> : null}
             {trip.driver ? <>Driver {trip.driver}<br /></> : null}
@@ -516,7 +516,7 @@ function LedgerPrintSheet({
         <div style={{ textAlign: "right" }}>
           <h4>Status</h4>
           <div style={{ fontSize: 13 }}>{lab(trip.status)}</div>
-          <div style={{ fontSize: 11.5, color: "#444", marginTop: 8 }}>
+          <div style={{ fontSize: 12, color: "#333", marginTop: 8 }}>
             {trip.actual_load_date ? <>Loaded {trip.actual_load_date}<br /></> : null}
             {trip.actual_delivery_at ? <>Delivered {trip.actual_delivery_at.slice(0, 10)}</> : null}
           </div>
@@ -544,7 +544,7 @@ function LedgerPrintSheet({
               <td className="num">{m2(c.amount_usd)}</td>
             </tr>
           )) : (
-            <tr><td colSpan={6} style={{ textAlign: "center", color: "#666" }}>No costs recorded on this trip.</td></tr>
+            <tr><td colSpan={6} style={{ textAlign: "center", color: "#555" }}>No costs recorded on this trip.</td></tr>
           )}
         </tbody>
       </table>

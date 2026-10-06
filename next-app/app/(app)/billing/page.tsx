@@ -501,7 +501,7 @@ function PrintSheet({ detail, onDone }: { detail: InvoiceDetail; onDone: () => v
         <div>
           <h4>Invoice to</h4>
           <div style={{ fontSize: 14, fontWeight: 600 }}>{c?.name || ""}</div>
-          <div style={{ fontSize: 11.5, color: "#444" }}>
+          <div style={{ fontSize: 12, color: "#333" }}>
             {c?.country || ""}
             {c?.tpin ? <>{" "}<br />TPIN {c.tpin}</> : null}
             {c?.contact_email ? <><br />{c.contact_email}</> : null}

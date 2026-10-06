@@ -22,6 +22,7 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const from = searchParams.get("from");
   const to = searchParams.get("to");
+  const includeLedgers = searchParams.get("includeLedgers") === "1";
 
   const { data: truck } = await ctx.admin
     .from("trucks")
@@ -40,8 +41,11 @@ export async function GET(
   // JS rather than querying twice.
   const [{ data: allTrips, error: tripsError }, { data: allCosts, error: costsError }] = await Promise.all([
     ctx.admin
+      // Selected in full (not just the revenue/cost figures the summary
+      // report needs) so the same row can also back a trip's printed
+      // ledger -- same shape BoardTrip already uses on the Board page.
       .from("trip_board")
-      .select("trip_id, trip_no, actual_load_date, revenue_usd, cost_usd, margin_usd")
+      .select("*")
       .eq("org_id", ctx.orgId)
       .eq("truck_id", id)
       .not("actual_load_date", "is", null)
@@ -75,6 +79,25 @@ export async function GET(
     return NextResponse.json({ error: tripCostRowsError.message }, { status: 400 });
   }
 
+  // Full per-line cost detail, only fetched when the printed report is
+  // asked to include each trip's ledger -- the summary above never needs
+  // more than the category/liters totals already queried.
+  let tripsWithLedgers = trips;
+  if (includeLedgers && tripIds.length) {
+    const { data: ledgerCostRows, error: ledgerCostRowsError } = await ctx.admin
+      .from("trip_costs")
+      .select("id, trip_id, category, description, amount, currency, fx_rate_to_usd, amount_usd, incurred_on, location, paid_by, receipt_ref, receipt_path, liters, price_per_liter")
+      .in("trip_id", tripIds)
+      .order("incurred_on", { ascending: true });
+    if (ledgerCostRowsError) {
+      return NextResponse.json({ error: ledgerCostRowsError.message }, { status: 400 });
+    }
+    tripsWithLedgers = trips.map((t) => ({
+      ...t,
+      costs: (ledgerCostRows ?? []).filter((c) => c.trip_id === t.trip_id),
+    }));
+  }
+
   // Fuel's liters/avg-price-per-liter rides along on the same category
   // breakdown -- no separate query, since these rows are already fetched.
   const sumByCategory = (rows: { category: string; amount_usd: number; liters?: number | null }[]) => {
@@ -101,7 +124,7 @@ export async function GET(
     truck,
     from: from || null,
     to: to || null,
-    trips,
+    trips: tripsWithLedgers,
     standingCosts,
     tripRevenue,
     tripExpenses,

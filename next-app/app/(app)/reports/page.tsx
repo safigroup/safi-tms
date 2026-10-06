@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { m0, m2, num, lab, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
 import { Spinner } from "@/lib/components/Spinner";
+import { TripLedgerBody } from "@/lib/components/TripLedgerBody";
 import type { BootstrapPayload, Breakeven, TruckReport } from "@/lib/types";
 
 // Mirrors lib/auth/permissions.ts's CAN_EDIT_COMMERCIAL -- UI convenience
@@ -111,6 +112,7 @@ export default function ReportsPage() {
   const [loadingReport, setLoadingReport] = useState(false);
   const [tab, setTab] = useState<"trips" | "standing">("trips");
   const [printing, setPrinting] = useState(false);
+  const [includeLedgers, setIncludeLedgers] = useState(false);
 
   async function load() {
     const res = await fetch("/api/bootstrap");
@@ -134,6 +136,7 @@ export default function ReportsPage() {
     const qs = new URLSearchParams();
     if (from) qs.set("from", from);
     if (to) qs.set("to", to);
+    if (includeLedgers) qs.set("includeLedgers", "1");
     const res = await fetch(`/api/reports/trucks/${id}?${qs.toString()}`);
     setLoadingReport(false);
     if (!res.ok) {
@@ -153,10 +156,10 @@ export default function ReportsPage() {
 
   useEffect(() => {
     if (!truckId) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- refetching the report when the selected truck or date range changes
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- refetching the report when the selected truck, date range, or ledger toggle changes
     loadReport(truckId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberate: only truckId/from/to should trigger a refetch
-  }, [truckId, from, to]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberate: only truckId/from/to/includeLedgers should trigger a refetch
+  }, [truckId, from, to, includeLedgers]);
 
   useEffect(() => {
     if (printing) window.print();
@@ -199,6 +202,10 @@ export default function ReportsPage() {
               Clear range
             </button>
           ) : null}
+          <div className="check" style={{ marginBottom: 10 }}>
+            <input id="rLedgers" type="checkbox" checked={includeLedgers} onChange={(e) => setIncludeLedgers(e.target.checked)} />
+            <label htmlFor="rLedgers">Include trip ledgers when printing</label>
+          </div>
         </div>
       </div>
 
@@ -553,6 +560,11 @@ function ReportPrintSheet({ report, onDone }: { report: TruckReport; onDone: () 
           </table>
         </>
       ) : null}
+      {report.trips.map((t) => t.costs ? (
+        <div key={t.trip_id} style={{ pageBreakBefore: "always" }}>
+          <TripLedgerBody trip={t} costs={t.costs} />
+        </div>
+      ) : null)}
     </div>,
     document.body,
   );

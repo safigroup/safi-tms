@@ -13,6 +13,7 @@ Needs `.env.local` (gitignored — copy `.env.example` and fill in real values):
 
 - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — safe to be public, used for auth only.
 - `SUPABASE_SERVICE_ROLE_KEY` — **not** safe to be public. Bypasses RLS on every table. Only ever obtained through `lib/auth/getAuthedOrgContext.ts`, `lib/auth/getAuthedPlatformAdmin.ts`, or `lib/auth/getAuthedApiKey.ts` — never import `lib/supabase/admin.ts` directly from a route handler.
+- `ANTHROPIC_API_KEY` — **not** safe to be public. Powers the Estimator page's AI cost insights (see below). A real, ongoing per-call cost, not a one-time setup. Leave unset in any environment where that's not wanted yet — the feature just reports itself as unconfigured rather than failing the page.
 
 Points at the **staging** Supabase project during development, not production — see `supabase/seed.sql` for the reference data it's seeded with, and the repo root README's security notes before touching RLS or views.
 
@@ -44,6 +45,12 @@ curl -X POST -H "Authorization: Bearer sk_..." -H "Content-Type: application/jso
 - `POST /api/agent/estimate` — body `{ routeId, tonnage?, volumeCbm?, customerId? }`. Computes the cost breakdown via the same `lib/estimates/estimateTripCost.ts` function the `/estimates` page itself uses (so the two can never disagree), and — if `customerId` matches a rate card for that route — an estimated revenue and margin. Returns 404 if the route doesn't belong to the caller's org.
 
 Both return `401` for a missing/invalid/revoked key, and never touch `trips`, `trip_costs`, or `invoices`.
+
+## AI cost insights
+
+`GET /api/insights/routes/[id]` (session-authenticated, not the Agent API) powers an "Insights" panel on the Estimator page. For the selected route, it compares each cost-template line against what trips that actually ran on that route have averaged per category — the same `estimateTripCost()` math the page itself uses, reused rather than re-implemented — and surfaces categories with no template line at all. Claude is given only those precomputed numbers and asked to write 1–4 short, concrete findings grounded in them; it's explicitly told never to invent a figure, and its response is parsed and validated the same way any other untrusted input is before it reaches the client.
+
+Degrades deliberately rather than erroring: fewer than 2 qualifying trips returns `insufficientData`, and a route with a template but no recorded costs at all (or vice versa) skips the Claude call entirely rather than spending one on an empty brief. Requires `ANTHROPIC_API_KEY`; without it, the endpoint returns a plain error and the panel just doesn't show anything; it never blocks or delays the manual cost breakdown above it on the page.
 
 ## Notes for whoever (or whatever) works on this next
 

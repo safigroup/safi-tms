@@ -12,7 +12,7 @@ npm run dev
 Needs `.env.local` (gitignored — copy `.env.example` and fill in real values):
 
 - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — safe to be public, used for auth only.
-- `SUPABASE_SERVICE_ROLE_KEY` — **not** safe to be public. Bypasses RLS on every table. Only ever obtained through `lib/auth/getAuthedOrgContext.ts` or `lib/auth/getAuthedPlatformAdmin.ts` — never import `lib/supabase/admin.ts` directly from a route handler.
+- `SUPABASE_SERVICE_ROLE_KEY` — **not** safe to be public. Bypasses RLS on every table. Only ever obtained through `lib/auth/getAuthedOrgContext.ts`, `lib/auth/getAuthedPlatformAdmin.ts`, or `lib/auth/getAuthedApiKey.ts` — never import `lib/supabase/admin.ts` directly from a route handler.
 
 Points at the **staging** Supabase project during development, not production — see `supabase/seed.sql` for the reference data it's seeded with, and the repo root README's security notes before touching RLS or views.
 
@@ -20,12 +20,30 @@ Points at the **staging** Supabase project during development, not production �
 
 - `app/login/`, `app/accept-invite/`, `app/forgot-password/`, `app/reset-password/` — public auth pages (client components, anon key).
 - `app/(app)/` — everything behind the auth gate: `layout.tsx` resolves the caller's org (or platform-admin status) server-side via `getAuthedOrgContext()` and either renders the app shell, an organization picker (platform admin with no org selected), or redirects to `/login`. Pages: `board`, `docket`, `billing`, `reports`, `admin`, `organizations` (platform-admin only).
-- `app/api/` — REST route handlers. Every one starts with `getAuthedOrgContext()` (org-scoped) or `getAuthedPlatformAdmin()` (cross-org: `api/platform/organizations`), checks a permission set from `lib/auth/permissions.ts` for anything mutating, and filters every query by the resolved `org_id`.
+- `app/api/` — REST route handlers. Every one starts with `getAuthedOrgContext()` (org-scoped, session cookie), `getAuthedPlatformAdmin()` (cross-org: `api/platform/organizations`), or `getAuthedApiKey()` (org-scoped, Bearer token: `api/agent/*`), checks a permission set from `lib/auth/permissions.ts` for anything mutating, and filters every query by the resolved `org_id`.
 - `lib/supabase/` — `client.ts` (browser, anon key), `server.ts` (SSR, anon key, request-bound cookies), `admin.ts` (service-role factory — internal only, see above).
-- `lib/auth/` — `getAuthedOrgContext.ts` (the per-request security choke point every org-scoped route starts with), `getAuthedPlatformAdmin.ts` (the equivalent for cross-org actions), `platformAdmin.ts` (shared platform-admin check), `permissions.ts` (the role permission matrix).
+- `lib/auth/` — `getAuthedOrgContext.ts` (the per-request security choke point every org-scoped route starts with), `getAuthedPlatformAdmin.ts` (the equivalent for cross-org actions), `getAuthedApiKey.ts` (the equivalent for API-key-authenticated agent routes — see [Agent API](#agent-api) below), `platformAdmin.ts` (shared platform-admin check), `permissions.ts` (the role permission matrix).
 - `lib/components/` — shared client components: `Nav.tsx` (masthead, nav, mobile hamburger menu, platform-admin org switcher), `ThemeToggle.tsx` (light/dark mode), `OrganizationsPicker.tsx`, `Spinner.tsx`.
 - `proxy.ts` — refreshes the Supabase session cookie on every request (this is `middleware.ts` under Next.js 16's new naming — see `AGENTS.md`).
 - `supabase/` — CLI-linked project: `migrations/` (applied to both staging and production, in order, explicitly — never auto-synced), `seed.sql` (staging-only reference data, deliberately **not** in `migrations/`).
+
+## Agent API
+
+`app/api/agent/*` lets an external agent (or script) query the Trip Cost Estimator programmatically instead of a human clicking through `/estimates`. It is deliberately **read-only** — nothing under `/api/agent/` can create or modify a trip, cost, or invoice, so a leaked key can't do anything destructive.
+
+**Auth**: `Authorization: Bearer <key>` header, where `<key>` is issued from Admin → API keys (`CAN_MANAGE_TEAM` only). The raw key is shown exactly once at creation — only its hash is stored — and can be revoked at any time from the same screen. Keys are scoped to the organization that issued them; there is no cross-org access.
+
+```bash
+curl -H "Authorization: Bearer sk_..." https://<host>/api/agent/routes
+curl -X POST -H "Authorization: Bearer sk_..." -H "Content-Type: application/json" \
+  -d '{"routeId": "...", "tonnage": 28, "customerId": "..."}' \
+  https://<host>/api/agent/estimate
+```
+
+- `GET /api/agent/routes` — lists the org's routes (`origin`, `destination`, `distanceKm`, `targetDays`, `defaultBorders`, `alternateBorderPaths`, and a `costTemplate` summary), so an agent can browse options before estimating.
+- `POST /api/agent/estimate` — body `{ routeId, tonnage?, volumeCbm?, customerId? }`. Computes the cost breakdown via the same `lib/estimates/estimateTripCost.ts` function the `/estimates` page itself uses (so the two can never disagree), and — if `customerId` matches a rate card for that route — an estimated revenue and margin. Returns 404 if the route doesn't belong to the caller's org.
+
+Both return `401` for a missing/invalid/revoked key, and never touch `trips`, `trip_costs`, or `invoices`.
 
 ## Notes for whoever (or whatever) works on this next
 

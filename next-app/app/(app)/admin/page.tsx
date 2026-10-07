@@ -140,14 +140,15 @@ const ENT_UI: Record<string, { label: string; permission: "fleet" | "commercial"
   },
 };
 
-const VIEWS = ["fx", "team", "customers", "trucks", "drivers", "routes", "rate_cards", "payment_schedule"] as const;
+const VIEWS = ["fx", "team", "customers", "trucks", "drivers", "routes", "rate_cards", "payment_schedule", "api_keys"] as const;
 type ViewKey = (typeof VIEWS)[number];
 const VIEW_LABELS: Record<ViewKey, string> = {
   fx: "Exchange rates", team: "Team", customers: "Customers", trucks: "Trucks", drivers: "Drivers", routes: "Routes", rate_cards: "Rate cards",
-  payment_schedule: "Payment schedule",
+  payment_schedule: "Payment schedule", api_keys: "API keys",
 };
 
 type TeamMember = { userId: string; email: string; role: string; createdAt: string };
+type ApiKey = { id: string; name: string; key_prefix: string; created_at: string; last_used_at: string | null; revoked_at: string | null };
 
 export default function AdminPage() {
   const router = useRouter();
@@ -159,6 +160,7 @@ export default function AdminPage() {
   const [team, setTeam] = useState<TeamMember[] | null>(null);
   const [viewerRole, setViewerRole] = useState<string | null>(null);
   const [teamError, setTeamError] = useState<string | null>(null);
+  const [apiKeys, setApiKeys] = useState<ApiKey[] | null>(null);
 
   async function load() {
     const res = await fetch("/api/bootstrap");
@@ -186,11 +188,17 @@ export default function AdminPage() {
     setViewerRole(body.viewerRole);
   }
 
+  async function loadApiKeys() {
+    const res = await fetch("/api/admin/api-keys");
+    if (res.ok) setApiKeys((await res.json()).keys);
+  }
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount
     load();
     loadTeam();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-once; load/loadTeam are recreated every render, adding them here would refetch on every render too
+    loadApiKeys();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-once; load/loadTeam/loadApiKeys are recreated every render, adding them here would refetch on every render too
   }, []);
 
   if (!data) return <div className="panel"><Spinner /></div>;
@@ -200,24 +208,27 @@ export default function AdminPage() {
   };
 
   const canEditView = (v: ViewKey): boolean => {
-    if (v === "team") return false;
+    if (v === "team" || v === "api_keys") return false;
     const permission = v === "fx" || v === "payment_schedule" ? "commercial" : ENT_UI[v].permission;
     return (permission === "fleet" ? CAN_EDIT_FLEET : CAN_EDIT_COMMERCIAL).includes(data.role);
   };
+  const canManageKeys = CAN_MANAGE_TEAM.includes(data.role);
   const canEdit = canEditView(view);
 
   return (
     <>
       {loadError ? <div className="note bad">{loadError}</div> : null}
       <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 16 }}>
-        {VIEWS.filter((v) => v !== "team" || CAN_MANAGE_TEAM.includes(data.role)).map((v) => (
+        {VIEWS.filter((v) => (v !== "team" && v !== "api_keys") || canManageKeys).map((v) => (
           <button
             key={v}
             className={"chip" + (view === v ? " on" : "")}
             onClick={() => { setView(v); setSelected(null); setCreating(false); }}
           >
             {VIEW_LABELS[v]}
-            {v === "payment_schedule" ? null : (
+            {v === "payment_schedule" ? null : v === "api_keys" ? (
+              apiKeys?.length ? <span className="c">{apiKeys.filter((k) => !k.revoked_at).length}</span> : null
+            ) : (
               <span className="c">{v === "fx" ? data.fx.length : v === "team" ? team?.length ?? 0 : masters[v].length}</span>
             )}
           </button>
@@ -227,8 +238,9 @@ export default function AdminPage() {
         <div className="panel">
           <div className="panel-head">
             <h2>{VIEW_LABELS[view]}</h2>
-            {view !== "fx" && view !== "team" && view !== "payment_schedule" && canEdit ? <button className="act" onClick={() => { setSelected(null); setCreating(true); }}>+ New</button> : null}
+            {view !== "fx" && view !== "team" && view !== "payment_schedule" && view !== "api_keys" && canEdit ? <button className="act" onClick={() => { setSelected(null); setCreating(true); }}>+ New</button> : null}
             {view === "team" ? <button className="act" onClick={() => { setSelected(null); setCreating(true); }}>+ Invite</button> : null}
+            {view === "api_keys" && canManageKeys ? <button className="act" onClick={() => setCreating(true)}>+ New key</button> : null}
           </div>
           {view === "fx" ? (
             <FxList fx={data.fx} />
@@ -242,6 +254,12 @@ export default function AdminPage() {
             )
           ) : view === "payment_schedule" ? (
             <div className="empty">Configure how customers without their own schedule are invoiced, on the right.</div>
+          ) : view === "api_keys" ? (
+            apiKeys ? (
+              <ApiKeyList keys={apiKeys} canManage={canManageKeys} onRevoked={loadApiKeys} />
+            ) : (
+              <Spinner />
+            )
           ) : (
             <EntityList
               entity={view}
@@ -253,12 +271,22 @@ export default function AdminPage() {
           )}
         </div>
         <div className="panel">
-          <div className="panel-head"><h2>{view === "fx" ? "Add a rate" : view === "team" ? (creating ? "Invite" : "Team member") : view === "payment_schedule" ? "Default schedule" : selected ? "Edit" : creating ? "New" : "Detail"}</h2></div>
+          <div className="panel-head"><h2>{view === "fx" ? "Add a rate" : view === "team" ? (creating ? "Invite" : "Team member") : view === "payment_schedule" ? "Default schedule" : view === "api_keys" ? "New key" : selected ? "Edit" : creating ? "New" : "Detail"}</h2></div>
           <div className="panel-body">
             {view === "fx" ? (
               canEdit ? <FxForm onSaved={load} /> : <div className="empty">You have read-only access to exchange rates.</div>
             ) : view === "payment_schedule" ? (
               <PaymentScheduleEditor canEdit={canEdit} />
+            ) : view === "api_keys" ? (
+              canManageKeys ? (
+                creating ? (
+                  <NewApiKeyForm onCreated={async () => { setCreating(false); await loadApiKeys(); }} onCancel={() => setCreating(false)} />
+                ) : (
+                  <div className="empty">Lets an agent call the Estimator via the read-only /api/agent/* endpoints. Create a key on the left.</div>
+                )
+              ) : (
+                <div className="empty">You have read-only access to API keys.</div>
+              )
             ) : view === "team" ? (
               creating ? (
                 <InviteForm
@@ -397,6 +425,115 @@ function InviteForm({
         </select>
       </div>
       <button className="primary" type="submit" disabled={saving}>{saving ? "Creating…" : "Create invite"}</button>
+      <button className="ghost" type="button" onClick={onCancel}>Cancel</button>
+    </form>
+  );
+}
+
+function ApiKeyList({
+  keys,
+  canManage,
+  onRevoked,
+}: {
+  keys: ApiKey[];
+  canManage: boolean;
+  onRevoked: () => Promise<void>;
+}) {
+  async function handleRevoke(id: string) {
+    if (!confirm("Revoke this key? Any agent using it will stop working immediately.")) return;
+    const res = await fetch(`/api/admin/api-keys/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      toast.success("Key revoked");
+      await onRevoked();
+    }
+  }
+
+  return (
+    <ul className="list">
+      {keys.length ? keys.map((k) => (
+        <li key={k.id}>
+          <div>
+            <div className="r-title">{k.name}</div>
+            <div className="r-mono">{k.key_prefix}… · created {k.created_at.slice(0, 10)}</div>
+            <div className="r-tags">
+              {k.revoked_at ? (
+                <span className="pill grey">revoked {k.revoked_at.slice(0, 10)}</span>
+              ) : (
+                <span className="pill good">active{k.last_used_at ? ` · last used ${k.last_used_at.slice(0, 10)}` : " · never used"}</span>
+              )}
+            </div>
+          </div>
+          {canManage && !k.revoked_at ? <button className="x" onClick={() => handleRevoke(k.id)}>✕</button> : null}
+        </li>
+      )) : <li className="empty">No API keys yet.</li>}
+    </ul>
+  );
+}
+
+function NewApiKeyForm({
+  onCreated,
+  onCancel,
+}: {
+  onCreated: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [rawKey, setRawKey] = useState<string | null>(null);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return setError("Give the key a name so it's recognizable later.");
+    setSaving(true);
+    setError(null);
+    const res = await fetch("/api/admin/api-keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return setError(body.error || res.statusText);
+    }
+    const body = await res.json();
+    toast.success("Key created");
+    setRawKey(body.key);
+  }
+
+  async function copyKey() {
+    if (!rawKey) return;
+    await navigator.clipboard.writeText(rawKey);
+    toast.success("Copied");
+  }
+
+  async function finish() {
+    await onCreated();
+  }
+
+  if (rawKey) {
+    return (
+      <div className="d-sec" style={{ borderBottom: "none", paddingTop: 0 }}>
+        <div className="note good">Key created for {name} — copy it now. It won&apos;t be shown again.</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input type="text" readOnly value={rawKey} style={{ fontFamily: "var(--mono)" }} />
+          <button className="act" type="button" onClick={copyKey}>Copy</button>
+        </div>
+        <button className="ghost" type="button" onClick={finish}>Done</button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {error ? <div className="note bad">{error}</div> : null}
+      <div className="field">
+        <label htmlFor="keyName">Name</label>
+        <input id="keyName" type="text" placeholder="e.g. Ops agent" value={name} onChange={(e) => setName(e.target.value)} />
+        <div className="hint">Lets you tell keys apart later — not shown to the agent.</div>
+      </div>
+      <button className="primary" type="submit" disabled={saving}>{saving ? "Creating…" : "Create key"}</button>
       <button className="ghost" type="button" onClick={onCancel}>Cancel</button>
     </form>
   );

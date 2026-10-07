@@ -7,7 +7,14 @@ import { m2, lab, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
 import { Spinner } from "@/lib/components/Spinner";
 import { estimateTripCost, type CostTemplateLine, type CostEstimate } from "@/lib/estimates/estimateTripCost";
+import type { RouteCostAnalysis } from "@/lib/insights/computeRouteCostDeltas";
 import type { BootstrapPayload, Customer, Route } from "@/lib/types";
+
+type Finding = { finding: string; suggestion: string };
+type InsightsResult =
+  | { insufficientData: true; tripCount: number }
+  | { insufficientData: false; tripCount: number; analysis: RouteCostAnalysis; findings: Finding[] }
+  | { error: string };
 
 const NEEDS_LABEL: Record<string, string> = {
   tonnage: "enter tonnage",
@@ -25,6 +32,8 @@ export default function EstimatesPage() {
   const [tonnage, setTonnage] = useState("");
   const [volumeCbm, setVolumeCbm] = useState("");
   const [printing, setPrinting] = useState(false);
+  const [insightsByRoute, setInsightsByRoute] = useState<Record<string, InsightsResult>>({});
+  const [insightsLoading, setInsightsLoading] = useState(false);
 
   async function load() {
     const res = await fetch("/api/bootstrap");
@@ -51,6 +60,29 @@ export default function EstimatesPage() {
   useEffect(() => {
     if (printing) window.print();
   }, [printing]);
+
+  useEffect(() => {
+    if (!routeId || insightsByRoute[routeId]) return;
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-change loading flag
+    setInsightsLoading(true);
+    fetch(`/api/insights/routes/${routeId}`)
+      .then((res) => res.json())
+      .then((body: InsightsResult) => {
+        if (!cancelled) setInsightsByRoute((cur) => ({ ...cur, [routeId]: body }));
+      })
+      .catch(() => {
+        if (!cancelled) setInsightsByRoute((cur) => ({ ...cur, [routeId]: { error: "request failed" } }));
+      })
+      .finally(() => {
+        if (!cancelled) setInsightsLoading(false);
+      });
+    return () => { cancelled = true; };
+    // Cached per route for the rest of this page session -- re-fetching
+    // every time someone flips back to a route they've already viewed
+    // would spend a real API call for nothing new to say.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed only on routeId; insightsByRoute is read, not a trigger
+  }, [routeId]);
 
   if (!data) return <div className="panel"><Spinner /></div>;
 
@@ -149,6 +181,7 @@ export default function EstimatesPage() {
                   No rate card on file for this customer and route.
                 </div>
               ) : null}
+              <RouteInsights result={insightsByRoute[routeId]} loading={insightsLoading && !insightsByRoute[routeId]} />
             </div>
           )}
         </div>
@@ -205,6 +238,45 @@ export default function EstimatesPage() {
         />
       ) : null}
     </>
+  );
+}
+
+// Deliberately lighter-weight than the breakdown above it: a quiet loading
+// line rather than a spinner, no red error banners -- this is a slower,
+// best-effort addition that should never read as something having gone
+// wrong with the estimate itself.
+function RouteInsights({ result, loading }: { result: InsightsResult | undefined; loading: boolean }) {
+  if (loading) {
+    return <div className="d-hint" style={{ marginTop: 16 }}>Analyzing historical costs on this route…</div>;
+  }
+  if (!result || "error" in result) {
+    return null;
+  }
+
+  return (
+    <div className="d-sec" style={{ marginTop: 16, paddingLeft: 0, paddingRight: 0, borderBottom: "none" }}>
+      <h3>Insights</h3>
+      {result.insufficientData ? (
+        <div className="d-hint">
+          Needs at least 2 trips with history to spot a trend on this route — {result.tripCount} so far.
+        </div>
+      ) : result.analysis.deltas.length === 0 && result.analysis.untemplated.length === 0 ? (
+        <div className="d-hint">No cost data recorded against this route&apos;s trips yet.</div>
+      ) : result.findings.length === 0 ? (
+        <div className="d-hint">
+          Nothing stands out — actual costs across {result.tripCount} trip{result.tripCount === 1 ? "" : "s"} are tracking close to the template.
+        </div>
+      ) : (
+        <ul className="list">
+          {result.findings.map((f, i) => (
+            <li key={i} style={{ display: "block" }}>
+              <div style={{ fontSize: 13.5 }}>{f.finding}</div>
+              <div className="d-hint" style={{ marginTop: 3 }}>{f.suggestion}</div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

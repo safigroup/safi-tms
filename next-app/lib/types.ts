@@ -175,6 +175,7 @@ export type TripDocument = {
 // against any particular trip -- see MilestoneDue for that.
 export type PaymentMilestone = {
   label: string;
+  amount: number | null;
   pct: number;
   requires_pod: boolean;
 };
@@ -231,14 +232,13 @@ export type TruckCost = {
   incurred_on: string;
 };
 
-export type TruckReportTrip = {
-  trip_id: string;
-  trip_no: string;
-  actual_load_date: string | null;
-  revenue_usd: number;
-  cost_usd: number;
-  margin_usd: number;
-};
+// The full BoardTrip shape, not just the revenue/cost figures the summary
+// report needs -- the same row also backs a trip's printed ledger when
+// the report is asked to include one (see TripLedgerBody). costs is only
+// populated then; it's absent otherwise, not an empty array, so the
+// print sheet can tell "ledgers weren't requested" apart from "requested
+// but this trip has none."
+export type TruckReportTrip = BoardTrip & { costs?: TripCost[] };
 
 export type CategoryAmount = {
   category: string;

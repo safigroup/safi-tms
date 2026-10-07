@@ -43,10 +43,25 @@ export function resolveMilestonesDue(
 
   const due: MilestoneDue[] = [];
   let cumPct = 0;
+  // Advances after every milestone (skipped or not) so each amount is
+  // relative to what raising the prior ones in this same list would have
+  // left outstanding -- matching raise_invoice()'s own sequential math.
+  // Using the fixed alreadyInvoicedUsd for every milestone instead would
+  // make each one's amount overlap the others', so summing multiple
+  // simultaneously-due milestones (e.g. the "Remaining" total) overcounts.
+  // Takes the max with the running baseline, not cumTarget outright --
+  // alreadyInvoicedUsd can already exceed an early milestone's own
+  // target (e.g. the schedule was edited after it was invoiced under a
+  // different percentage, or it was simply invoiced for less than its
+  // slot); dropping straight to that milestone's smaller cumTarget would
+  // "forget" money already invoiced past it, making a later, actually-
+  // already-covered milestone look due again.
+  let baseline = alreadyInvoicedUsd;
   for (const m of schedule) {
     cumPct += Number(m.pct);
     const cumTarget = Math.round(((trip.revenue_usd * cumPct) / 100) * 100) / 100;
-    const amount = Math.round((cumTarget - alreadyInvoicedUsd) * 100) / 100;
+    const amount = Math.round((cumTarget - baseline) * 100) / 100;
+    baseline = Math.max(baseline, cumTarget);
     if (amount <= 0.01) continue;
 
     const raisable = m.requires_pod ? trip.pod_in_hand : !NOT_STARTED_STATUSES.has(trip.status);

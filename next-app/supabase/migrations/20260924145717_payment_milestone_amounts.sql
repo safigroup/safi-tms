@@ -1,0 +1,12 @@
+-- Admins now type each milestone's typical dollar amount rather than a
+-- raw percentage (the Admin editor was requiring hand-computed
+-- percentages, e.g. AMT CONGO SARL's 56.60/15.09/28.31 schedule). The
+-- typed amounts are stored here purely for that display/editing
+-- convenience -- pct remains the sole value raise_invoice() and
+-- resolveMilestonesDue() read, computed as each amount's share of the
+-- row set's own total, so a schedule still scales correctly to any
+-- trip's actual revenue regardless of what the amounts summed to.
+-- Nullable: existing rows predate this and have no typed amount (the
+-- Admin editor falls back to showing their existing pct as a starting
+-- amount, which reproduces the same percentages unless edited).
+alter table "public"."payment_milestones" add column "amount" numeric(14,2);

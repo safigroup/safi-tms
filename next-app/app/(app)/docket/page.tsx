@@ -9,6 +9,7 @@ import { prepareFile } from "@/lib/imagePrep";
 import { saveCostDraft, loadCostDraft, clearCostDraft, type CostDraft } from "@/lib/costDraft";
 import { Spinner } from "@/lib/components/Spinner";
 import { TripLedgerBody } from "@/lib/components/TripLedgerBody";
+import type { PrintLang } from "@/lib/print/translations";
 import type { AuditLogEntry, BootstrapPayload, BoardTrip, TripCost, TripDocument } from "@/lib/types";
 
 const CATS = [
@@ -45,11 +46,21 @@ export default function DocketPage() {
   const [formNote, setFormNote] = useState<string | null>(null);
   const [editingCostId, setEditingCostId] = useState<string | null>(null);
   const [selectedCostIds, setSelectedCostIds] = useState<Set<string>>(new Set());
-  const [printJob, setPrintJob] = useState<{ trip: BoardTrip; costs: TripCost[] } | null>(null);
+  const [printJob, setPrintJob] = useState<{ trip: BoardTrip; costs: TripCost[]; lang: PrintLang } | null>(null);
+  const [printLang, setPrintLang] = useState<PrintLang>("en");
 
   useEffect(() => {
     if (printJob) window.print();
   }, [printJob]);
+
+  useEffect(() => {
+    // Defaults to French for a DRC customer (country "CD") -- still just
+    // a default, overridable with the EN/FR toggle before printing.
+    const tripRow = data?.board.find((t) => t.trip_id === tripId);
+    const country = data?.customers.find((c) => c.id === tripRow?.customer_id)?.country;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting the print-language default when the selected trip changes
+    setPrintLang(country === "CD" ? "fr" : "en");
+  }, [tripId, data]);
 
   async function loadBootstrap() {
     const res = await fetch("/api/bootstrap");
@@ -275,7 +286,11 @@ export default function DocketPage() {
           <div className="d-head">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
               <div className="r-no">{trip.trip_no} · <span className="pill grey">{lab(trip.status)}</span></div>
-              <button type="button" className="act" onClick={() => setPrintJob({ trip, costs })}>Print ledger</button>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <button type="button" className={"chip" + (printLang === "en" ? " on" : "")} onClick={() => setPrintLang("en")}>EN</button>
+                <button type="button" className={"chip" + (printLang === "fr" ? " on" : "")} onClick={() => setPrintLang("fr")}>FR</button>
+                <button type="button" className="act" onClick={() => setPrintJob({ trip, costs, lang: printLang })}>Print ledger</button>
+              </div>
             </div>
             <div className="r-title" style={{ fontSize: 18 }}>{trip.customer}</div>
             <div className="r-sub">{trip.route}{trip.fleet_no ? " · " + trip.fleet_no : ""}</div>
@@ -466,7 +481,7 @@ export default function DocketPage() {
           }}
         />
       ) : null}
-      {printJob ? <LedgerPrintSheet trip={printJob.trip} costs={printJob.costs} onDone={() => setPrintJob(null)} /> : null}
+      {printJob ? <LedgerPrintSheet trip={printJob.trip} costs={printJob.costs} lang={printJob.lang} onDone={() => setPrintJob(null)} /> : null}
     </>
   );
 }
@@ -474,10 +489,12 @@ export default function DocketPage() {
 function LedgerPrintSheet({
   trip,
   costs,
+  lang,
   onDone,
 }: {
   trip: BoardTrip;
   costs: TripCost[];
+  lang: PrintLang;
   onDone: () => void;
 }) {
   useEffect(() => {
@@ -487,7 +504,7 @@ function LedgerPrintSheet({
   }, [onDone]);
 
   return createPortal(
-    <div id="sheet"><TripLedgerBody trip={trip} costs={costs} /></div>,
+    <div id="sheet"><TripLedgerBody trip={trip} costs={costs} lang={lang} /></div>,
     document.body,
   );
 }

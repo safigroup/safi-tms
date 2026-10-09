@@ -8,6 +8,7 @@ import { m0, m2, num, lab, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
 import { Spinner } from "@/lib/components/Spinner";
 import { TripLedgerBody } from "@/lib/components/TripLedgerBody";
+import { t, catLabel, type PrintLang } from "@/lib/print/translations";
 import type { BootstrapPayload, Breakeven, TruckReport } from "@/lib/types";
 
 // Mirrors lib/auth/permissions.ts's CAN_EDIT_COMMERCIAL -- UI convenience
@@ -112,6 +113,7 @@ export default function ReportsPage() {
   const [loadingReport, setLoadingReport] = useState(false);
   const [tab, setTab] = useState<"trips" | "standing">("trips");
   const [printing, setPrinting] = useState(false);
+  const [printLang, setPrintLang] = useState<PrintLang>("en");
   const [includeLedgers, setIncludeLedgers] = useState(false);
 
   async function load() {
@@ -297,7 +299,11 @@ export default function ReportsPage() {
             <div className="panel">
               <div className="panel-head">
                 <h2>{report.truck.fleet_no}</h2>
-                <button className="act" onClick={() => setPrinting(true)}>Print / PDF</button>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <button className={"chip" + (printLang === "en" ? " on" : "")} onClick={() => setPrintLang("en")}>EN</button>
+                  <button className={"chip" + (printLang === "fr" ? " on" : "")} onClick={() => setPrintLang("fr")}>FR</button>
+                  <button className="act" onClick={() => setPrinting(true)}>Print / PDF</button>
+                </div>
               </div>
               <div className="tabs">
                 <button className={tab === "trips" ? "on" : ""} onClick={() => setTab("trips")}>
@@ -349,7 +355,7 @@ export default function ReportsPage() {
         <div className="empty">Pick a truck to see its report.</div>
       )}
 
-      {printing && report ? <ReportPrintSheet report={report} onDone={() => setPrinting(false)} /> : null}
+      {printing && report ? <ReportPrintSheet report={report} lang={printLang} onDone={() => setPrinting(false)} /> : null}
     </>
   );
 }
@@ -467,7 +473,7 @@ function AddTruckCostForm({
   );
 }
 
-function ReportPrintSheet({ report, onDone }: { report: TruckReport; onDone: () => void }) {
+function ReportPrintSheet({ report, lang, onDone }: { report: TruckReport; lang: PrintLang; onDone: () => void }) {
   useEffect(() => {
     const handler = () => onDone();
     window.addEventListener("afterprint", handler);
@@ -482,32 +488,32 @@ function ReportPrintSheet({ report, onDone }: { report: TruckReport; onDone: () 
           <p>{COMPANY.reg}<br />{COMPANY.address}<br />{COMPANY.phone} · {COMPANY.email}</p>
         </div>
         <div className="im">
-          <div className="big">Truck Report</div>
+          <div className="big">{t(lang, "truck_report")}</div>
           {report.truck.fleet_no} · {report.truck.horse_reg}<br />
           {report.from || "start"} – {report.to || "present"}
         </div>
       </div>
       <table>
-        <thead><tr><th>Trip</th><th>Loaded</th><th className="num">Revenue</th><th className="num">Cost</th><th className="num">Margin</th></tr></thead>
+        <thead><tr><th>{t(lang, "trip")}</th><th>{t(lang, "loaded")}</th><th className="num">{t(lang, "revenue")}</th><th className="num">{t(lang, "cost")}</th><th className="num">{t(lang, "margin")}</th></tr></thead>
         <tbody>
-          {report.trips.map((t) => (
-            <tr key={t.trip_id}>
-              <td>{t.trip_no}</td>
-              <td>{t.actual_load_date || "—"}</td>
-              <td className="num">{m2(t.revenue_usd)}</td>
-              <td className="num">{m2(t.cost_usd)}</td>
-              <td className="num">{m2(t.margin_usd)}</td>
+          {report.trips.map((tr) => (
+            <tr key={tr.trip_id}>
+              <td>{tr.trip_no}</td>
+              <td>{tr.actual_load_date || "—"}</td>
+              <td className="num">{m2(tr.revenue_usd)}</td>
+              <td className="num">{m2(tr.cost_usd)}</td>
+              <td className="num">{m2(tr.margin_usd)}</td>
             </tr>
           ))}
         </tbody>
       </table>
       {report.standingCosts.length ? (
         <table style={{ marginTop: 18 }}>
-          <thead><tr><th>Standing cost</th><th>Date</th><th className="num">Amount</th></tr></thead>
+          <thead><tr><th>{t(lang, "standing_cost")}</th><th>{t(lang, "date")}</th><th className="num">{t(lang, "amount")}</th></tr></thead>
           <tbody>
             {report.standingCosts.map((c) => (
               <tr key={c.id}>
-                <td>{lab(c.category)}{c.description ? " — " + c.description : ""}</td>
+                <td>{catLabel(lang, c.category)}{c.description ? " — " + c.description : ""}</td>
                 <td>{c.incurred_on}</td>
                 <td className="num">{m2(c.amount_usd)}</td>
               </tr>
@@ -517,52 +523,52 @@ function ReportPrintSheet({ report, onDone }: { report: TruckReport; onDone: () 
       ) : null}
 
       <h4 style={{ fontFamily: "var(--mono)", fontSize: 10, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: "#555", marginTop: 26 }}>
-        Profit &amp; loss
+        {t(lang, "profit_and_loss")}
       </h4>
       <table style={{ marginTop: 8 }}>
         <tbody>
-          <tr><td>Revenue</td><td className="num">{m2(report.tripRevenue)}</td></tr>
+          <tr><td>{t(lang, "revenue")}</td><td className="num">{m2(report.tripRevenue)}</td></tr>
           {report.tripExpensesByCategory.map((c) => (
             <tr key={"t-" + c.category}>
-              <td>Trip: {lab(c.category)}{c.liters ? ` (${num(c.liters)} L · avg ${m2(c.avgPricePerLiterUsd)}/L)` : ""}</td>
+              <td>{t(lang, "trip_prefix")}: {catLabel(lang, c.category)}{c.liters ? ` (${num(c.liters)} L · avg ${m2(c.avgPricePerLiterUsd)}/L)` : ""}</td>
               <td className="num">− {m2(c.amountUsd)}</td>
             </tr>
           ))}
           {report.standingExpensesByCategory.map((c) => (
-            <tr key={"s-" + c.category}><td>Standing: {lab(c.category)}</td><td className="num">− {m2(c.amountUsd)}</td></tr>
+            <tr key={"s-" + c.category}><td>{t(lang, "standing_prefix")}: {catLabel(lang, c.category)}</td><td className="num">− {m2(c.amountUsd)}</td></tr>
           ))}
         </tbody>
       </table>
       <div className="totals">
-        <div><span>Total expenses</span><span>− {m2(report.totalExpenses)}</span></div>
-        <div className="due"><span>Net profit / (loss)</span><span>{pl(report.margin)}</span></div>
+        <div><span>{t(lang, "total_expenses")}</span><span>− {m2(report.totalExpenses)}</span></div>
+        <div className="due"><span>{t(lang, "net_profit_loss")}</span><span>{pl(report.margin)}</span></div>
       </div>
       {report.breakeven.status !== "no_data" ? (
         <>
           <h4 style={{ fontFamily: "var(--mono)", fontSize: 10, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: "#555", marginTop: 26 }}>
-            Asset breakeven
+            {t(lang, "asset_breakeven")}
           </h4>
           <table style={{ marginTop: 8 }}>
             <tbody>
-              <tr><td>Total investment</td><td className="num">{m2(report.breakeven.investment)}</td></tr>
-              <tr><td>Purchase date</td><td className="num">{report.breakeven.startDate}</td></tr>
+              <tr><td>{t(lang, "total_investment")}</td><td className="num">{m2(report.breakeven.investment)}</td></tr>
+              <tr><td>{t(lang, "purchase_date")}</td><td className="num">{report.breakeven.startDate}</td></tr>
               <tr>
-                <td>Status</td>
+                <td>{t(lang, "status")}</td>
                 <td className="num">
                   {report.breakeven.status === "reached"
-                    ? `Broke even ${monthLabel(report.breakeven.reachedOn)}`
+                    ? `${t(lang, "broke_even")} ${monthLabel(report.breakeven.reachedOn)}`
                     : report.breakeven.status === "projected"
-                      ? `Projected ${monthLabel(report.breakeven.projectedOn)}`
-                      : "Not on track at current pace"}
+                      ? `${t(lang, "projected")} ${monthLabel(report.breakeven.projectedOn)}`
+                      : t(lang, "not_on_track")}
                 </td>
               </tr>
             </tbody>
           </table>
         </>
       ) : null}
-      {report.trips.map((t) => t.costs ? (
-        <div key={t.trip_id} style={{ pageBreakBefore: "always" }}>
-          <TripLedgerBody trip={t} costs={t.costs} />
+      {report.trips.map((tr) => tr.costs ? (
+        <div key={tr.trip_id} style={{ pageBreakBefore: "always" }}>
+          <TripLedgerBody trip={tr} costs={tr.costs} lang={lang} />
         </div>
       ) : null)}
     </div>,

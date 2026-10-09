@@ -7,6 +7,7 @@ import { m2, lab, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
 import { Spinner } from "@/lib/components/Spinner";
 import { estimateTripCost, type CostTemplateLine, type CostEstimate } from "@/lib/estimates/estimateTripCost";
+import { t, catLabel, type PrintLang } from "@/lib/print/translations";
 import type { BootstrapPayload, Customer, Route } from "@/lib/types";
 
 const NEEDS_LABEL: Record<string, string> = {
@@ -25,6 +26,7 @@ export default function EstimatesPage() {
   const [tonnage, setTonnage] = useState("");
   const [volumeCbm, setVolumeCbm] = useState("");
   const [printing, setPrinting] = useState(false);
+  const [printLang, setPrintLang] = useState<PrintLang>("en");
 
   async function load() {
     const res = await fetch("/api/bootstrap");
@@ -51,6 +53,14 @@ export default function EstimatesPage() {
   useEffect(() => {
     if (printing) window.print();
   }, [printing]);
+
+  useEffect(() => {
+    // Defaults to French for a DRC customer (country "CD") -- still just
+    // a default, overridable with the EN/FR toggle before printing.
+    const country = data?.customers.find((c) => c.id === customerId)?.country;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting the print-language default when the selected customer changes
+    setPrintLang(country === "CD" ? "fr" : "en");
+  }, [customerId, data]);
 
   if (!data) return <div className="panel"><Spinner /></div>;
 
@@ -94,7 +104,13 @@ export default function EstimatesPage() {
         <div className="panel">
           <div className="panel-head">
             <h2>Estimate</h2>
-            {route ? <button className="act" type="button" onClick={() => setPrinting(true)}>Print / PDF</button> : null}
+            {route ? (
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <button className={"chip" + (printLang === "en" ? " on" : "")} type="button" onClick={() => setPrintLang("en")}>EN</button>
+                <button className={"chip" + (printLang === "fr" ? " on" : "")} type="button" onClick={() => setPrintLang("fr")}>FR</button>
+                <button className="act" type="button" onClick={() => setPrinting(true)}>Print / PDF</button>
+              </div>
+            ) : null}
           </div>
           {!route ? (
             <div className="empty">Pick a route to see an estimate.</div>
@@ -201,6 +217,7 @@ export default function EstimatesPage() {
           estimate={estimate}
           revenueAmount={revenueAmount}
           margin={margin}
+          lang={printLang}
           onDone={() => setPrinting(false)}
         />
       ) : null}
@@ -216,6 +233,7 @@ function EstimatePrintSheet({
   estimate,
   revenueAmount,
   margin,
+  lang,
   onDone,
 }: {
   route: Route;
@@ -225,6 +243,7 @@ function EstimatePrintSheet({
   estimate: CostEstimate;
   revenueAmount: number | null;
   margin: number | null;
+  lang: PrintLang;
   onDone: () => void;
 }) {
   useEffect(() => {
@@ -232,6 +251,12 @@ function EstimatePrintSheet({
     window.addEventListener("afterprint", handler);
     return () => window.removeEventListener("afterprint", handler);
   }, [onDone]);
+
+  const basisSuffix = (basis: CostTemplateLine["basis"]) =>
+    basis === "per_trip" ? t(lang, "flat")
+    : basis === "per_tonne" ? t(lang, "per_tonne_suffix")
+    : basis === "per_cbm" ? t(lang, "per_cbm_suffix")
+    : t(lang, "per_km_suffix");
 
   return createPortal(
     <div id="sheet">
@@ -241,46 +266,46 @@ function EstimatePrintSheet({
           <p>{COMPANY.reg}<br />{COMPANY.address}<br />{COMPANY.phone} · {COMPANY.email}</p>
         </div>
         <div className="im">
-          <div className="big">Cost Estimate</div>
-          {route.name}<br />Printed {today()}
+          <div className="big">{t(lang, "cost_estimate")}</div>
+          {route.name}<br />{t(lang, "printed")} {today()}
         </div>
       </div>
       <div className="parties">
         <div>
-          <h4>Route</h4>
+          <h4>{t(lang, "route")}</h4>
           <div style={{ fontSize: 14, fontWeight: 600 }}>{route.name}</div>
           <div style={{ fontSize: 12, color: "#333" }}>
             {route.origin} → {route.destination}<br />
             {route.distance_km ? <>{route.distance_km} km<br /></> : null}
-            {borderList?.length ? <>Via {borderLabel === "Default" ? "" : borderLabel + " — "}{borderList.join(" → ")}</> : null}
+            {borderList?.length ? <>{t(lang, "via")} {borderLabel === "Default" ? "" : borderLabel + " — "}{borderList.join(" → ")}</> : null}
           </div>
         </div>
         {customer ? (
           <div style={{ textAlign: "right" }}>
-            <h4>Customer</h4>
+            <h4>{t(lang, "customer")}</h4>
             <div style={{ fontSize: 13 }}>{customer.name}</div>
           </div>
         ) : null}
       </div>
       <table>
-        <thead><tr><th>Cost category</th><th>Basis</th><th className="num">Amount</th></tr></thead>
+        <thead><tr><th>{t(lang, "cost_category")}</th><th>{t(lang, "basis")}</th><th className="num">{t(lang, "amount")}</th></tr></thead>
         <tbody>
           {estimate.lines.map((l) => (
             <tr key={l.category}>
-              <td>{lab(l.category)}</td>
-              <td>{m2(l.rate)} {l.basis === "per_trip" ? "flat" : l.basis === "per_tonne" ? "/ tonne" : l.basis === "per_cbm" ? "/ m³" : "/ km"}</td>
+              <td>{catLabel(lang, l.category)}</td>
+              <td>{m2(l.rate)} {basisSuffix(l.basis)}</td>
               <td className="num">{l.amount !== null ? m2(l.amount) : "—"}</td>
             </tr>
           ))}
         </tbody>
       </table>
       <div className="totals">
-        <div className="due"><span>Estimated total cost</span><span>{m2(estimate.total)}</span></div>
-        {revenueAmount !== null ? <div><span>Estimated revenue</span><span>{m2(revenueAmount)}</span></div> : null}
-        {margin !== null ? <div><span>Estimated margin</span><span>{m2(margin)}</span></div> : null}
+        <div className="due"><span>{t(lang, "estimated_total_cost")}</span><span>{m2(estimate.total)}</span></div>
+        {revenueAmount !== null ? <div><span>{t(lang, "estimated_revenue")}</span><span>{m2(revenueAmount)}</span></div> : null}
+        {margin !== null ? <div><span>{t(lang, "estimated_margin")}</span><span>{m2(margin)}</span></div> : null}
       </div>
       <div className="terms">
-        This is an estimate only, based on configured cost/rate templates — actual trip costs and revenue may differ.
+        {t(lang, "estimate_disclaimer")}
       </div>
     </div>,
     document.body,

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { m0, m2, lab, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
 import { Spinner } from "@/lib/components/Spinner";
+import { t, invoiceTypeLabel, type PrintLang } from "@/lib/print/translations";
 import type { ArInvoice, BillableTrip, BootstrapPayload } from "@/lib/types";
 
 // Mirrors lib/auth/permissions.ts's CAN_MANAGE_BILLING -- UI convenience
@@ -49,6 +50,7 @@ export default function BillingPage() {
   const [bucket, setBucket] = useState("open");
   const [selected, setSelected] = useState<string | null>(null);
   const [printData, setPrintData] = useState<InvoiceDetail | null>(null);
+  const [printLang, setPrintLang] = useState<PrintLang>("en");
 
   async function load() {
     const res = await fetch("/api/bootstrap");
@@ -97,11 +99,12 @@ export default function BillingPage() {
   const invRows = data.ar.filter(bucketFn);
   const canWrite = CAN_MANAGE_BILLING.includes(data.role);
 
-  async function printInvoice(id: string) {
+  async function printInvoice(id: string, lang: PrintLang) {
     const res = await fetch(`/api/invoices/${id}`);
     if (!res.ok) return;
     const body: InvoiceDetail = await res.json();
     setPrintData(body);
+    setPrintLang(lang);
   }
 
   return (
@@ -196,7 +199,7 @@ export default function BillingPage() {
               invoiceId={selected}
               ar={data.ar}
               onChanged={load}
-              onPrint={() => printInvoice(selected)}
+              onPrint={(lang) => printInvoice(selected, lang)}
               canWrite={canWrite}
             />
           ) : (
@@ -204,7 +207,7 @@ export default function BillingPage() {
           )}
         </div>
       </div>
-      {printData ? <PrintSheet detail={printData} onDone={() => setPrintData(null)} /> : null}
+      {printData ? <PrintSheet detail={printData} lang={printLang} onDone={() => setPrintData(null)} /> : null}
     </>
   );
 }
@@ -305,7 +308,7 @@ function InvoiceDetailPanel({
   invoiceId: string;
   ar: ArInvoice[];
   onChanged: () => Promise<void>;
-  onPrint: () => void;
+  onPrint: (lang: PrintLang) => void;
   canWrite: boolean;
 }) {
   const i = ar.find((x) => x.id === invoiceId);
@@ -320,11 +323,15 @@ function InvoiceDetailPanel({
   const [payNote, setPayNote] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   const [payments, setPayments] = useState<InvoiceDetail["payments"] | null>(null);
+  const [printLang, setPrintLang] = useState<PrintLang>("en");
 
   async function loadPayments() {
     const res = await fetch(`/api/invoices/${invoiceId}`);
     const body: InvoiceDetail | null = res.ok ? await res.json() : null;
     setPayments(body?.payments ?? []);
+    // Defaults to French for a DRC customer (country "CD") -- still just
+    // a default, overridable with the EN/FR toggle before printing.
+    setPrintLang(body?.invoice.customers?.country === "CD" ? "fr" : "en");
   }
 
   useEffect(() => {
@@ -399,7 +406,9 @@ function InvoiceDetailPanel({
       ) : null}
       <div className="d-sec">
         <div className="acts">
-          <button className="act" onClick={onPrint}>Print / PDF</button>
+          <button type="button" className={"chip" + (printLang === "en" ? " on" : "")} onClick={() => setPrintLang("en")}>EN</button>
+          <button type="button" className={"chip" + (printLang === "fr" ? " on" : "")} onClick={() => setPrintLang("fr")}>FR</button>
+          <button className="act" onClick={() => onPrint(printLang)}>Print / PDF</button>
           {!cancelled && paid === 0 && canWrite ? (
             <button className="act" style={{ borderColor: "var(--alert)", color: "var(--alert)" }} onClick={() => setShowCancel(true)}>
               Cancel invoice
@@ -474,7 +483,7 @@ function InvoiceDetailPanel({
   );
 }
 
-function PrintSheet({ detail, onDone }: { detail: InvoiceDetail; onDone: () => void }) {
+function PrintSheet({ detail, lang, onDone }: { detail: InvoiceDetail; lang: PrintLang; onDone: () => void }) {
   useEffect(() => {
     const handler = () => onDone();
     window.addEventListener("afterprint", handler);
@@ -484,6 +493,9 @@ function PrintSheet({ detail, onDone }: { detail: InvoiceDetail; onDone: () => v
   const { invoice: inv, lines, payments } = detail;
   const rec = payments.reduce((s, p) => s + Number(p.amount), 0);
   const c = inv.customers;
+  const defaultTerms = lang === "fr"
+    ? "50 % au chargement, 50 % à la livraison. USD uniquement."
+    : "50% on loading, 50% on delivery. USD only.";
 
   return createPortal(
     <div id="sheet">
@@ -493,13 +505,13 @@ function PrintSheet({ detail, onDone }: { detail: InvoiceDetail; onDone: () => v
           <p>{COMPANY.reg}<br />TPIN {COMPANY.tpin}<br />{COMPANY.address}<br />{COMPANY.phone} · {COMPANY.email}</p>
         </div>
         <div className="im">
-          <div className="big">Invoice</div>
-          {inv.invoice_no}<br />Issued {inv.issued_on}<br />Due {inv.due_on}
+          <div className="big">{t(lang, "invoice")}</div>
+          {inv.invoice_no}<br />{t(lang, "issued")} {inv.issued_on}<br />{t(lang, "due")} {inv.due_on}
         </div>
       </div>
       <div className="parties">
         <div>
-          <h4>Invoice to</h4>
+          <h4>{t(lang, "invoice_to")}</h4>
           <div style={{ fontSize: 14, fontWeight: 600 }}>{c?.name || ""}</div>
           <div style={{ fontSize: 12, color: "#333" }}>
             {c?.country || ""}
@@ -508,12 +520,12 @@ function PrintSheet({ detail, onDone }: { detail: InvoiceDetail; onDone: () => v
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
-          <h4>Stage</h4>
-          <div style={{ fontSize: 13 }}>{lab(inv.invoice_type)}</div>
+          <h4>{t(lang, "stage")}</h4>
+          <div style={{ fontSize: 13 }}>{invoiceTypeLabel(lang, inv.invoice_type)}</div>
         </div>
       </div>
       <table>
-        <thead><tr><th>Description</th><th className="num">Qty</th><th className="num">Rate</th><th className="num">Amount</th></tr></thead>
+        <thead><tr><th>{t(lang, "description")}</th><th className="num">{t(lang, "qty")}</th><th className="num">{t(lang, "rate")}</th><th className="num">{t(lang, "amount")}</th></tr></thead>
         <tbody>
           {lines.map((l, idx) => (
             <tr key={idx}>
@@ -526,13 +538,13 @@ function PrintSheet({ detail, onDone }: { detail: InvoiceDetail; onDone: () => v
         </tbody>
       </table>
       <div className="totals">
-        <div><span>Subtotal</span><span>{m2(inv.subtotal, inv.currency)}</span></div>
-        {rec > 0 ? <div><span>Received to date</span><span>− {m2(rec, inv.currency)}</span></div> : null}
-        <div className="due"><span>Amount due</span><span>{m2(Number(inv.total_due) - rec, inv.currency)}</span></div>
+        <div><span>{t(lang, "subtotal")}</span><span>{m2(inv.subtotal, inv.currency)}</span></div>
+        {rec > 0 ? <div><span>{t(lang, "received_to_date")}</span><span>− {m2(rec, inv.currency)}</span></div> : null}
+        <div className="due"><span>{t(lang, "amount_due")}</span><span>{m2(Number(inv.total_due) - rec, inv.currency)}</span></div>
       </div>
       <div className="terms">
-        <b>Payment terms</b><br />{c?.payment_terms || "50% on loading, 50% on delivery. USD only."}<br /><br />
-        <b>Remit to</b><br />{COMPANY.bank.map((line, idx) => <span key={idx}>{line}<br /></span>)}
+        <b>{t(lang, "payment_terms")}</b><br />{c?.payment_terms || defaultTerms}<br /><br />
+        <b>{t(lang, "remit_to")}</b><br />{COMPANY.bank.map((line, idx) => <span key={idx}>{line}<br /></span>)}
       </div>
     </div>,
     document.body,

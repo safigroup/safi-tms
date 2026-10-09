@@ -67,6 +67,7 @@ export type BoardTrip = {
 export type Customer = {
   id: string;
   name: string;
+  country: string | null;
   is_active: boolean;
 };
 

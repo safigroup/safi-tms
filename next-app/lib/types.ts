@@ -157,6 +157,7 @@ export type TripCost = {
   receipt_path: string | null;
   liters: number | null;
   price_per_liter: number | null;
+  is_empty_return: boolean;
 };
 
 export type DocStatus = "pending" | "issued" | "lodged" | "cleared" | "received" | "rejected";

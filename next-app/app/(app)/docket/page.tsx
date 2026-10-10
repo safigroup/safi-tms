@@ -22,7 +22,7 @@ const DOCTYPES = [
   "delivery_note", "weighbridge_ticket", "insurance", "permit", "other",
 ];
 
-const emptyDraft: CostDraft = { cat: CATS[0], amt: "", cur: "", when: today(), desc: "", loc: "", paid: "driver_float", ref: "", liters: "", pricePerLiter: "" };
+const emptyDraft: CostDraft = { cat: CATS[0], amt: "", cur: "", when: today(), desc: "", loc: "", paid: "driver_float", ref: "", liters: "", pricePerLiter: "", emptyReturn: false };
 
 // Mirrors lib/auth/permissions.ts's CAN_MANAGE_TRIPS/CAN_OVERRIDE_RECORDS --
 // UI convenience only (hides actions a role can't use), the route handlers
@@ -202,6 +202,7 @@ export default function DocketPage() {
           receiptPath,
           liters: draft.cat === "fuel" ? draft.liters || null : null,
           pricePerLiter: draft.cat === "fuel" ? draft.pricePerLiter || null : null,
+          emptyReturn: draft.emptyReturn,
         }),
       });
       if (!res.ok) {
@@ -211,7 +212,7 @@ export default function DocketPage() {
 
       toast.success(`${m2(amtNum, draft.cur)} → ${m2(amtNum * rateToUsd)}`);
       clearCostDraft(tripId);
-      setDraft({ ...emptyDraft, cat: draft.cat, cur: draft.cur, when: draft.when, paid: draft.paid });
+      setDraft({ ...emptyDraft, cat: draft.cat, cur: draft.cur, when: draft.when, paid: draft.paid, emptyReturn: draft.emptyReturn });
       setCostFile(null);
       await loadDetail(tripId);
       await loadBootstrap();
@@ -352,7 +353,10 @@ export default function DocketPage() {
                     />
                   ) : null}
                   <div style={{ minWidth: 0, flex: 1 }}>
-                  <div className="r-no" style={{ color: "var(--stamp)" }}>{lab(c.category)}</div>
+                  <div className="r-no" style={{ color: "var(--stamp)" }}>
+                    {lab(c.category)}
+                    {c.is_empty_return ? <span className="pill violet" style={{ marginLeft: 7 }}>empty return</span> : null}
+                  </div>
                   <div style={{ fontSize: 13, marginTop: 1 }}>{c.description || "—"}</div>
                   <div className="r-mono">
                     {c.incurred_on}{c.location ? " · " + c.location : ""}{c.receipt_ref ? " · " + c.receipt_ref : ""}
@@ -451,6 +455,10 @@ export default function DocketPage() {
           <div className="field">
             <label htmlFor="loc">Location</label>
             <input id="loc" type="text" placeholder="Nakonde" value={draft.loc} onChange={(e) => updateDraft({ loc: e.target.value })} />
+          </div>
+          <div className="check" style={{ marginBottom: 13 }}>
+            <input type="checkbox" id="emptyReturn" checked={draft.emptyReturn} onChange={(e) => updateDraft({ emptyReturn: e.target.checked })} />
+            <label htmlFor="emptyReturn">Empty return leg — truck is coming back with no cargo</label>
           </div>
           <div className="row">
             <div className="field">
@@ -604,6 +612,7 @@ function EditCostForm({
   const [receiptRef, setReceiptRef] = useState(cost.receipt_ref ?? "");
   const [liters, setLiters] = useState(cost.liters != null ? String(cost.liters) : "");
   const [pricePerLiter, setPricePerLiter] = useState(cost.price_per_liter != null ? String(cost.price_per_liter) : "");
+  const [emptyReturn, setEmptyReturn] = useState(cost.is_empty_return);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState<AuditLogEntry[] | null>(null);
@@ -636,6 +645,7 @@ function EditCostForm({
         receipt_ref: receiptRef.trim() || null,
         liters: liters || null,
         price_per_liter: pricePerLiter || null,
+        is_empty_return: emptyReturn,
       }),
     });
     setSaving(false);
@@ -712,6 +722,10 @@ function EditCostForm({
             <label htmlFor="ecRef">Receipt ref</label>
             <input id="ecRef" type="text" value={receiptRef} onChange={(e) => setReceiptRef(e.target.value)} />
           </div>
+        </div>
+        <div className="check" style={{ marginBottom: 13 }}>
+          <input type="checkbox" id="ecEmptyReturn" checked={emptyReturn} onChange={(e) => setEmptyReturn(e.target.checked)} />
+          <label htmlFor="ecEmptyReturn">Empty return leg</label>
         </div>
         <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button>
         <button className="ghost" type="button" onClick={onCancel}>Cancel</button>

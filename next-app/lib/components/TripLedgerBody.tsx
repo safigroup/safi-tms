@@ -63,7 +63,7 @@ export function TripLedgerBody({ trip, costs, lang }: { trip: BoardTrip; costs: 
           {costs.length ? costs.map((c) => (
             <tr key={c.id}>
               <td>{c.incurred_on}</td>
-              <td>{catLabel(lang, c.category)}</td>
+              <td>{catLabel(lang, c.category)}{c.is_empty_return ? ` (${t(lang, "empty_return_tag")})` : ""}</td>
               <td>{c.description || "—"}{c.location ? " · " + c.location : ""}</td>
               <td>{c.currency}</td>
               <td className="num">{c.currency !== "USD" ? m2(c.amount, c.currency) : "—"}</td>

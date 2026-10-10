@@ -138,6 +138,7 @@ export async function POST(request: Request) {
     // real-world exports commonly have this capitalized or space-separated
     // ("Other", "Driver Advance"), so normalize before the enum rejects it.
     const category = row.category.trim().toLowerCase().replace(/\s+/g, "_");
+    const isEmptyReturn = ["yes", "y", "true", "1"].includes((row.empty_return || "").trim().toLowerCase());
 
     const { error } = await ctx.admin.from("trip_costs").insert({
       org_id: ctx.orgId,
@@ -153,6 +154,7 @@ export async function POST(request: Request) {
       price_per_liter: hasFuelBreakdown ? pricePerLiter : null,
       paid_by: row.paid_by || null,
       receipt_ref: row.receipt_ref || null,
+      is_empty_return: isEmptyReturn,
       recorded_by: ctx.userId,
     });
 

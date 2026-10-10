@@ -73,8 +73,8 @@ export async function GET(
   // trip_costs directly, scoped to just the trips already resolved above.
   const tripIds = trips.map((t) => t.trip_id);
   const { data: tripCostRows, error: tripCostRowsError } = tripIds.length
-    ? await ctx.admin.from("trip_costs").select("category, amount_usd, liters").in("trip_id", tripIds)
-    : { data: [] as { category: string; amount_usd: number; liters: number | null }[], error: null };
+    ? await ctx.admin.from("trip_costs").select("category, amount_usd, liters, is_empty_return").in("trip_id", tripIds)
+    : { data: [] as { category: string; amount_usd: number; liters: number | null; is_empty_return: boolean }[], error: null };
   if (tripCostRowsError) {
     return NextResponse.json({ error: tripCostRowsError.message }, { status: 400 });
   }
@@ -119,6 +119,14 @@ export async function GET(
   const tripExpenses = trips.reduce((s, t) => s + Number(t.cost_usd || 0), 0);
   const standingExpenses = standingCosts.reduce((s, c) => s + Number(c.amount_usd || 0), 0);
   const totalExpenses = tripExpenses + standingExpenses;
+  // A cut across the category breakdown above, not a category of its own
+  // -- fuel, tolls, driver allowance etc. can all be incurred on either
+  // leg of a trip. Surfaced separately so empty miles' real cost shows
+  // up on its own, instead of being folded invisibly into whichever
+  // category each entry happened to be.
+  const emptyReturnExpenses = (tripCostRows ?? [])
+    .filter((r) => r.is_empty_return)
+    .reduce((s, r) => s + Number(r.amount_usd || 0), 0);
 
   return NextResponse.json({
     truck,
@@ -128,6 +136,7 @@ export async function GET(
     standingCosts,
     tripRevenue,
     tripExpenses,
+    emptyReturnExpenses,
     standingExpenses,
     totalExpenses,
     margin: tripRevenue - totalExpenses,

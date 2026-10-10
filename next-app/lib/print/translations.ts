@@ -65,6 +65,7 @@ const STRINGS: Record<string, { en: string; fr: string }> = {
   // trip ledger
   no_costs: { en: "No costs recorded on this trip.", fr: "Aucun coût enregistré pour ce voyage." },
   empty_return_tag: { en: "Empty return", fr: "Retour à vide" },
+  empty_return_total: { en: "Of which, empty return legs", fr: "Dont retours à vide" },
 
   // basis suffixes (estimate table)
   flat: { en: "flat", fr: "forfait" },

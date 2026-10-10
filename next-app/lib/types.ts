@@ -279,6 +279,7 @@ export type TruckReport = {
   standingCosts: TruckCost[];
   tripRevenue: number;
   tripExpenses: number;
+  emptyReturnExpenses: number;
   standingExpenses: number;
   totalExpenses: number;
   margin: number;

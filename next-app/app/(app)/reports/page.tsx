@@ -246,6 +246,11 @@ export default function ReportsPage() {
                 <div className="d-kv" style={{ paddingLeft: 14, borderTop: "1px solid var(--rule-soft)", marginTop: 4, paddingTop: 6, fontWeight: 600 }}>
                   <span>Total trip expenses</span><span>{m2(report.tripExpenses)}</span>
                 </div>
+                {report.emptyReturnExpenses > 0 ? (
+                  <div className="d-hint" style={{ paddingLeft: 14, marginTop: 2 }}>
+                    of which, empty return legs: {m2(report.emptyReturnExpenses)} ({Math.round((report.emptyReturnExpenses / report.tripExpenses) * 100)}% of trip expenses)
+                  </div>
+                ) : null}
               </div>
 
               <div style={{ marginTop: 13 }}>
@@ -537,6 +542,9 @@ function ReportPrintSheet({ report, lang, onDone }: { report: TruckReport; lang:
           {report.standingExpensesByCategory.map((c) => (
             <tr key={"s-" + c.category}><td>{t(lang, "standing_prefix")}: {catLabel(lang, c.category)}</td><td className="num">− {m2(c.amountUsd)}</td></tr>
           ))}
+          {report.emptyReturnExpenses > 0 ? (
+            <tr><td style={{ color: "#555" }}>{t(lang, "empty_return_total")}</td><td className="num" style={{ color: "#555" }}>{m2(report.emptyReturnExpenses)}</td></tr>
+          ) : null}
         </tbody>
       </table>
       <div className="totals">

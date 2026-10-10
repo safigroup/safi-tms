@@ -12,7 +12,8 @@ npm run dev
 Needs `.env.local` (gitignored — copy `.env.example` and fill in real values):
 
 - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — safe to be public, used for auth only.
-- `SUPABASE_SERVICE_ROLE_KEY` — **not** safe to be public. Bypasses RLS on every table. Only ever obtained through `lib/auth/getAuthedOrgContext.ts`, `lib/auth/getAuthedPlatformAdmin.ts`, or `lib/auth/getAuthedApiKey.ts` — never import `lib/supabase/admin.ts` directly from a route handler.
+- `SUPABASE_SERVICE_ROLE_KEY` — **not** safe to be public. Bypasses RLS on every table. Only ever obtained through `lib/auth/getAuthedOrgContext.ts`, `lib/auth/getAuthedPlatformAdmin.ts`, `lib/auth/getAuthedApiKey.ts`, or `lib/auth/getAuthedCron.ts` — never import `lib/supabase/admin.ts` directly from a route handler.
+- `CRON_SECRET` — **not** safe to be public. Gates `/api/cron/fx-rates` (see [Automated FX rates](#automated-fx-rates) below). Only needed locally if you want to call that route yourself.
 
 Points at the **staging** Supabase project during development, not production — see `supabase/seed.sql` for the reference data it's seeded with, and the repo root README's security notes before touching RLS or views.
 
@@ -20,9 +21,9 @@ Points at the **staging** Supabase project during development, not production �
 
 - `app/login/`, `app/accept-invite/`, `app/forgot-password/`, `app/reset-password/` — public auth pages (client components, anon key).
 - `app/(app)/` — everything behind the auth gate: `layout.tsx` resolves the caller's org (or platform-admin status) server-side via `getAuthedOrgContext()` and either renders the app shell, an organization picker (platform admin with no org selected), or redirects to `/login`. Pages: `board`, `docket`, `billing`, `reports`, `admin`, `organizations` (platform-admin only).
-- `app/api/` — REST route handlers. Every one starts with `getAuthedOrgContext()` (org-scoped, session cookie), `getAuthedPlatformAdmin()` (cross-org: `api/platform/organizations`), or `getAuthedApiKey()` (org-scoped, Bearer token: `api/agent/*`), checks a permission set from `lib/auth/permissions.ts` for anything mutating, and filters every query by the resolved `org_id`.
+- `app/api/` — REST route handlers. Every one starts with `getAuthedOrgContext()` (org-scoped, session cookie), `getAuthedPlatformAdmin()` (cross-org: `api/platform/organizations`), `getAuthedApiKey()` (org-scoped, Bearer token: `api/agent/*`), or `getAuthedCron()` (shared-secret, Vercel Cron: `api/cron/*`), checks a permission set from `lib/auth/permissions.ts` for anything mutating, and filters every query by the resolved `org_id`.
 - `lib/supabase/` — `client.ts` (browser, anon key), `server.ts` (SSR, anon key, request-bound cookies), `admin.ts` (service-role factory — internal only, see above).
-- `lib/auth/` — `getAuthedOrgContext.ts` (the per-request security choke point every org-scoped route starts with), `getAuthedPlatformAdmin.ts` (the equivalent for cross-org actions), `getAuthedApiKey.ts` (the equivalent for API-key-authenticated agent routes — see [Agent API](#agent-api) below), `platformAdmin.ts` (shared platform-admin check), `permissions.ts` (the role permission matrix).
+- `lib/auth/` — `getAuthedOrgContext.ts` (the per-request security choke point every org-scoped route starts with), `getAuthedPlatformAdmin.ts` (the equivalent for cross-org actions), `getAuthedApiKey.ts` (the equivalent for API-key-authenticated agent routes — see [Agent API](#agent-api) below), `getAuthedCron.ts` (the equivalent for Vercel Cron routes — see [Automated FX rates](#automated-fx-rates) below), `platformAdmin.ts` (shared platform-admin check), `permissions.ts` (the role permission matrix).
 - `lib/components/` — shared client components: `Nav.tsx` (masthead, nav, mobile hamburger menu, platform-admin org switcher), `ThemeToggle.tsx` (light/dark mode), `OrganizationsPicker.tsx`, `Spinner.tsx`.
 - `proxy.ts` — refreshes the Supabase session cookie on every request (this is `middleware.ts` under Next.js 16's new naming — see `AGENTS.md`).
 - `supabase/` — CLI-linked project: `migrations/` (applied to both staging and production, in order, explicitly — never auto-synced), `seed.sql` (staging-only reference data, deliberately **not** in `migrations/`).
@@ -44,6 +45,16 @@ curl -X POST -H "Authorization: Bearer sk_..." -H "Content-Type: application/jso
 - `POST /api/agent/estimate` — body `{ routeId, tonnage?, volumeCbm?, customerId? }`. Computes the cost breakdown via the same `lib/estimates/estimateTripCost.ts` function the `/estimates` page itself uses (so the two can never disagree), and — if `customerId` matches a rate card for that route — an estimated revenue and margin. Returns 404 if the route doesn't belong to the caller's org.
 
 Both return `401` for a missing/invalid/revoked key, and never touch `trips`, `trip_costs`, or `invoices`.
+
+## Automated FX rates
+
+`GET /api/cron/fx-rates`, triggered by Vercel Cron on the 1st and 15th of each month (`vercel.json`), keeps every org's `fx_rates` current without anyone having to remember the Admin → "Exchange rates" form. It refreshes **only** currencies an org already has at least one `fx_rates` row for — it never introduces a currency no one asked for — using the free, keyless [open.er-api.com](https://open.er-api.com) feed.
+
+It always **inserts** a new row dated today (upserted only against today's own `(org_id, currency, effective_on)` key, same as the manual admin form) and never touches a past row — `trip_costs.fx_rate_to_usd` freezes whatever rate was on file at entry time, so history must never be rewritten.
+
+These are official/interbank rates, which can diverge from real border-town cash rates (ZMW and CDF especially) — the manual admin form still works and always wins if someone enters a same-day rate after the cron ran. `Nav.tsx`'s existing 14-day staleness badge is the safety net if a run is ever missed.
+
+**Auth**: `CRON_SECRET` env var — Vercel sends it automatically as `Authorization: Bearer <value>` on every cron invocation once it's set in the project's environment variables.
 
 ## Notes for whoever (or whatever) works on this next
 

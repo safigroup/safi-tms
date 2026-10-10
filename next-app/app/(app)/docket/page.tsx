@@ -76,12 +76,19 @@ export default function DocketPage() {
     setData(payload);
     setLoadError(payload.fetchErrors.length ? `Couldn't load ${payload.fetchErrors.join(", ")}.` : null);
     const open = payload.board.filter((t) => !["closed", "cancelled" as string].includes(t.status));
-    const wanted = searchParams.get("trip");
-    if (wanted && open.some((t) => t.trip_id === wanted)) {
-      setTripId(wanted);
-    } else if (open.length) {
-      setTripId((cur) => cur ?? open[0].trip_id);
-    }
+    // Re-reads the ?trip= URL param every time this runs, not just on
+    // mount -- the dropdown below only ever sets local state, never the
+    // URL, so if this always preferred the URL param it would snap back
+    // to whatever trip the page first loaded on every refetch after
+    // saving (every save/cancel/import handler calls this to refresh the
+    // board). Keeping the currently-selected trip when it's still in the
+    // open list is what lets a manually-picked trip stick.
+    setTripId((cur) => {
+      if (cur && open.some((t) => t.trip_id === cur)) return cur;
+      const wanted = searchParams.get("trip");
+      if (wanted && open.some((t) => t.trip_id === wanted)) return wanted;
+      return open.length ? open[0].trip_id : null;
+    });
   }
 
   async function loadDetail(id: string) {
@@ -272,7 +279,7 @@ export default function DocketPage() {
         <div className="panel-body" style={{ display: "flex", gap: 11, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div className="field" style={{ marginBottom: 0, minWidth: 260 }}>
             <label htmlFor="trip">Trip</label>
-            <select id="trip" value={tripId ?? ""} onChange={(e) => setTripId(e.target.value)}>
+            <select id="trip" value={tripId ?? ""} onChange={(e) => { setTripId(e.target.value); router.replace(`/docket?trip=${e.target.value}`, { scroll: false }); }}>
               {open.map((t) => (
                 <option key={t.trip_id} value={t.trip_id}>{t.trip_no} — {t.customer} — {t.route}</option>
               ))}

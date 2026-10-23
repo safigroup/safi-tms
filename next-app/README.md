@@ -13,6 +13,7 @@ Needs `.env.local` (gitignored — copy `.env.example` and fill in real values):
 
 - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — safe to be public, used for auth only.
 - `SUPABASE_SERVICE_ROLE_KEY` — **not** safe to be public. Bypasses RLS on every table. Only ever obtained through `lib/auth/getAuthedOrgContext.ts`, `lib/auth/getAuthedPlatformAdmin.ts`, `lib/auth/getAuthedApiKey.ts`, or `lib/auth/getAuthedCron.ts` — never import `lib/supabase/admin.ts` directly from a route handler. The one exception is `lib/demoRequests/createDemoRequest.ts`, which uses it internally to record a landing-page demo request and never hands the client back (see [Landing page](#landing-page)).
+- `RESEND_API_KEY` / `DEMO_REQUEST_FROM` — demo-request notification emails (see [Landing page](#landing-page)); optional, nothing breaks without them.
 - `CRON_SECRET` — **not** safe to be public. Gates `/api/cron/fx-rates` (see [Automated FX rates](#automated-fx-rates) below). Only needed locally if you want to call that route yourself.
 
 Points at the **staging** Supabase project during development, not production — see `supabase/seed.sql` for the reference data it's seeded with, and the repo root README's security notes before touching RLS or views.
@@ -20,7 +21,7 @@ Points at the **staging** Supabase project during development, not production �
 ## Structure
 
 - `app/page.tsx` + `app/_landing/` — the public landing page at `/` (see [Landing page](#landing-page)); signed-in users are redirected straight to `/board`.
-- `app/login/`, `app/accept-invite/`, `app/forgot-password/`, `app/reset-password/` — public auth pages (client components, anon key).
+- `app/login/`, `app/accept-invite/`, `app/forgot-password/`, `app/reset-password/` — public auth pages (client components, anon key), all framed by `lib/components/AuthShell.tsx` so each links back to the landing page.
 - `app/(app)/` — everything behind the auth gate: `layout.tsx` resolves the caller's org (or platform-admin status) server-side via `getAuthedOrgContext()` and either renders the app shell, an organization picker (platform admin with no org selected), or redirects to `/login`. Pages: `board`, `docket`, `billing`, `reports`, `estimates`, `admin`, `organizations` and `demo-requests` (both platform-admin only).
 - `app/api/` — REST route handlers. Every one starts with `getAuthedOrgContext()` (org-scoped, session cookie), `getAuthedPlatformAdmin()` (cross-org: `api/platform/organizations`), `getAuthedApiKey()` (org-scoped, Bearer token: `api/agent/*`), or `getAuthedCron()` (shared-secret, Vercel Cron: `api/cron/*`) — the only exception is the public `api/demo-requests` (see [Landing page](#landing-page)) — checks a permission set from `lib/auth/permissions.ts` for anything mutating, and filters every query by the resolved `org_id`.
 - `lib/supabase/` — `client.ts` (browser, anon key), `server.ts` (SSR, anon key, request-bound cookies), `admin.ts` (service-role factory — internal only, see above).
@@ -62,6 +63,8 @@ These are official/interbank rates, which can diverge from real border-town cash
 `/` is a public, bilingual (EN/FR) landing page for signed-out visitors, styled entirely with the app's own tokens and component classes so it follows the same light/dark toggle. Copy lives in `app/_landing/copy.ts` — both languages share one typed shape, so a key missing from either fails the build. The language comes from the `safi_lang` cookie (set by the EN/FR toggle), else the browser's `Accept-Language`, else English. The board preview is illustrative data and stays in English in both languages, because the signed-in screens are English-only.
 
 **Demo requests**: the page's form posts to the public `POST /api/demo-requests`, which validates input, drops honeypot submissions silently, and allows at most 5 requests per IP per hour (IPs are stored only as a SHA-256 hash). Rows land in `demo_requests` — the platform operator's own sales leads, not tenant data, so there is no `org_id`; RLS is on with no policies and anon/authenticated grants are revoked, so the public anon key can't touch the table directly. Platform admins see them at `/demo-requests` (`GET /api/platform/demo-requests`).
+
+**Notification email**: after each saved request, `lib/demoRequests/notifyDemoRequest.ts` emails every platform admin through [Resend](https://resend.com), with Reply-To set to the requester. It runs in `after()`, so the visitor never waits on it, and a failure is only logged. It's off until `RESEND_API_KEY` is set. Without `DEMO_REQUEST_FROM` it sends from Resend's test sender, which only delivers to the Resend account's own address — verify a domain in Resend and set `DEMO_REQUEST_FROM` to reach every admin.
 
 ## Notes for whoever (or whatever) works on this next
 

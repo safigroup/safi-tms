@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { AuthShell } from "@/lib/components/AuthShell";
 
 type Status = "verifying" | "ready" | "invalid";
 type TokenType = "invite" | "recovery";
@@ -59,53 +60,48 @@ function VerifyTokenForm({ type, invalidMessage }: { type: TokenType; invalidMes
       return setError("That didn't work: " + error.message);
     }
 
-    router.replace("/");
+    router.replace("/board");
     router.refresh();
   }
 
   return (
-    <div className="wrap">
-      <div className="gate">
-        <div className="panel">
-          <div className="panel-head">
-            <h2>Set your password</h2>
+    <AuthShell
+      kicker={type === "invite" ? "Account setup" : "Password reset"}
+      title="Set your password"
+      subtitle={status === "ready" ? "Choose a password of at least 6 characters." : undefined}
+    >
+      {status === "verifying" ? (
+        <div className="empty">Checking your link…</div>
+      ) : status === "invalid" ? (
+        <div className="note bad" role="alert">{invalidMessage}</div>
+      ) : (
+        <form onSubmit={handleSubmit}>
+          {error ? <div className="note bad" role="alert">{error}</div> : null}
+          <div className="field">
+            <label htmlFor="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
           </div>
-          <div className="panel-body">
-            {status === "verifying" ? (
-              <div className="empty">Checking your link…</div>
-            ) : status === "invalid" ? (
-              <div className="note bad">{invalidMessage}</div>
-            ) : (
-              <form onSubmit={handleSubmit}>
-                {error ? <div className="note bad">{error}</div> : null}
-                <div className="field">
-                  <label htmlFor="password">Password</label>
-                  <input
-                    id="password"
-                    type="password"
-                    autoComplete="new-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="confirm">Confirm password</label>
-                  <input
-                    id="confirm"
-                    type="password"
-                    autoComplete="new-password"
-                    value={confirm}
-                    onChange={(e) => setConfirm(e.target.value)}
-                  />
-                </div>
-                <button className="primary" type="submit" disabled={saving}>
-                  {saving ? "Saving…" : "Save password"}
-                </button>
-              </form>
-            )}
+          <div className="field">
+            <label htmlFor="confirm">Confirm password</label>
+            <input
+              id="confirm"
+              type="password"
+              autoComplete="new-password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+            />
           </div>
-        </div>
-      </div>
-    </div>
+          <button className="primary" type="submit" disabled={saving}>
+            {saving ? "Saving…" : "Save password"}
+          </button>
+        </form>
+      )}
+    </AuthShell>
   );
 }

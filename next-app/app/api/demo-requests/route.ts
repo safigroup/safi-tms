@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
-import { createDemoRequest } from "@/lib/demoRequests/createDemoRequest";
+import { after, NextResponse } from "next/server";
+import { createDemoRequest, type DemoRequestInput } from "@/lib/demoRequests/createDemoRequest";
+import { notifyDemoRequest } from "@/lib/demoRequests/notifyDemoRequest";
 import { DEMO_COUNTRIES, DEMO_FLEET_SIZES } from "@/lib/demoRequests/options";
 
 const COUNTRY_CODES = new Set<string>(DEMO_COUNTRIES.map((c) => c.code));
@@ -41,17 +42,18 @@ export async function POST(request: Request) {
 
   const country = text(body.country, 10);
   const fleetSize = text(body.fleetSize, 10);
+  const input: DemoRequestInput = {
+    name,
+    company,
+    email,
+    phone,
+    country: country && COUNTRY_CODES.has(country) ? country : null,
+    fleetSize: fleetSize && FLEET_CODES.has(fleetSize) ? fleetSize : null,
+    message: text(body.message, 2000),
+    lang: body.lang === "fr" ? "fr" : "en",
+  };
   const result = await createDemoRequest(
-    {
-      name,
-      company,
-      email,
-      phone,
-      country: country && COUNTRY_CODES.has(country) ? country : null,
-      fleetSize: fleetSize && FLEET_CODES.has(fleetSize) ? fleetSize : null,
-      message: text(body.message, 2000),
-      lang: body.lang === "fr" ? "fr" : "en",
-    },
+    input,
     request.headers.get("x-forwarded-for")?.split(",")[0].trim() || request.headers.get("x-real-ip") || "unknown",
   );
 
@@ -61,5 +63,8 @@ export async function POST(request: Request) {
       { status: result.reason === "rate_limited" ? 429 : 500 },
     );
   }
+
+  // After the response, so the visitor never waits on (or sees) the email.
+  after(() => notifyDemoRequest(input, new URL(request.url).origin));
   return NextResponse.json({ ok: true });
 }

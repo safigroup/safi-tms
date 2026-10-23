@@ -4,6 +4,8 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { AuthShell } from "@/lib/components/AuthShell";
+import s from "@/lib/components/AuthShell.module.css";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,50 +28,44 @@ export default function LoginPage() {
       return;
     }
 
-    router.replace("/");
+    router.replace("/board");
     router.refresh();
   }
 
   return (
-    <div className="wrap">
-      <div className="gate">
-        <div className="panel">
-          <div className="panel-head">
-            <h2>Sign in</h2>
-          </div>
-          <div className="panel-body">
-            {error ? <div className="note bad">{error}</div> : null}
-            <form onSubmit={handleSubmit}>
-              <div className="field">
-                <label htmlFor="email">Email</label>
-                <input
-                  id="email"
-                  type="email"
-                  autoComplete="username"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="password">Password</label>
-                <input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-              <button className="primary" type="submit" disabled={signingIn}>
-                {signingIn ? "Signing in…" : "Sign in"}
-              </button>
-            </form>
-            <Link href="/forgot-password" style={{ display: "block", marginTop: 12, fontSize: 13, color: "var(--ink-soft)" }}>
-              Forgot password?
-            </Link>
-          </div>
+    <AuthShell kicker="Sign in" title="Welcome back" subtitle="Sign in to your company's Safi TMS workspace.">
+      {error ? <div className="note bad" role="alert">{error}</div> : null}
+      <form onSubmit={handleSubmit}>
+        <div className="field">
+          <label htmlFor="email">Email</label>
+          <input
+            id="email"
+            type="email"
+            autoComplete="username"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
         </div>
-      </div>
-    </div>
+        <div className="field">
+          <div className={s.labelRow}>
+            <label htmlFor="password">Password</label>
+            <Link href="/forgot-password" className={s.inlineLink}>Forgot password?</Link>
+          </div>
+          <input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+        <button className="primary" type="submit" disabled={signingIn}>
+          {signingIn ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
+      <p className={s.aside}>
+        New to Safi TMS? <Link href="/#demo" className={s.inlineLink}>Request a demo</Link>
+      </p>
+    </AuthShell>
   );
 }

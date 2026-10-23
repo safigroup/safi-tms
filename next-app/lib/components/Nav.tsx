@@ -80,7 +80,9 @@ export function Nav({
     window.location.assign("/board");
   }
 
-  const views = isPlatformAdmin ? [...VIEWS, { href: "/organizations", label: "Organizations" }] : VIEWS;
+  const views = isPlatformAdmin
+    ? [...VIEWS, { href: "/organizations", label: "Organizations" }, { href: "/demo-requests", label: "Demo requests" }]
+    : VIEWS;
 
   const rolling = data?.board.filter((t) => ["loading", "in_transit", "at_border"].includes(t.status)).length ?? 0;
   const pod = data?.board.filter((t) => t.status === "delivered" && !t.pod_in_hand).length ?? 0;

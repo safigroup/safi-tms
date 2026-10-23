@@ -1,0 +1,285 @@
+/* Shared frame for the public auth pages (sign in, forgot/reset password,
+   accept invite). The form side uses the app's tokens and follows the
+   light/dark toggle; the brand panel keeps one deliberate navy look in
+   both themes (only deepened for dark), so its colors are its own. */
+
+.shell {
+  display: grid;
+  grid-template-columns: minmax(360px, 5fr) 7fr;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--ground);
+}
+
+/* ---------- brand panel ---------- */
+
+.brandPanel {
+  --bp-bg: #1E3A5F;
+  --bp-bg-deep: #152A47;
+  --bp-ink: #FFFFFF;
+  --bp-soft: rgba(255, 255, 255, .66);
+  --bp-line: rgba(255, 255, 255, .22);
+  --bp-go: #34C784;
+
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 32px;
+  padding: clamp(28px, 4vw, 48px);
+  color: var(--bp-ink);
+  background:
+    radial-gradient(900px 520px at 0% 0%, rgba(255, 255, 255, .09), transparent 62%),
+    linear-gradient(160deg, var(--bp-bg) 0%, var(--bp-bg-deep) 100%);
+  overflow: hidden;
+}
+
+:global([data-theme="dark"]) .brandPanel {
+  --bp-bg: #16263D;
+  --bp-bg-deep: #0F1A2B;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  color: var(--bp-ink);
+  text-decoration: none;
+}
+
+.brandName {
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: 21px;
+  letter-spacing: -0.01em;
+}
+
+.brandSub {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--bp-soft);
+}
+
+.brandBody {
+  display: grid;
+  gap: 36px;
+  max-width: 420px;
+}
+
+.brandLine {
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: clamp(1.9rem, 1.2rem + 1.6vw, 2.6rem);
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+/* a corridor drawn as stops on a line, like the landing page's trip flow */
+.route {
+  list-style: none;
+  display: grid;
+}
+
+.stop {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding: 0 0 22px 30px;
+}
+
+.stop:last-child {
+  padding-bottom: 0;
+}
+
+.stop::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  bottom: -4px;
+  left: 6px;
+  width: 2px;
+  background: var(--bp-line);
+}
+
+.stop:last-child::before {
+  display: none;
+}
+
+.stop::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--bp-ink);
+  background: var(--bp-bg);
+}
+
+.stop:last-child::after {
+  border-color: var(--bp-go);
+  background: var(--bp-go);
+}
+
+.stopName {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.stopNote {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--bp-soft);
+}
+
+.brandFoot {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--bp-soft);
+}
+
+/* ---------- form side ---------- */
+
+.formSide {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+  padding: clamp(20px, 3vw, 32px) clamp(16px, 5vw, 64px);
+}
+
+.formTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sans);
+  font-weight: 500;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  text-decoration: none;
+  transition: color .12s ease;
+}
+
+.back:hover {
+  color: var(--ink);
+}
+
+.formWrap {
+  align-self: center;
+  width: 100%;
+  max-width: 400px;
+  margin-inline: auto;
+  padding-block: 40px;
+}
+
+.kicker {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--stamp);
+}
+
+.title {
+  margin-top: 10px;
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: clamp(1.7rem, 1.4rem + 1vw, 2.1rem);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.subtitle {
+  margin-top: 10px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.body {
+  margin-top: 28px;
+}
+
+.brand:focus-visible,
+.back:focus-visible {
+  outline: 2px solid var(--stamp);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.brand:focus-visible {
+  outline-color: var(--bp-ink);
+}
+
+/* ---------- narrow screens: the panel becomes a slim header ---------- */
+
+@media (max-width: 860px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+
+  .brandPanel {
+    position: static;
+    height: auto;
+    padding: 18px 20px;
+  }
+
+  .brandBody,
+  .brandFoot {
+    display: none;
+  }
+
+  .formWrap {
+    align-self: start;
+    padding-block: 28px 40px;
+  }
+}
+
+/* ---------- helpers for the pages inside the shell ---------- */
+
+.labelRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inlineLink {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--stamp);
+  text-decoration: none;
+}
+
+.inlineLink:hover {
+  text-decoration: underline;
+}
+
+.aside {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--rule);
+  font-size: 14px;
+  color: var(--ink-soft);
+  text-align: center;
+}

@@ -15,6 +15,21 @@ export type Organization = {
   created_at: string;
 };
 
+// Returned by /api/platform/demo-requests -- platform-admin only, leads
+// from the public landing page's demo request form.
+export type DemoRequest = {
+  id: string;
+  created_at: string;
+  name: string;
+  company: string;
+  email: string | null;
+  phone: string | null;
+  country: string | null;
+  fleet_size: string | null;
+  message: string | null;
+  lang: "en" | "fr";
+};
+
 export type TripStatus =
   | "draft"
   | "allocated"

@@ -3,6 +3,8 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { AuthShell } from "@/lib/components/AuthShell";
+import s from "@/lib/components/AuthShell.module.css";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -23,40 +25,35 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="wrap">
-      <div className="gate">
-        <div className="panel">
-          <div className="panel-head">
-            <h2>Reset your password</h2>
-          </div>
-          <div className="panel-body">
-            {sent ? (
-              <div className="note good">
-                If that email has an account, we&apos;ve sent a link to reset the password. It may take a minute to arrive.
-              </div>
-            ) : (
-              <form onSubmit={handleSubmit}>
-                <div className="field">
-                  <label htmlFor="email">Email</label>
-                  <input
-                    id="email"
-                    type="email"
-                    autoComplete="username"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
-                <button className="primary" type="submit" disabled={sending}>
-                  {sending ? "Sending…" : "Send reset link"}
-                </button>
-              </form>
-            )}
-            <Link href="/login" style={{ display: "block", marginTop: 12, fontSize: 13, color: "var(--ink-soft)" }}>
-              Back to sign in
-            </Link>
-          </div>
+    <AuthShell
+      kicker="Password reset"
+      title="Forgot your password?"
+      subtitle="Enter the email you sign in with and we'll send you a link to choose a new one."
+    >
+      {sent ? (
+        <div className="note good" role="status">
+          If that email has an account, we&apos;ve sent a link to reset the password. It may take a minute to arrive.
         </div>
-      </div>
-    </div>
+      ) : (
+        <form onSubmit={handleSubmit}>
+          <div className="field">
+            <label htmlFor="email">Email</label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <button className="primary" type="submit" disabled={sending}>
+            {sending ? "Sending…" : "Send reset link"}
+          </button>
+        </form>
+      )}
+      <p className={s.aside}>
+        Remembered it? <Link href="/login" className={s.inlineLink}>Back to sign in</Link>
+      </p>
+    </AuthShell>
   );
 }

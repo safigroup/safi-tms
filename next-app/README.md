@@ -12,16 +12,17 @@ npm run dev
 Needs `.env.local` (gitignored — copy `.env.example` and fill in real values):
 
 - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — safe to be public, used for auth only.
-- `SUPABASE_SERVICE_ROLE_KEY` — **not** safe to be public. Bypasses RLS on every table. Only ever obtained through `lib/auth/getAuthedOrgContext.ts`, `lib/auth/getAuthedPlatformAdmin.ts`, `lib/auth/getAuthedApiKey.ts`, or `lib/auth/getAuthedCron.ts` — never import `lib/supabase/admin.ts` directly from a route handler.
+- `SUPABASE_SERVICE_ROLE_KEY` — **not** safe to be public. Bypasses RLS on every table. Only ever obtained through `lib/auth/getAuthedOrgContext.ts`, `lib/auth/getAuthedPlatformAdmin.ts`, `lib/auth/getAuthedApiKey.ts`, or `lib/auth/getAuthedCron.ts` — never import `lib/supabase/admin.ts` directly from a route handler. The one exception is `lib/demoRequests/createDemoRequest.ts`, which uses it internally to record a landing-page demo request and never hands the client back (see [Landing page](#landing-page)).
 - `CRON_SECRET` — **not** safe to be public. Gates `/api/cron/fx-rates` (see [Automated FX rates](#automated-fx-rates) below). Only needed locally if you want to call that route yourself.
 
 Points at the **staging** Supabase project during development, not production — see `supabase/seed.sql` for the reference data it's seeded with, and the repo root README's security notes before touching RLS or views.
 
 ## Structure
 
+- `app/page.tsx` + `app/_landing/` — the public landing page at `/` (see [Landing page](#landing-page)); signed-in users are redirected straight to `/board`.
 - `app/login/`, `app/accept-invite/`, `app/forgot-password/`, `app/reset-password/` — public auth pages (client components, anon key).
-- `app/(app)/` — everything behind the auth gate: `layout.tsx` resolves the caller's org (or platform-admin status) server-side via `getAuthedOrgContext()` and either renders the app shell, an organization picker (platform admin with no org selected), or redirects to `/login`. Pages: `board`, `docket`, `billing`, `reports`, `admin`, `organizations` (platform-admin only).
-- `app/api/` — REST route handlers. Every one starts with `getAuthedOrgContext()` (org-scoped, session cookie), `getAuthedPlatformAdmin()` (cross-org: `api/platform/organizations`), `getAuthedApiKey()` (org-scoped, Bearer token: `api/agent/*`), or `getAuthedCron()` (shared-secret, Vercel Cron: `api/cron/*`), checks a permission set from `lib/auth/permissions.ts` for anything mutating, and filters every query by the resolved `org_id`.
+- `app/(app)/` — everything behind the auth gate: `layout.tsx` resolves the caller's org (or platform-admin status) server-side via `getAuthedOrgContext()` and either renders the app shell, an organization picker (platform admin with no org selected), or redirects to `/login`. Pages: `board`, `docket`, `billing`, `reports`, `estimates`, `admin`, `organizations` and `demo-requests` (both platform-admin only).
+- `app/api/` — REST route handlers. Every one starts with `getAuthedOrgContext()` (org-scoped, session cookie), `getAuthedPlatformAdmin()` (cross-org: `api/platform/organizations`), `getAuthedApiKey()` (org-scoped, Bearer token: `api/agent/*`), or `getAuthedCron()` (shared-secret, Vercel Cron: `api/cron/*`) — the only exception is the public `api/demo-requests` (see [Landing page](#landing-page)) — checks a permission set from `lib/auth/permissions.ts` for anything mutating, and filters every query by the resolved `org_id`.
 - `lib/supabase/` — `client.ts` (browser, anon key), `server.ts` (SSR, anon key, request-bound cookies), `admin.ts` (service-role factory — internal only, see above).
 - `lib/auth/` — `getAuthedOrgContext.ts` (the per-request security choke point every org-scoped route starts with), `getAuthedPlatformAdmin.ts` (the equivalent for cross-org actions), `getAuthedApiKey.ts` (the equivalent for API-key-authenticated agent routes — see [Agent API](#agent-api) below), `getAuthedCron.ts` (the equivalent for Vercel Cron routes — see [Automated FX rates](#automated-fx-rates) below), `platformAdmin.ts` (shared platform-admin check), `permissions.ts` (the role permission matrix).
 - `lib/components/` — shared client components: `Nav.tsx` (masthead, nav, mobile hamburger menu, platform-admin org switcher), `ThemeToggle.tsx` (light/dark mode), `OrganizationsPicker.tsx`, `Spinner.tsx`.
@@ -55,6 +56,12 @@ It always **inserts** a new row dated today (upserted only against today's own `
 These are official/interbank rates, which can diverge from real border-town cash rates (ZMW and CDF especially) — the manual admin form still works and always wins if someone enters a same-day rate after the cron ran. `Nav.tsx`'s existing 14-day staleness badge is the safety net if a run is ever missed.
 
 **Auth**: `CRON_SECRET` env var — Vercel sends it automatically as `Authorization: Bearer <value>` on every cron invocation once it's set in the project's environment variables.
+
+## Landing page
+
+`/` is a public, bilingual (EN/FR) landing page for signed-out visitors, styled entirely with the app's own tokens and component classes so it follows the same light/dark toggle. Copy lives in `app/_landing/copy.ts` — both languages share one typed shape, so a key missing from either fails the build. The language comes from the `safi_lang` cookie (set by the EN/FR toggle), else the browser's `Accept-Language`, else English. The board preview is illustrative data and stays in English in both languages, because the signed-in screens are English-only.
+
+**Demo requests**: the page's form posts to the public `POST /api/demo-requests`, which validates input, drops honeypot submissions silently, and allows at most 5 requests per IP per hour (IPs are stored only as a SHA-256 hash). Rows land in `demo_requests` — the platform operator's own sales leads, not tenant data, so there is no `org_id`; RLS is on with no policies and anon/authenticated grants are revoked, so the public anon key can't touch the table directly. Platform admins see them at `/demo-requests` (`GET /api/platform/demo-requests`).
 
 ## Notes for whoever (or whatever) works on this next
 

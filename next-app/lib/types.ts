@@ -15,6 +15,21 @@ export type Organization = {
   created_at: string;
 };
 
+// Returned by /api/platform/demo-requests -- platform-admin only, leads
+// from the public landing page's demo request form.
+export type DemoRequest = {
+  id: string;
+  created_at: string;
+  name: string;
+  company: string;
+  email: string | null;
+  phone: string | null;
+  country: string | null;
+  fleet_size: string | null;
+  message: string | null;
+  lang: "en" | "fr";
+};
+
 export type TripStatus =
   | "draft"
   | "allocated"
@@ -67,6 +82,7 @@ export type BoardTrip = {
 export type Customer = {
   id: string;
   name: string;
+  country: string | null;
   is_active: boolean;
 };
 
@@ -156,6 +172,7 @@ export type TripCost = {
   receipt_path: string | null;
   liters: number | null;
   price_per_liter: number | null;
+  is_empty_return: boolean;
 };
 
 export type DocStatus = "pending" | "issued" | "lodged" | "cleared" | "received" | "rejected";
@@ -277,6 +294,7 @@ export type TruckReport = {
   standingCosts: TruckCost[];
   tripRevenue: number;
   tripExpenses: number;
+  emptyReturnExpenses: number;
   standingExpenses: number;
   totalExpenses: number;
   margin: number;

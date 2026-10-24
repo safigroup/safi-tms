@@ -16,6 +16,7 @@ export type CostDraft = {
   ref: string;
   liters: string;
   pricePerLiter: string;
+  emptyReturn: boolean;
 };
 
 const draftKey = (tripId: string) => `safi:costDraft:${tripId}`;

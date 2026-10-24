@@ -12,18 +12,21 @@ npm run dev
 Needs `.env.local` (gitignored — copy `.env.example` and fill in real values):
 
 - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — safe to be public, used for auth only.
-- `SUPABASE_SERVICE_ROLE_KEY` — **not** safe to be public. Bypasses RLS on every table. Only ever obtained through `lib/auth/getAuthedOrgContext.ts`, `lib/auth/getAuthedPlatformAdmin.ts`, or `lib/auth/getAuthedApiKey.ts` — never import `lib/supabase/admin.ts` directly from a route handler.
+- `SUPABASE_SERVICE_ROLE_KEY` — **not** safe to be public. Bypasses RLS on every table. Only ever obtained through `lib/auth/getAuthedOrgContext.ts`, `lib/auth/getAuthedPlatformAdmin.ts`, `lib/auth/getAuthedApiKey.ts`, or `lib/auth/getAuthedCron.ts` — never import `lib/supabase/admin.ts` directly from a route handler. The one exception is `lib/demoRequests/createDemoRequest.ts`, which uses it internally to record a landing-page demo request and never hands the client back (see [Landing page](#landing-page)).
+- `RESEND_API_KEY` / `DEMO_REQUEST_FROM` — demo-request notification emails (see [Landing page](#landing-page)); optional, nothing breaks without them.
+- `CRON_SECRET` — **not** safe to be public. Gates `/api/cron/fx-rates` (see [Automated FX rates](#automated-fx-rates) below). Only needed locally if you want to call that route yourself.
 - `ANTHROPIC_API_KEY` — **not** safe to be public. Powers the Estimator page's AI cost insights (see below). A real, ongoing per-call cost, not a one-time setup. Leave unset in any environment where that's not wanted yet — the feature just reports itself as unconfigured rather than failing the page.
 
 Points at the **staging** Supabase project during development, not production — see `supabase/seed.sql` for the reference data it's seeded with, and the repo root README's security notes before touching RLS or views.
 
 ## Structure
 
-- `app/login/`, `app/accept-invite/`, `app/forgot-password/`, `app/reset-password/` — public auth pages (client components, anon key).
-- `app/(app)/` — everything behind the auth gate: `layout.tsx` resolves the caller's org (or platform-admin status) server-side via `getAuthedOrgContext()` and either renders the app shell, an organization picker (platform admin with no org selected), or redirects to `/login`. Pages: `board`, `docket`, `billing`, `reports`, `admin`, `organizations` (platform-admin only).
-- `app/api/` — REST route handlers. Every one starts with `getAuthedOrgContext()` (org-scoped, session cookie), `getAuthedPlatformAdmin()` (cross-org: `api/platform/organizations`), or `getAuthedApiKey()` (org-scoped, Bearer token: `api/agent/*`), checks a permission set from `lib/auth/permissions.ts` for anything mutating, and filters every query by the resolved `org_id`.
+- `app/page.tsx` + `app/_landing/` — the public landing page at `/` (see [Landing page](#landing-page)); signed-in users are redirected straight to `/board`.
+- `app/login/`, `app/accept-invite/`, `app/forgot-password/`, `app/reset-password/` — public auth pages (client components, anon key), all framed by `lib/components/AuthShell.tsx` so each links back to the landing page.
+- `app/(app)/` — everything behind the auth gate: `layout.tsx` resolves the caller's org (or platform-admin status) server-side via `getAuthedOrgContext()` and either renders the app shell, an organization picker (platform admin with no org selected), or redirects to `/login`. Pages: `board`, `docket`, `billing`, `reports`, `estimates`, `admin`, `organizations` and `demo-requests` (both platform-admin only).
+- `app/api/` — REST route handlers. Every one starts with `getAuthedOrgContext()` (org-scoped, session cookie), `getAuthedPlatformAdmin()` (cross-org: `api/platform/organizations`), `getAuthedApiKey()` (org-scoped, Bearer token: `api/agent/*`), or `getAuthedCron()` (shared-secret, Vercel Cron: `api/cron/*`) — the only exception is the public `api/demo-requests` (see [Landing page](#landing-page)) — checks a permission set from `lib/auth/permissions.ts` for anything mutating, and filters every query by the resolved `org_id`.
 - `lib/supabase/` — `client.ts` (browser, anon key), `server.ts` (SSR, anon key, request-bound cookies), `admin.ts` (service-role factory — internal only, see above).
-- `lib/auth/` — `getAuthedOrgContext.ts` (the per-request security choke point every org-scoped route starts with), `getAuthedPlatformAdmin.ts` (the equivalent for cross-org actions), `getAuthedApiKey.ts` (the equivalent for API-key-authenticated agent routes — see [Agent API](#agent-api) below), `platformAdmin.ts` (shared platform-admin check), `permissions.ts` (the role permission matrix).
+- `lib/auth/` — `getAuthedOrgContext.ts` (the per-request security choke point every org-scoped route starts with), `getAuthedPlatformAdmin.ts` (the equivalent for cross-org actions), `getAuthedApiKey.ts` (the equivalent for API-key-authenticated agent routes — see [Agent API](#agent-api) below), `getAuthedCron.ts` (the equivalent for Vercel Cron routes — see [Automated FX rates](#automated-fx-rates) below), `platformAdmin.ts` (shared platform-admin check), `permissions.ts` (the role permission matrix).
 - `lib/components/` — shared client components: `Nav.tsx` (masthead, nav, mobile hamburger menu, platform-admin org switcher), `ThemeToggle.tsx` (light/dark mode), `OrganizationsPicker.tsx`, `Spinner.tsx`.
 - `proxy.ts` — refreshes the Supabase session cookie on every request (this is `middleware.ts` under Next.js 16's new naming — see `AGENTS.md`).
 - `supabase/` — CLI-linked project: `migrations/` (applied to both staging and production, in order, explicitly — never auto-synced), `seed.sql` (staging-only reference data, deliberately **not** in `migrations/`).
@@ -51,6 +54,24 @@ Both return `401` for a missing/invalid/revoked key, and never touch `trips`, `t
 `GET /api/insights/routes/[id]` (session-authenticated, not the Agent API) powers an "Insights" panel on the Estimator page. For the selected route, it compares each cost-template line against what trips that actually ran on that route have averaged per category — the same `estimateTripCost()` math the page itself uses, reused rather than re-implemented — and surfaces categories with no template line at all. Claude is given only those precomputed numbers and asked to write 1–4 short, concrete findings grounded in them; it's explicitly told never to invent a figure, and its response is parsed and validated the same way any other untrusted input is before it reaches the client.
 
 Degrades deliberately rather than erroring: fewer than 2 qualifying trips returns `insufficientData`, and a route with a template but no recorded costs at all (or vice versa) skips the Claude call entirely rather than spending one on an empty brief. Requires `ANTHROPIC_API_KEY`; without it, the endpoint returns a plain error and the panel just doesn't show anything; it never blocks or delays the manual cost breakdown above it on the page.
+
+## Automated FX rates
+
+`GET /api/cron/fx-rates`, triggered by Vercel Cron on the 1st and 15th of each month (`vercel.json`), keeps every org's `fx_rates` current without anyone having to remember the Admin → "Exchange rates" form. It refreshes **only** currencies an org already has at least one `fx_rates` row for — it never introduces a currency no one asked for — using the free, keyless [open.er-api.com](https://open.er-api.com) feed.
+
+It always **inserts** a new row dated today (upserted only against today's own `(org_id, currency, effective_on)` key, same as the manual admin form) and never touches a past row — `trip_costs.fx_rate_to_usd` freezes whatever rate was on file at entry time, so history must never be rewritten.
+
+These are official/interbank rates, which can diverge from real border-town cash rates (ZMW and CDF especially) — the manual admin form still works and always wins if someone enters a same-day rate after the cron ran. `Nav.tsx`'s existing 14-day staleness badge is the safety net if a run is ever missed.
+
+**Auth**: `CRON_SECRET` env var — Vercel sends it automatically as `Authorization: Bearer <value>` on every cron invocation once it's set in the project's environment variables.
+
+## Landing page
+
+`/` is a public, bilingual (EN/FR) landing page for signed-out visitors, styled entirely with the app's own tokens and component classes so it follows the same light/dark toggle. Copy lives in `app/_landing/copy.ts` — both languages share one typed shape, so a key missing from either fails the build. The language comes from the `safi_lang` cookie (set by the EN/FR toggle), else the browser's `Accept-Language`, else English. The board preview is illustrative data and stays in English in both languages, because the signed-in screens are English-only.
+
+**Demo requests**: the page's form posts to the public `POST /api/demo-requests`, which validates input, drops honeypot submissions silently, and allows at most 5 requests per IP per hour (IPs are stored only as a SHA-256 hash). Rows land in `demo_requests` — the platform operator's own sales leads, not tenant data, so there is no `org_id`; RLS is on with no policies and anon/authenticated grants are revoked, so the public anon key can't touch the table directly. Platform admins see them at `/demo-requests` (`GET /api/platform/demo-requests`).
+
+**Notification email**: after each saved request, `lib/demoRequests/notifyDemoRequest.ts` emails every platform admin through [Resend](https://resend.com), with Reply-To set to the requester. It runs in `after()`, so the visitor never waits on it, and a failure is only logged. It's off until `RESEND_API_KEY` is set. Without `DEMO_REQUEST_FROM` it sends from Resend's test sender, which only delivers to the Resend account's own address — verify a domain in Resend and set `DEMO_REQUEST_FROM` to reach every admin.
 
 ## Notes for whoever (or whatever) works on this next
 

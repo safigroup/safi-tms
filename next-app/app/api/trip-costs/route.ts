@@ -83,6 +83,7 @@ export async function POST(request: Request) {
       receipt_path: body.receiptPath || null,
       liters: hasFuelBreakdown ? liters : null,
       price_per_liter: hasFuelBreakdown ? pricePerLiter : null,
+      is_empty_return: !!body.emptyReturn,
       recorded_by: ctx.userId,
     })
     .select("id, amount_usd")

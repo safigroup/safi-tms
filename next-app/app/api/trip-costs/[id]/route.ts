@@ -6,6 +6,7 @@ import { diffFields, writeAuditLog, getAuditLog } from "@/lib/auditLog";
 const EDITABLE_FIELDS = [
   "category", "amount", "currency", "incurred_on", "description",
   "location", "paid_by", "receipt_ref", "liters", "price_per_liter",
+  "is_empty_return",
 ];
 
 // Edit history -- editing an existing entry is CAN_OVERRIDE_RECORDS

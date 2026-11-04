@@ -57,7 +57,7 @@ Degrades deliberately rather than erroring: fewer than 2 qualifying trips return
 
 ## Automated FX rates
 
-`GET /api/cron/fx-rates`, triggered by Vercel Cron on the 1st and 15th of each month (`vercel.json`), keeps every org's `fx_rates` current without anyone having to remember the Admin → "Exchange rates" form. It refreshes **only** currencies an org already has at least one `fx_rates` row for — it never introduces a currency no one asked for — using the free, keyless [open.er-api.com](https://open.er-api.com) feed.
+`GET /api/cron/fx-rates`, triggered by Vercel Cron every morning (`vercel.json`), keeps every org's `fx_rates` current without anyone having to remember the Admin → "Exchange rates" form. It refreshes **only** currencies an org already has at least one `fx_rates` row for — it never introduces a currency no one asked for — using the free, keyless [open.er-api.com](https://open.er-api.com) feed. Each run refreshes only currencies whose newest rate (automatic or manual) is 14+ days old, so rates still change roughly every two weeks — but a run Vercel fails to deliver (cron delivery is best-effort; the 2026-11-01 run never arrived) is made up the next day instead of leaving rates stale for another fortnight. Vercel's dashboard (or `vercel crons run /api/cron/fx-rates`) can trigger it by hand.
 
 It always **inserts** a new row dated today (upserted only against today's own `(org_id, currency, effective_on)` key, same as the manual admin form) and never touches a past row — `trip_costs.fx_rate_to_usd` freezes whatever rate was on file at entry time, so history must never be rewritten.
 

@@ -5,10 +5,14 @@ import { getAuthedCron } from "@/lib/auth/getAuthedCron";
 // ever used (USD/TZS/ZMW/CDF/RWF confirmed) -- no account to manage, no
 // quota to watch.
 const FX_API_URL = "https://open.er-api.com/v6/latest/USD";
+const REFRESH_AFTER_DAYS = 14;
 
-// Twice a month (see vercel.json), refreshes every currency an org
-// already tracks -- it never introduces a currency no one asked for, it
-// only keeps existing ones current. Always INSERTS a new row dated today
+// Runs daily (see vercel.json) and refreshes any currency an org already
+// tracks whose newest rate -- automatic or entered by hand -- is
+// REFRESH_AFTER_DAYS old. Checking daily rather than firing on fixed dates
+// means a cron run Vercel fails to deliver (best-effort; Nov 1 2026 never
+// arrived) is caught the next morning instead of leaving rates stale for
+// another two weeks. It never introduces a currency no one asked for. Always INSERTS a new row dated today
 // (upserting only against today's own date, the same (org_id, currency,
 // effective_on) key /api/admin/fx-rates already uses) -- it never
 // touches a past row, since trip_costs freezes whatever rate was on file
@@ -24,17 +28,22 @@ export async function GET(request: Request) {
 
   const { data: existing, error: existingError } = await ctx.admin
     .from("fx_rates")
-    .select("org_id, currency")
+    .select("org_id, currency, effective_on")
     .neq("currency", "USD");
   if (existingError) {
     return NextResponse.json({ error: existingError.message }, { status: 500 });
   }
 
-  const tracked = Array.from(
-    new Map((existing ?? []).map((r) => [`${r.org_id}:${r.currency}`, r])).values(),
-  );
-  if (!tracked.length) {
-    return NextResponse.json({ ok: true, updated: [], skipped: [] });
+  const latest = new Map<string, { org_id: string; currency: string; effective_on: string }>();
+  for (const r of existing ?? []) {
+    const key = `${r.org_id}:${r.currency}`;
+    const cur = latest.get(key);
+    if (!cur || r.effective_on > cur.effective_on) latest.set(key, r);
+  }
+  const cutoff = new Date(Date.now() - REFRESH_AFTER_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const due = Array.from(latest.values()).filter((r) => r.effective_on <= cutoff);
+  if (!due.length) {
+    return NextResponse.json({ ok: true, updated: [], skipped: [], notDue: latest.size });
   }
 
   let rates: Record<string, number>;
@@ -52,7 +61,7 @@ export async function GET(request: Request) {
   const today = new Date().toISOString().slice(0, 10);
   const updated: string[] = [];
   const skipped: string[] = [];
-  for (const { org_id, currency } of tracked) {
+  for (const { org_id, currency } of due) {
     const unitsPerUsd = rates[currency];
     if (!unitsPerUsd) {
       skipped.push(`${org_id}:${currency}`);
@@ -75,5 +84,5 @@ export async function GET(request: Request) {
     updated.push(`${org_id}:${currency}`);
   }
 
-  return NextResponse.json({ ok: true, updated, skipped });
+  return NextResponse.json({ ok: true, updated, skipped, notDue: latest.size - due.length });
 }

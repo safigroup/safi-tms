@@ -10,7 +10,8 @@ import { saveCostDraft, loadCostDraft, clearCostDraft, type CostDraft } from "@/
 import { Spinner } from "@/lib/components/Spinner";
 import { TripLedgerBody } from "@/lib/components/TripLedgerBody";
 import type { PrintLang } from "@/lib/print/translations";
-import type { AuditLogEntry, BootstrapPayload, BoardTrip, TripCost, TripDocument } from "@/lib/types";
+import type { AuditLogEntry, BootstrapPayload, BoardTrip, FxRate, TripAllocation, TripCost, TripDocument } from "@/lib/types";
+import { buildTripStatement } from "@/lib/tripStatement";
 
 const CATS = [
   "fuel", "driver_advance", "driver_allowance", "border_fees", "customs_duty",
@@ -37,8 +38,9 @@ export default function DocketPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tripId, setTripId] = useState<string | null>(null);
   const [costs, setCosts] = useState<TripCost[]>([]);
+  const [allocations, setAllocations] = useState<TripAllocation[]>([]);
   const [documents, setDocuments] = useState<TripDocument[]>([]);
-  const [tab, setTab] = useState<"ledger" | "docs">("ledger");
+  const [tab, setTab] = useState<"ledger" | "balance" | "docs">("ledger");
   const [draft, setDraft] = useState<CostDraft>(emptyDraft);
   const [restoredNote, setRestoredNote] = useState(false);
   const [costFile, setCostFile] = useState<File | null>(null);
@@ -46,7 +48,7 @@ export default function DocketPage() {
   const [formNote, setFormNote] = useState<string | null>(null);
   const [editingCostId, setEditingCostId] = useState<string | null>(null);
   const [selectedCostIds, setSelectedCostIds] = useState<Set<string>>(new Set());
-  const [printJob, setPrintJob] = useState<{ trip: BoardTrip; costs: TripCost[]; lang: PrintLang } | null>(null);
+  const [printJob, setPrintJob] = useState<{ trip: BoardTrip; costs: TripCost[]; allocations: TripAllocation[]; lang: PrintLang } | null>(null);
   const [printLang, setPrintLang] = useState<PrintLang>("en");
 
   useEffect(() => {
@@ -99,6 +101,7 @@ export default function DocketPage() {
     }
     const body = await res.json();
     setCosts(body.costs ?? []);
+    setAllocations(body.allocations ?? []);
     setDocuments(body.documents ?? []);
     setSelectedCostIds(new Set());
   }
@@ -297,7 +300,7 @@ export default function DocketPage() {
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <button type="button" className={"chip" + (printLang === "en" ? " on" : "")} onClick={() => setPrintLang("en")}>EN</button>
                 <button type="button" className={"chip" + (printLang === "fr" ? " on" : "")} onClick={() => setPrintLang("fr")}>FR</button>
-                <button type="button" className="act" onClick={() => setPrintJob({ trip, costs, lang: printLang })}>Print ledger</button>
+                <button type="button" className="act" onClick={() => setPrintJob({ trip, costs, allocations, lang: printLang })}>Print ledger</button>
               </div>
             </div>
             <div className="r-title" style={{ fontSize: 18 }}>{trip.customer}</div>
@@ -312,6 +315,9 @@ export default function DocketPage() {
         <div className="tabs">
           <button className={tab === "ledger" ? "on" : ""} onClick={() => setTab("ledger")}>
             Ledger {costs.length ? <span className="c">({costs.length})</span> : null}
+          </button>
+          <button className={tab === "balance" ? "on" : ""} onClick={() => setTab("balance")}>
+            Balance {allocations.length ? <span className="c">({allocations.length})</span> : null}
           </button>
           <button className={tab === "docs" ? "on" : ""} onClick={() => setTab("docs")}>
             Documents {documents.filter((d) => d.status === "pending").length ? <span className="badge">{documents.filter((d) => d.status === "pending").length}</span> : null}
@@ -378,6 +384,16 @@ export default function DocketPage() {
           </ul>
           </>
           )
+        ) : tab === "balance" ? (
+          <BalanceTab
+            tripId={tripId}
+            allocations={allocations}
+            costs={costs}
+            curOpts={curOpts}
+            fx={data.fx}
+            canWrite={canWrite}
+            onChanged={async () => { if (tripId) await loadDetail(tripId); }}
+          />
         ) : (
           <DocsTab
             trip={trip}
@@ -496,7 +512,7 @@ export default function DocketPage() {
           }}
         />
       ) : null}
-      {printJob ? <LedgerPrintSheet trip={printJob.trip} costs={printJob.costs} lang={printJob.lang} onDone={() => setPrintJob(null)} /> : null}
+      {printJob ? <LedgerPrintSheet trip={printJob.trip} costs={printJob.costs} allocations={printJob.allocations} lang={printJob.lang} onDone={() => setPrintJob(null)} /> : null}
     </>
   );
 }
@@ -504,11 +520,13 @@ export default function DocketPage() {
 function LedgerPrintSheet({
   trip,
   costs,
+  allocations,
   lang,
   onDone,
 }: {
   trip: BoardTrip;
   costs: TripCost[];
+  allocations: TripAllocation[];
   lang: PrintLang;
   onDone: () => void;
 }) {
@@ -519,7 +537,7 @@ function LedgerPrintSheet({
   }, [onDone]);
 
   return createPortal(
-    <div id="sheet"><TripLedgerBody trip={trip} costs={costs} lang={lang} /></div>,
+    <div id="sheet"><TripLedgerBody trip={trip} costs={costs} allocations={allocations} lang={lang} /></div>,
     document.body,
   );
 }
@@ -788,6 +806,190 @@ function CaptureField({
       </span>
       {file ? <button className="clear" type="button" onClick={() => onChange(null)}>✕</button> : null}
     </div>
+  );
+}
+
+// Money allocated to the trip set against everything it has spent, whoever
+// paid -- the on-screen twin of the printed ledger's balance statement.
+function BalanceTab({
+  tripId,
+  allocations,
+  costs,
+  curOpts,
+  fx,
+  canWrite,
+  onChanged,
+}: {
+  tripId: string | null;
+  allocations: TripAllocation[];
+  costs: TripCost[];
+  curOpts: string[];
+  fx: FxRate[];
+  canWrite: boolean;
+  onChanged: () => Promise<void>;
+}) {
+  const statement = buildTripStatement(allocations, costs);
+  const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState("USD");
+  const [allocatedOn, setAllocatedOn] = useState(today());
+  const [description, setDescription] = useState("");
+  const [reference, setReference] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const amtNum = parseFloat(amount);
+  const rateToUsd = currency === "USD" ? 1 : fx.find((r) => r.currency === currency)?.rate_to_usd;
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!tripId) return;
+    setSaving(true);
+    setError(null);
+    const res = await fetch("/api/trip-allocations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tripId, amount: amtNum, currency, allocatedOn, description, reference }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return setError(body.error || res.statusText);
+    }
+    toast.success(`Allocated ${m2(amtNum, currency)}`);
+    setAmount("");
+    setDescription("");
+    setReference("");
+    await onChanged();
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Remove this allocation?")) return;
+    const res = await fetch(`/api/trip-allocations/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      toast.success("Allocation removed");
+      await onChanged();
+    }
+  }
+
+  return (
+    <>
+      <div className="d-sec">
+        <div className="d-figs" style={{ marginTop: 0 }}>
+          <div><div className="k">Allocated</div><div className="v">{m2(statement.allocated)}</div></div>
+          <div><div className="k">Spent</div><div className="v">{m2(statement.spent)}</div></div>
+          <div>
+            <div className="k">{statement.balance < 0 ? "Overspent" : "Remaining"}</div>
+            <div className={"v " + (statement.balance < 0 ? "neg" : "pos")}>{m2(Math.abs(statement.balance))}</div>
+          </div>
+        </div>
+      </div>
+
+      {canWrite ? (
+        <form className="d-sec" onSubmit={handleSubmit}>
+          <h3>Allocate funds</h3>
+          {error ? <div className="note bad">{error}</div> : null}
+          <div className="row3">
+            <div className="field">
+              <label htmlFor="alAmt">Amount</label>
+              <input id="alAmt" type="number" inputMode="decimal" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="alCur">Currency</label>
+              <select id="alCur" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                {curOpts.map((c) => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="alDate">Date</label>
+              <input id="alDate" type="date" value={allocatedOn} onChange={(e) => setAllocatedOn(e.target.value)} />
+            </div>
+          </div>
+          <div className="row">
+            <div className="field">
+              <label htmlFor="alDesc">Description</label>
+              <input id="alDesc" type="text" placeholder="e.g. Trip budget, cash to driver" value={description} onChange={(e) => setDescription(e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="alRef">Reference</label>
+              <input id="alRef" type="text" placeholder="e.g. M-Pesa code" value={reference} onChange={(e) => setReference(e.target.value)} />
+            </div>
+          </div>
+          {currency !== "USD" && Number.isFinite(amtNum) && amtNum > 0 ? (
+            <div className="d-hint" style={{ marginBottom: 10 }}>
+              {rateToUsd !== undefined ? `≈ ${m2(amtNum * rateToUsd)} at the rate on file` : `No exchange rate on file for ${currency}.`}
+            </div>
+          ) : null}
+          <button className="primary" type="submit" disabled={saving || !(amtNum > 0) || !allocatedOn}>
+            {saving ? "Saving…" : "Allocate funds"}
+          </button>
+        </form>
+      ) : null}
+
+      {statement.rows.length ? (
+        <div className="stmt-wrap">
+          {!allocations.length ? (
+            <div className="note warn" style={{ margin: "14px 18px 0" }}>
+              No funds allocated yet, so every cost shows as overspend until you record what was allocated.
+            </div>
+          ) : null}
+          <table className="stmt">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Entry</th>
+                <th className="num">Debit</th>
+                <th className="num">Credit</th>
+                <th className="num">Balance</th>
+                {canWrite ? <th aria-label="Actions" /> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {statement.rows.map((r) => r.kind === "allocation" ? (
+                <tr key={"a" + r.allocation.id} className="alloc">
+                  <td className="mono">{r.date}</td>
+                  <td>
+                    <span className="pill violet">allocated</span>{" "}
+                    {r.allocation.description || "Funds allocated"}
+                    <div className="r-mono">
+                      {[r.allocation.currency !== "USD" ? m2(r.allocation.amount, r.allocation.currency) : null, r.allocation.reference].filter(Boolean).join(" · ")}
+                    </div>
+                  </td>
+                  <td className="num">{m2(r.debit)}</td>
+                  <td className="num" />
+                  <td className={"num" + (r.balance < 0 ? " neg" : "")}>{m2(r.balance)}</td>
+                  {canWrite ? <td><button className="x" onClick={() => handleDelete(r.allocation.id)}>✕</button></td> : null}
+                </tr>
+              ) : (
+                <tr key={"c" + r.cost.id}>
+                  <td className="mono">{r.date}</td>
+                  <td>
+                    {lab(r.cost.category)}{r.cost.description ? " — " + r.cost.description : ""}
+                    <div className="r-mono">
+                      {[r.cost.currency !== "USD" ? m2(r.cost.amount, r.cost.currency) : null, r.cost.paid_by ? "paid by " + lab(r.cost.paid_by) : null].filter(Boolean).join(" · ")}
+                    </div>
+                  </td>
+                  <td className="num" />
+                  <td className="num">{m2(r.credit)}</td>
+                  <td className={"num" + (r.balance < 0 ? " neg" : "")}>{m2(r.balance)}</td>
+                  {canWrite ? <td /> : null}
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={2}>Totals</td>
+                <td className="num">{m2(statement.allocated)}</td>
+                <td className="num">{m2(statement.spent)}</td>
+                <td className={"num" + (statement.balance < 0 ? " neg" : "")}>{m2(statement.balance)}</td>
+                {canWrite ? <td /> : null}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      ) : (
+        <div className="empty">Nothing allocated or spent on this trip yet.</div>
+      )}
+    </>
   );
 }
 

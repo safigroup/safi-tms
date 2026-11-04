@@ -67,6 +67,18 @@ const STRINGS: Record<string, { en: string; fr: string }> = {
   empty_return_tag: { en: "Empty return", fr: "Retour à vide" },
   empty_return_total: { en: "Of which, empty return legs", fr: "Dont retours à vide" },
 
+  // trip balance statement
+  balance_statement: { en: "Balance statement", fr: "Relevé de solde" },
+  entry: { en: "Entry", fr: "Libellé" },
+  debit: { en: "Debit", fr: "Débit" },
+  credit: { en: "Credit", fr: "Crédit" },
+  balance: { en: "Balance", fr: "Solde" },
+  funds_allocated: { en: "Funds allocated", fr: "Fonds alloués" },
+  total_allocated: { en: "Total allocated", fr: "Total alloué" },
+  total_spent: { en: "Total spent", fr: "Total dépensé" },
+  budget_remaining: { en: "Budget remaining", fr: "Budget restant" },
+  overspent: { en: "Overspent", fr: "Dépassement" },
+
   // basis suffixes (estimate table)
   flat: { en: "flat", fr: "forfait" },
   per_tonne_suffix: { en: "/ tonne", fr: "/ tonne" },

@@ -1,7 +1,8 @@
 import { m2, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
 import { t, catLabel, statusLabel, type PrintLang } from "@/lib/print/translations";
-import type { BoardTrip, TripCost } from "@/lib/types";
+import type { BoardTrip, TripAllocation, TripCost } from "@/lib/types";
+import { buildTripStatement } from "@/lib/tripStatement";
 
 // The inner content of a trip's printed ledger -- everything but the
 // #sheet portal/afterprint wiring, which differs between its two callers:
@@ -11,8 +12,19 @@ import type { BoardTrip, TripCost } from "@/lib/types";
 // translates the fixed labels below -- trip.customer, trip.commodity,
 // a cost's description, and every other piece of free text stay exactly
 // as entered, in whatever language they were written.
-export function TripLedgerBody({ trip, costs, lang }: { trip: BoardTrip; costs: TripCost[]; lang: PrintLang }) {
+export function TripLedgerBody({
+  trip,
+  costs,
+  allocations = [],
+  lang,
+}: {
+  trip: BoardTrip;
+  costs: TripCost[];
+  allocations?: TripAllocation[];
+  lang: PrintLang;
+}) {
   const total = costs.reduce((s, c) => s + Number(c.amount_usd), 0);
+  const statement = buildTripStatement(allocations, costs);
 
   return (
     <>
@@ -79,6 +91,47 @@ export function TripLedgerBody({ trip, costs, lang }: { trip: BoardTrip; costs: 
         <div><span>{t(lang, "total_costs")}</span><span>{m2(total)}</span></div>
         <div className="due"><span>{t(lang, "margin")}</span><span>{m2(Number(trip.revenue_usd) - total)}</span></div>
       </div>
+      {/* Only once money has been allocated -- without any, every cost
+          would just read as an unexplained overspend. */}
+      {allocations.length ? (
+        <>
+          <div className="sec-title">{t(lang, "balance_statement")}</div>
+          <table>
+            <thead>
+              <tr>
+                <th>{t(lang, "date")}</th>
+                <th>{t(lang, "entry")}</th>
+                <th className="num">{t(lang, "debit")}</th>
+                <th className="num">{t(lang, "credit")}</th>
+                <th className="num">{t(lang, "balance")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {statement.rows.map((r) => (
+                <tr key={r.kind + (r.kind === "allocation" ? r.allocation.id : r.cost.id)}>
+                  <td>{r.date}</td>
+                  <td>
+                    {r.kind === "allocation"
+                      ? <>{t(lang, "funds_allocated")}{r.allocation.description ? " — " + r.allocation.description : ""}{r.allocation.reference ? " · " + r.allocation.reference : ""}</>
+                      : <>{catLabel(lang, r.cost.category)}{r.cost.description ? " — " + r.cost.description : ""}</>}
+                  </td>
+                  <td className="num">{r.debit ? m2(r.debit) : ""}</td>
+                  <td className="num">{r.credit ? m2(r.credit) : ""}</td>
+                  <td className="num" style={r.balance < 0 ? { color: "#B23A26" } : undefined}>{m2(r.balance)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="totals">
+            <div><span>{t(lang, "total_allocated")}</span><span>{m2(statement.allocated)}</span></div>
+            <div><span>{t(lang, "total_spent")}</span><span>{m2(statement.spent)}</span></div>
+            <div className="due">
+              <span>{statement.balance < 0 ? t(lang, "overspent") : t(lang, "budget_remaining")}</span>
+              <span>{m2(Math.abs(statement.balance))}</span>
+            </div>
+          </div>
+        </>
+      ) : null}
     </>
   );
 }

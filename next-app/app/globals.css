@@ -1025,6 +1025,64 @@ button.ghost.danger:hover {
   color: var(--ink)
 }
 
+/* trip balance statement (Docket) */
+.stmt-wrap {
+  overflow-x: auto
+}
+
+table.stmt {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px
+}
+
+table.stmt th {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap
+}
+
+table.stmt td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rule-soft);
+  vertical-align: top
+}
+
+table.stmt td.mono {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  white-space: nowrap
+}
+
+table.stmt .num {
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap
+}
+
+table.stmt .neg {
+  color: var(--alert)
+}
+
+table.stmt tr.alloc td {
+  background: var(--stamp-wash)
+}
+
+table.stmt tfoot td {
+  font-weight: 600;
+  border-top: 1px solid var(--rule);
+  border-bottom: none
+}
+
 /* file capture */
 .capture {
   border: 1px dashed var(--rule);
@@ -1315,6 +1373,18 @@ button.ghost.danger:hover {
   text-align: right;
   font-family: var(--mono);
   font-variant-numeric: tabular-nums
+}
+
+#sheet .sec-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: #555;
+  margin-top: 28px;
+  padding-top: 12px;
+  border-top: 1px solid #ddd
 }
 
 #sheet .totals {

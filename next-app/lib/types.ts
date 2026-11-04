@@ -175,6 +175,21 @@ export type TripCost = {
   is_empty_return: boolean;
 };
 
+// Money allocated to a trip -- the debit side of its balance statement
+// (see lib/tripStatement.ts), where every TripCost is a credit.
+export type TripAllocation = {
+  id: string;
+  trip_id: string;
+  allocated_on: string;
+  amount: number;
+  currency: string;
+  fx_rate_to_usd: number;
+  amount_usd: number;
+  description: string | null;
+  reference: string | null;
+  created_at: string;
+};
+
 export type DocStatus = "pending" | "issued" | "lodged" | "cleared" | "received" | "rejected";
 
 export type TripDocument = {
@@ -255,7 +270,7 @@ export type TruckCost = {
 // populated then; it's absent otherwise, not an empty array, so the
 // print sheet can tell "ledgers weren't requested" apart from "requested
 // but this trip has none."
-export type TruckReportTrip = BoardTrip & { costs?: TripCost[] };
+export type TruckReportTrip = BoardTrip & { costs?: TripCost[]; allocations?: TripAllocation[] };
 
 export type CategoryAmount = {
   category: string;

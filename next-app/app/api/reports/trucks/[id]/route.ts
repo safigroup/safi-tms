@@ -84,17 +84,29 @@ export async function GET(
   // more than the category/liters totals already queried.
   let tripsWithLedgers = trips;
   if (includeLedgers && tripIds.length) {
-    const { data: ledgerCostRows, error: ledgerCostRowsError } = await ctx.admin
-      .from("trip_costs")
-      .select("id, trip_id, category, description, amount, currency, fx_rate_to_usd, amount_usd, incurred_on, location, paid_by, receipt_ref, receipt_path, liters, price_per_liter")
-      .in("trip_id", tripIds)
-      .order("incurred_on", { ascending: true });
+    const [{ data: ledgerCostRows, error: ledgerCostRowsError }, { data: allocationRows, error: allocationRowsError }] = await Promise.all([
+      ctx.admin
+        .from("trip_costs")
+        .select("id, trip_id, category, description, amount, currency, fx_rate_to_usd, amount_usd, incurred_on, location, paid_by, receipt_ref, receipt_path, liters, price_per_liter, is_empty_return")
+        .in("trip_id", tripIds)
+        .order("incurred_on", { ascending: true }),
+      ctx.admin
+        .from("trip_allocations")
+        .select("*")
+        .eq("org_id", ctx.orgId)
+        .in("trip_id", tripIds)
+        .order("allocated_on", { ascending: true }),
+    ]);
     if (ledgerCostRowsError) {
       return NextResponse.json({ error: ledgerCostRowsError.message }, { status: 400 });
+    }
+    if (allocationRowsError) {
+      return NextResponse.json({ error: allocationRowsError.message }, { status: 400 });
     }
     tripsWithLedgers = trips.map((t) => ({
       ...t,
       costs: (ledgerCostRows ?? []).filter((c) => c.trip_id === t.trip_id),
+      allocations: (allocationRows ?? []).filter((a) => a.trip_id === t.trip_id),
     }));
   }
 

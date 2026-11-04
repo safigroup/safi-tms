@@ -576,7 +576,7 @@ function ReportPrintSheet({ report, lang, onDone }: { report: TruckReport; lang:
       ) : null}
       {report.trips.map((tr) => tr.costs ? (
         <div key={tr.trip_id} style={{ pageBreakBefore: "always" }}>
-          <TripLedgerBody trip={tr} costs={tr.costs} lang={lang} />
+          <TripLedgerBody trip={tr} costs={tr.costs} allocations={tr.allocations} lang={lang} />
         </div>
       ) : null)}
     </div>,

@@ -190,6 +190,38 @@ export type TripAllocation = {
   created_at: string;
 };
 
+// Company cashbook (owner/admin/finance only) -- see lib/cashbook/.
+export type CashAccountKind = "bank" | "mobile_money" | "cash";
+
+export type CashAccount = {
+  id: string;
+  name: string;
+  kind: CashAccountKind;
+  currency: string;
+  opening_balance: number;
+  opening_date: string;
+  is_active: boolean;
+};
+
+// Returned by GET /api/cashbook -- the account plus its balance today.
+export type CashAccountSummary = CashAccount & { balance: number };
+
+export type CashTransaction = {
+  id: string;
+  account_id: string;
+  occurred_on: string;
+  direction: "in" | "out";
+  amount: number;
+  fx_rate_to_usd: number;
+  amount_usd: number;
+  category: string;
+  counterparty: string | null;
+  description: string | null;
+  reference: string | null;
+  transfer_id: string | null;
+  created_at: string;
+};
+
 export type DocStatus = "pending" | "issued" | "lodged" | "cleared" | "received" | "rejected";
 
 export type TripDocument = {

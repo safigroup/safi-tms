@@ -79,6 +79,20 @@ const STRINGS: Record<string, { en: string; fr: string }> = {
   budget_remaining: { en: "Budget remaining", fr: "Budget restant" },
   overspent: { en: "Overspent", fr: "Dépassement" },
 
+  // cashbook account statement
+  account_statement: { en: "Account statement", fr: "Relevé de compte" },
+  account: { en: "Account", fr: "Compte" },
+  period: { en: "Period", fr: "Période" },
+  balance_brought_forward: { en: "Balance brought forward", fr: "Solde reporté" },
+  money_in_dr: { en: "Money in (Dr)", fr: "Entrées (débit)" },
+  money_out_cr: { en: "Money out (Cr)", fr: "Sorties (crédit)" },
+  total_in: { en: "Total money in", fr: "Total des entrées" },
+  total_out: { en: "Total money out", fr: "Total des sorties" },
+  closing_balance: { en: "Closing balance", fr: "Solde de clôture" },
+  kind_bank: { en: "Bank", fr: "Banque" },
+  kind_mobile_money: { en: "Mobile money", fr: "Mobile money" },
+  kind_cash: { en: "Cash", fr: "Caisse" },
+
   // basis suffixes (estimate table)
   flat: { en: "flat", fr: "forfait" },
   per_tonne_suffix: { en: "/ tonne", fr: "/ tonne" },

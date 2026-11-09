@@ -1077,10 +1077,77 @@ table.stmt tr.alloc td {
   background: var(--stamp-wash)
 }
 
+table.stmt tr.bf td {
+  background: var(--ground);
+  font-weight: 500
+}
+
 table.stmt tfoot td {
   font-weight: 600;
   border-top: 1px solid var(--rule);
   border-bottom: none
+}
+
+/* cashbook account cards */
+.acct-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+  padding: 16px 18px
+}
+
+.acct {
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  background: var(--ground);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color .12s ease, background-color .12s ease
+}
+
+.acct:hover {
+  border-color: var(--stamp)
+}
+
+.acct.on {
+  background: var(--stamp-wash);
+  border-color: var(--stamp);
+  box-shadow: inset 3px 0 0 var(--stamp)
+}
+
+.acct.off {
+  opacity: .55
+}
+
+.acct-name {
+  font-family: var(--cond);
+  font-weight: 600;
+  font-size: 15px
+}
+
+.acct-kind {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-soft)
+}
+
+.acct-bal {
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px
+}
+
+.acct-bal.neg {
+  color: var(--alert)
 }
 
 /* file capture */

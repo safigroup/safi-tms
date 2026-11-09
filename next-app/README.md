@@ -73,6 +73,14 @@ These are official/interbank rates, which can diverge from real border-town cash
 
 **Notification email**: after each saved request, `lib/demoRequests/notifyDemoRequest.ts` emails every platform admin through [Resend](https://resend.com), with Reply-To set to the requester. It runs in `after()`, so the visitor never waits on it, and a failure is only logged. It's off until `RESEND_API_KEY` is set. Without `DEMO_REQUEST_FROM` it sends from Resend's test sender, which only delivers to the Resend account's own address — verify a domain in Resend and set `DEMO_REQUEST_FROM` to reach every admin.
 
+## Company cashbook
+
+`/cashbook` records the company's own money: bank accounts, mobile money wallets and cash boxes (`cash_accounts`, any currency the app has a rate for), each opening with its balance on a chosen date (1 Nov 2026 by default), plus every movement in or out (`cash_transactions`). Transfers between two of the company's accounts are written as a pair sharing a `transfer_id`, so they're only ever created or deleted whole; across currencies both the amount sent and the amount received are entered as they actually happened. Each entry freezes the rate on file at entry, like trip costs, for later USD reporting.
+
+Statements (`lib/cashbook/statement.ts`, shared by the page and its English/French printout) show money in as the debit side and money out as the credit side, with the balance brought forward to the period's first day. Account balances come from the `cash_account_balances` view, so they stay correct past the API's 1,000-row read limit.
+
+Unlike the rest of the app, **viewing** is restricted too: only owner, admin and finance (`CAN_USE_CASHBOOK`), on every `/api/cashbook` route. Phase 2 will add invoice payments, office/agent/card-paid trip costs, trip allocations and truck costs to these statements automatically.
+
 ## Notes for whoever (or whatever) works on this next
 
 `AGENTS.md` is not boilerplate — Next.js 16 has real breaking changes from older training data (`proxy.ts` replacing `middleware.ts`, fully async `cookies()`/`params`, etc.). Read `node_modules/next/dist/docs/` before assuming an API works the way an earlier Next.js version's did.

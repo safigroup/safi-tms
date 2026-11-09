@@ -15,3 +15,7 @@ export const CAN_MANAGE_TEAM: ReadonlySet<OrgRole> = new Set(["owner", "admin"])
 // creating/deleting trip costs day-to-day); this is the "correct a
 // mistake after the fact" power, not routine data entry.
 export const CAN_OVERRIDE_RECORDS: ReadonlySet<OrgRole> = new Set(["owner", "admin"]);
+// The company cashbook is the one area where even *seeing* data is gated:
+// company-wide bank and cash balances aren't for operations staff or
+// viewers. Checked on every /api/cashbook route, reads included.
+export const CAN_USE_CASHBOOK: ReadonlySet<OrgRole> = new Set(["owner", "admin", "finance"]);

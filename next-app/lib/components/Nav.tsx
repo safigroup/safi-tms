@@ -8,10 +8,15 @@ import { ThemeToggle } from "@/lib/components/ThemeToggle";
 import { setActiveOrg } from "@/app/(app)/actions";
 import type { BootstrapPayload, Organization } from "@/lib/types";
 
+// Mirrors CAN_USE_CASHBOOK (lib/auth/permissions.ts) -- the link is only
+// a convenience; every /api/cashbook route enforces it.
+const CASHBOOK_ROLES = ["owner", "admin", "finance"];
+
 const VIEWS = [
   { href: "/board", label: "Board" },
   { href: "/docket", label: "Cost docket" },
   { href: "/billing", label: "Billing" },
+  { href: "/cashbook", label: "Cashbook" },
   { href: "/reports", label: "Reports" },
   { href: "/estimates", label: "Estimator" },
   { href: "/admin", label: "Admin" },
@@ -80,9 +85,10 @@ export function Nav({
     window.location.assign("/board");
   }
 
+  const roleViews = VIEWS.filter((v) => v.href !== "/cashbook" || CASHBOOK_ROLES.includes(role));
   const views = isPlatformAdmin
-    ? [...VIEWS, { href: "/organizations", label: "Organizations" }, { href: "/demo-requests", label: "Demo requests" }]
-    : VIEWS;
+    ? [...roleViews, { href: "/organizations", label: "Organizations" }, { href: "/demo-requests", label: "Demo requests" }]
+    : roleViews;
 
   const rolling = data?.board.filter((t) => ["loading", "in_transit", "at_border"].includes(t.status)).length ?? 0;
   const pod = data?.board.filter((t) => t.status === "delivered" && !t.pod_in_hand).length ?? 0;

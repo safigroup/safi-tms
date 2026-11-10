@@ -212,6 +212,7 @@ export default function CashbookPage() {
               key={formMode === "edit-account" ? account!.id : "new"}
               account={formMode === "edit-account" ? account! : null}
               currencies={overview.currencies}
+              hasEntries={formMode === "edit-account" && !!detail?.transactions.length}
               onSaved={async (id) => {
                 setMode("out");
                 if (id) setSelectedId(id);
@@ -461,11 +462,13 @@ function TransferForm({
 function AccountForm({
   account,
   currencies,
+  hasEntries,
   onSaved,
   onCancel,
 }: {
   account: CashAccount | null;
   currencies: string[];
+  hasEntries: boolean;
   onSaved: (id: string | null) => Promise<void>;
   onCancel?: () => void;
 }) {
@@ -486,7 +489,7 @@ function AccountForm({
       ? await fetch(`/api/cashbook/accounts/${account.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, openingBalance: Number(openingBalance || 0), openingDate, isActive }),
+          body: JSON.stringify({ name, kind, currency, openingBalance: Number(openingBalance || 0), openingDate, isActive }),
         })
       : await fetch("/api/cashbook/accounts", {
           method: "POST",
@@ -509,27 +512,26 @@ function AccountForm({
           <label htmlFor="acName">Name</label>
           <input id="acName" type="text" placeholder="e.g. Stanbic USD, M-Pesa, Petty cash" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
-        {account ? null : (
-          <div className="row">
-            <div className="field">
-              <label htmlFor="acKind">Type</label>
-              <select id="acKind" value={kind} onChange={(e) => setKind(e.target.value as CashAccountKind)}>
-                <option value="bank">Bank</option>
-                <option value="mobile_money">Mobile money</option>
-                <option value="cash">Cash</option>
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="acCur">Currency</label>
-              <select id="acCur" value={currency} onChange={(e) => setCurrency(e.target.value)}>
-                {currencies.map((c) => <option key={c}>{c}</option>)}
-              </select>
-            </div>
-          </div>
-        )}
         <div className="row">
           <div className="field">
-            <label htmlFor="acBal">Opening balance ({account?.currency ?? currency})</label>
+            <label htmlFor="acKind">Type</label>
+            <select id="acKind" value={kind} onChange={(e) => setKind(e.target.value as CashAccountKind)}>
+              <option value="bank">Bank</option>
+              <option value="mobile_money">Mobile money</option>
+              <option value="cash">Cash</option>
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="acCur">Currency</label>
+            <select id="acCur" value={currency} disabled={hasEntries} onChange={(e) => setCurrency(e.target.value)}>
+              {currencies.map((c) => <option key={c}>{c}</option>)}
+            </select>
+            {hasEntries ? <div className="hint">Locked: this account already has entries in {account?.currency}.</div> : null}
+          </div>
+        </div>
+        <div className="row">
+          <div className="field">
+            <label htmlFor="acBal">Opening balance ({currency})</label>
             <input id="acBal" type="number" inputMode="decimal" step="0.01" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} />
           </div>
           <div className="field">

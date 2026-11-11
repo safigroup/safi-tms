@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
 import { CAN_USE_CASHBOOK } from "@/lib/auth/permissions";
-import { getOrgCashAccount } from "@/lib/cashbook/server";
+import { getOrgCashAccount, rateToUsd } from "@/lib/cashbook/server";
 
 const PAGE = 1000;
 
@@ -46,8 +46,10 @@ export async function GET(
   return NextResponse.json({ account, transactions });
 }
 
-// Rename, deactivate, or correct the opening balance/date. Currency is
-// fixed once created -- every transaction on the account is in it.
+// Rename, deactivate, or correct the type, opening balance/date -- or
+// the currency, but only before the first entry: once there are entries,
+// their amounts were typed in that currency and their USD values frozen
+// from it, so relabelling them would silently change what they mean.
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -74,6 +76,28 @@ export async function PATCH(
     updates.name = name.slice(0, 80);
   }
   if (body.isActive !== undefined) updates.is_active = !!body.isActive;
+  if (body.kind !== undefined) {
+    if (!["bank", "mobile_money", "cash"].includes(body.kind)) {
+      return NextResponse.json({ error: "Pick bank, mobile money or cash." }, { status: 400 });
+    }
+    updates.kind = body.kind;
+  }
+  if (body.currency !== undefined && body.currency !== account.currency) {
+    if (typeof body.currency !== "string" || (await rateToUsd(ctx.admin, ctx.orgId, body.currency)) === null) {
+      return NextResponse.json({ error: "Pick a currency with an exchange rate on file." }, { status: 400 });
+    }
+    const { count } = await ctx.admin
+      .from("cash_transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("account_id", id);
+    if (count) {
+      return NextResponse.json(
+        { error: `This account already has entries in ${account.currency}, so its currency can't change. Delete them first, or open a new account.` },
+        { status: 400 },
+      );
+    }
+    updates.currency = body.currency;
+  }
   if (body.openingBalance !== undefined) {
     const n = Number(body.openingBalance);
     if (!Number.isFinite(n)) return NextResponse.json({ error: "Enter a valid opening balance." }, { status: 400 });

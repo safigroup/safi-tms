@@ -27,7 +27,9 @@ const FILTERS: [string, string, (t: BoardTrip) => boolean][] = [
   ["border", "At border", (t) => t.status === "at_border"],
   ["pod", "Awaiting POD", (t) => t.status === "delivered" && !t.pod_in_hand],
   ["billable", "Billable", (t) => t.status === "pod_received"],
-  ["late", "Late", (t) => !!t.over_target],
+  // Trips still on the road past their corridor target -- the ones you can
+  // act on. A delivered trip that once ran late is history, not an alert.
+  ["late", "Late", (t) => ["loading", "in_transit", "at_border"].includes(t.status) && !!t.over_target],
   ["all", "All", () => true],
 ];
 
@@ -44,6 +46,37 @@ const NEXT: Record<string, [TripStatus, string][]> = {
 
 const lab = (s: string) => s.replace(/_/g, " ");
 
+const SORTS: [string, string, (a: BoardTrip, b: BoardTrip) => number][] = [
+  ["recent", "Latest loaded", () => 0],
+  ["overdue", "Most overdue", (a, b) => lateBy(b) - lateBy(a)],
+  ["margin-desc", "Highest margin", (a, b) => Number(b.margin_usd) - Number(a.margin_usd)],
+  ["margin-asc", "Lowest margin", (a, b) => Number(a.margin_usd) - Number(b.margin_usd)],
+];
+
+function lateBy(t: BoardTrip) {
+  return t.days_running != null && t.target_days != null ? t.days_running - t.target_days : -Infinity;
+}
+
+// What each trip is still owed under its customer's payment schedule that
+// is held back only by a missing POD -- the same projection Billing uses,
+// rather than assuming half the revenue.
+function podHeldUsd(data: BootstrapPayload, tripId: string) {
+  const b = data.billable.find((x) => x.trip_id === tripId);
+  return (b?.milestones_due ?? []).filter((m) => m.blocked_reason === "awaiting_pod").reduce((s, m) => s + m.amount_usd, 0);
+}
+
+function waitLabel(sinceIso: string, now: number) {
+  const hours = Math.max(0, (now - new Date(sinceIso).getTime()) / 3_600_000);
+  if (hours < 1) return "under 1h";
+  if (hours < 48) return `${Math.floor(hours)}h`;
+  return `${Math.floor(hours / 24)}d ${Math.floor(hours % 24)}h`;
+}
+
+function matchesSearch(t: BoardTrip, q: string) {
+  return [t.trip_no, t.customer, t.route, t.fleet_no, t.horse_reg, t.driver, t.container_no, t.commodity]
+    .some((v) => v && v.toLowerCase().includes(q));
+}
+
 // Mirrors lib/auth/permissions.ts's CAN_MANAGE_TRIPS/CAN_OVERRIDE_RECORDS --
 // UI convenience only (hides actions a role can't use), the route handlers
 // are the real check.
@@ -55,6 +88,9 @@ export default function BoardPage() {
   const [data, setData] = useState<BootstrapPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("active");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("recent");
+  const [loadedAt, setLoadedAt] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [showNewTrip, setShowNewTrip] = useState(false);
 
@@ -70,6 +106,7 @@ export default function BoardPage() {
     }
     const payload: BootstrapPayload = await res.json();
     setData(payload);
+    setLoadedAt(Date.now());
     setError(payload.fetchErrors.length ? `Couldn't load ${payload.fetchErrors.join(", ")}.` : null);
   }
 
@@ -86,45 +123,56 @@ export default function BoardPage() {
 
   if (!data) return <div className="panel"><Spinner /></div>;
 
-  const board = data.board;
-  const rolling = board.filter((t) => ["loading", "in_transit", "at_border"].includes(t.status));
+  const all = data.board;
+  const rolling = all.filter((t) => ["loading", "in_transit", "at_border"].includes(t.status));
   const late = rolling.filter((t) => t.over_target);
-  const pod = board.filter((t) => t.status === "delivered" && !t.pod_in_hand);
-  const unbilled = pod.reduce((s, t) => s + Number(t.revenue_usd || 0) * 0.5, 0);
-  const done = board.filter((t) => ["pod_received", "invoiced", "closed"].includes(t.status));
-  const avg = done.length ? done.reduce((s, t) => s + Number(t.margin_pct || 0), 0) / done.length : null;
+  const pod = all.filter((t) => t.status === "delivered" && !t.pod_in_hand);
+  const podHeld = pod.reduce((s, t) => s + podHeldUsd(data, t.trip_id), 0);
+  const atBorder = all
+    .filter((t) => t.status === "at_border")
+    .sort((a, b) => (a.last_border_at ?? "").localeCompare(b.last_border_at ?? ""));
+  const longest = atBorder.find((t) => t.last_border_at);
+  const longestHours = longest ? (loadedAt - new Date(longest.last_border_at!).getTime()) / 3_600_000 : 0;
 
+  const q = search.trim().toLowerCase();
+  const board = q ? all.filter((t) => matchesSearch(t, q)) : all;
   const filterFn = FILTERS.find((f) => f[0] === filter)![2];
-  const rows = board.filter(filterFn);
-  const selectedTrip = board.find((t) => t.trip_id === selected) || null;
+  const sortFn = SORTS.find((x) => x[0] === sort)![2];
+  const rows = board.filter(filterFn).sort(sortFn);
+  const selectedTrip = all.find((t) => t.trip_id === selected) || null;
+  const detailOpen = showNewTrip || !!selectedTrip;
+  const closeDetail = () => { setSelected(null); setShowNewTrip(false); };
   const canWrite = CAN_MANAGE_TRIPS.includes(data.role);
 
   return (
     <>
       {error ? <div className="note bad">{error}</div> : null}
+      {/* Each figure is also the filter for the trips behind it. */}
       <div className="strip">
-        <div className="cell">
+        <button type="button" className={"cell" + (filter === "rolling" ? " on" : "")} onClick={() => setFilter("rolling")}>
           <div className="k">On the road</div>
           <div className="v">{rolling.length}</div>
-          <div className="n">{board.filter((t) => t.status !== "closed").length} open trips</div>
-        </div>
-        <div className="cell">
-          <div className="k">Over corridor target</div>
-          <div className={"v" + (late.length ? " warn" : "")}>{late.length}</div>
+          <div className="n">{all.filter((t) => !["closed", "invoiced"].includes(t.status)).length} active trips</div>
+        </button>
+        <button type="button" className={"cell" + (filter === "border" ? " on" : "")} onClick={() => setFilter("border")}>
+          <div className="k">At border now</div>
+          <div className={"v" + (longestHours >= 24 ? " warn" : "")}>{atBorder.length}</div>
+          <div className="n">
+            {longest
+              ? `Longest: ${longest.trip_no} at ${(longest.last_border || "border").split("/")[0].trim()}, ${waitLabel(longest.last_border_at!, loadedAt)}`
+              : atBorder.length ? "waiting times not logged" : "none waiting"}
+          </div>
+        </button>
+        <button type="button" className={"cell" + (filter === "late" ? " on" : "")} onClick={() => setFilter("late")}>
+          <div className="k">Late</div>
+          <div className={"v" + (late.length ? " bad" : "")}>{late.length}</div>
           <div className="n">{late.length ? late.map((t) => t.trip_no).join(", ") : "all on schedule"}</div>
-        </div>
-        <div className="cell">
+        </button>
+        <button type="button" className={"cell" + (filter === "pod" ? " on" : "")} onClick={() => setFilter("pod")}>
           <div className="k">Awaiting POD</div>
           <div className={"v" + (pod.length ? " warn" : "")}>{pod.length}</div>
-          <div className="n">{m0(unbilled)} not yet billable</div>
-        </div>
-        <div className="cell">
-          <div className="k">Avg margin, delivered</div>
-          <div className={"v" + (avg !== null && avg >= 0 ? " pos" : "")}>
-            {avg !== null ? avg.toFixed(1) + "%" : "—"}
-          </div>
-          <div className="n">{done.length} trips</div>
-        </div>
+          <div className="n">{podHeld > 0 ? `${m0(podHeld)} held until POD` : "nothing held back"}</div>
+        </button>
       </div>
       <div className="grid">
         <div className="panel">
@@ -136,7 +184,19 @@ export default function BoardPage() {
               </button>
             ) : null}
           </div>
-          <div className="chips">
+          <div className="board-tools">
+            <input
+              type="search"
+              aria-label="Search trips"
+              placeholder="Search trip, customer, truck, driver, container…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <select aria-label="Sort trips" value={sort} onChange={(e) => setSort(e.target.value)}>
+              {SORTS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+          </div>
+          <div className="chips board-chips">
             {FILTERS.map(([key, label, fn]) => (
               <button
                 key={key}
@@ -148,7 +208,7 @@ export default function BoardPage() {
               </button>
             ))}
           </div>
-          <ul className="list">
+          <ul className="list board-list">
             {rows.length ? (
               rows.map((t) => {
                 const m = Number(t.margin_usd || 0);
@@ -170,14 +230,14 @@ export default function BoardPage() {
                         <span className={"pill " + (PILL[t.status] || "grey")}>{lab(t.status)}</span>
                         {t.over_target ? (
                           <span className="pill bad">day {t.days_running} of {t.target_days}</span>
-                        ) : t.days_running != null ? (
-                          <span className="pill grey">day {t.days_running}</span>
+                        ) : t.days_running ? (
+                          <span className="pill grey">day {t.days_running}{t.target_days ? ` of ${t.target_days}` : ""}</span>
                         ) : null}
                         {t.last_border && ["in_transit", "at_border"].includes(t.status) ? (
                           <span className="pill violet">{t.last_border}</span>
                         ) : null}
                         {t.docs_pending ? (
-                          <span className="pill warn">{t.docs_pending} doc{t.docs_pending > 1 ? "s" : ""}</span>
+                          <span className="pill warn">{t.docs_pending} doc{t.docs_pending > 1 ? "s" : ""} pending</span>
                         ) : null}
                         {t.status === "delivered" && !t.pod_in_hand ? (
                           <span className="pill warn">no POD</span>
@@ -193,13 +253,17 @@ export default function BoardPage() {
                 );
               })
             ) : (
-              <li className="empty">Nothing here.</li>
+              <li className="empty">{q ? `No trips match "${search.trim()}".` : "Nothing here."}</li>
             )}
           </ul>
         </div>
-        <div className="panel">
+        {/* On narrow screens this becomes a full-screen view over the list
+            (see .board-detail in globals.css), so tapping a trip shows it
+            straight away instead of below every other trip. */}
+        <div className={"panel board-detail" + (detailOpen ? " open" : "")}>
           <div className="panel-head">
             <h2>{showNewTrip ? "New trip" : "Trip detail"}</h2>
+            <button type="button" className="act board-back" onClick={closeDetail}>← Trips</button>
           </div>
           {showNewTrip ? (
             <NewTripForm
@@ -364,7 +428,10 @@ function TripDetail({
         <div className="d-sec">
           <h3>Blocked on</h3>
           <div className="d-hint">
-            POD not received. {m2(Number(trip.revenue_usd || 0) * 0.5)} can&apos;t be invoiced until it&apos;s in hand.
+            POD not received.{" "}
+            {podHeldUsd(data, trip.trip_id) > 0
+              ? <>{m2(podHeldUsd(data, trip.trip_id))} can&apos;t be invoiced until it&apos;s in hand.</>
+              : <>No payment milestone is waiting on it.</>}
           </div>
         </div>
       ) : null}

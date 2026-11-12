@@ -28,7 +28,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.replace("/board");
+    router.replace("/overview");
     router.refresh();
   }
 

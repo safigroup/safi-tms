@@ -28,7 +28,7 @@ export function OrganizationsPicker() {
     }
     // Full navigation -- see the identical comment in lib/components/Nav.tsx.
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- deliberate: a router.push transition would leave stale client-fetched state behind
-    window.location.assign("/board");
+    window.location.assign("/overview");
   }
 
   async function load() {

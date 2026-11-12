@@ -20,13 +20,13 @@ export async function generateMetadata(): Promise<Metadata> {
 
 // Public landing page for signed-out visitors. Signed-in users never see
 // it -- "/" has always been their way into the app, so it still sends
-// them straight to the Board.
+// them straight to the Overview.
 export default async function HomePage() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user) redirect("/board");
+  if (user) redirect("/overview");
 
   return <Landing initialLang={await resolveLang()} year={new Date().getFullYear()} />;
 }

@@ -16,3 +16,11 @@ export const num = (n: number | string | null | undefined) =>
 export const lab = (s: string | null | undefined) => String(s || "").replace(/_/g, " ");
 
 export const today = () => new Date().toISOString().slice(0, 10);
+
+// How long ago something started, for waits at a border and the like.
+export function waitLabel(sinceIso: string, now: number) {
+  const hours = Math.max(0, (now - new Date(sinceIso).getTime()) / 3_600_000);
+  if (hours < 1) return "under 1h";
+  if (hours < 48) return `${Math.floor(hours)}h`;
+  return `${Math.floor(hours / 24)}d ${Math.floor(hours % 24)}h`;
+}

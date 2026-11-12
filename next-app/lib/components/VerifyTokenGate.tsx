@@ -60,7 +60,7 @@ function VerifyTokenForm({ type, invalidMessage }: { type: TokenType; invalidMes
       return setError("That didn't work: " + error.message);
     }
 
-    router.replace("/board");
+    router.replace("/overview");
     router.refresh();
   }
 

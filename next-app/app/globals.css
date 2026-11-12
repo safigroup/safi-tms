@@ -400,6 +400,97 @@ nav a.on .n {
   }
 }
 
+/* strip cells that act as filters (Board) */
+.strip button.cell {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  transition: background-color .12s ease
+}
+
+.strip button.cell:hover {
+  background: var(--ground)
+}
+
+.strip button.cell.on {
+  box-shadow: inset 0 -3px 0 var(--stamp)
+}
+
+.strip button.cell:focus-visible {
+  outline: 2px solid var(--stamp);
+  outline-offset: -2px
+}
+
+/* Board: search + sort, mobile list and detail */
+.board-tools {
+  display: flex;
+  gap: 8px;
+  padding: 12px 18px 0;
+  background: var(--ground)
+}
+
+.board-tools input {
+  flex: 1;
+  min-width: 0
+}
+
+.board-tools select {
+  width: auto;
+  flex: none
+}
+
+/* Selectors below are deliberately more specific than the global .act,
+   ul.list and .chips rules they override, which come later in this file. */
+.panel-head .board-back {
+  display: none
+}
+
+@media(max-width:1000px) {
+  ul.list.board-list {
+    max-height: none
+  }
+
+  .chips.board-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto
+  }
+
+  .chips.board-chips .chip {
+    flex: none
+  }
+
+  .board-detail:not(.open) {
+    display: none
+  }
+
+  .board-detail.open {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    border: none;
+    border-radius: 0;
+    overflow-y: auto;
+    padding-bottom: env(safe-area-inset-bottom, 0px)
+  }
+
+  .board-detail.open .panel-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--card);
+    padding-top: calc(14px + env(safe-area-inset-top, 0px))
+  }
+
+  .panel-head .board-back {
+    display: inline-flex
+  }
+}
+
 /* layout */
 .grid {
   display: grid;

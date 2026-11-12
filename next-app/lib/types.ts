@@ -71,6 +71,8 @@ export type BoardTrip = {
   docs_pending: number;
   pod_in_hand: boolean;
   last_border: string | null;
+  // When the latest border event (arrival or clearance) was logged.
+  last_border_at: string | null;
   customer_id: string;
   route_id: string;
   driver_id: string | null;

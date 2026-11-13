@@ -81,6 +81,18 @@ export type BoardTrip = {
   agent_name: string | null;
 };
 
+// One row of a trip's history: a status change (logged by the database
+// whenever trips.status changes) or a border arrival/clearance.
+export type TripEvent = {
+  id: string;
+  event_type: string;
+  location: string | null;
+  occurred_at: string;
+  from_status: string | null;
+  to_status: string | null;
+  recorded_by_email: string | null;
+};
+
 export type Customer = {
   id: string;
   name: string;

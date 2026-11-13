@@ -7,7 +7,8 @@ import { toast } from "sonner";
 import { m0, m2, today, waitLabel } from "@/lib/format";
 import { useBusyGroup } from "@/lib/useBusyGroup";
 import { Spinner } from "@/lib/components/Spinner";
-import type { AuditLogEntry, BoardTrip, BootstrapPayload, TripStatus } from "@/lib/types";
+import { buildTimeline, routeProgress, type Stop } from "@/lib/trips/timeline";
+import type { AuditLogEntry, BoardTrip, BootstrapPayload, TripEvent, TripStatus } from "@/lib/types";
 
 const PILL: Record<string, string> = {
   draft: "grey",
@@ -306,6 +307,15 @@ function TripDetail({
   const canBill =
     (!trip.pod_in_hand && trip.status === "delivered") ||
     ["pod_received", "in_transit", "at_border", "loading"].includes(trip.status);
+  const history = useTripHistory(trip);
+  const route = data.routes.find((r) => r.id === trip.route_id);
+  const stops = typeof history === "object"
+    ? routeProgress(trip, route, history.events, history.fetchedAt)
+    : routeProgress(trip, route, [], 0);
+  // Once the history is in, only offer the borders still ahead.
+  const bordersAhead = typeof history === "object"
+    ? stops.filter((s) => s.kind === "border" && s.state !== "done").map((s) => s.location!)
+    : borders;
 
   async function advance(status: TripStatus) {
     setNote(null);
@@ -358,6 +368,7 @@ function TripDetail({
           <div><div className="k">Margin</div><div className={"v " + (m >= 0 ? "pos" : "neg")}>{m2(m)}</div></div>
         </div>
       </div>
+      {editing ? null : <RouteLine trip={trip} stops={stops} />}
       {editing ? (
         <TripEditForm
           trip={trip}
@@ -406,11 +417,13 @@ function TripDetail({
           <h3>Border</h3>
           <div className="acts">
             {trip.status === "in_transit"
-              ? borders.map((b) => (
-                  <button key={b} className="act" disabled={busy} onClick={() => borderEvent("arrival", b)}>
-                    Arrived {b.split("/")[0]}
-                  </button>
-                ))
+              ? bordersAhead.length
+                ? bordersAhead.map((b) => (
+                    <button key={b} className="act" disabled={busy} onClick={() => borderEvent("arrival", b)}>
+                      Arrived {b.split("/")[0]}
+                    </button>
+                  ))
+                : <div className="d-hint">All borders cleared. Next stop: {route?.destination || "destination"}.</div>
               : (() => {
                   const loc = trip.last_border || borders[0] || "";
                   return (
@@ -449,12 +462,96 @@ function TripDetail({
         <div className="d-kv"><span>Days running</span><span>{trip.days_running != null ? trip.days_running + " of " + (trip.target_days ?? "?") : "—"}</span></div>
         <div className="d-kv"><span>Last border</span><span>{trip.last_border || "—"}</span></div>
       </div>
+      <TripHistory history={history} />
         </>
       )}
       {note ? <div className="panel-body" style={{ paddingTop: 0 }}><div className="note bad">{note}</div></div> : null}
     </>
   );
 }
+
+// fetchedAt stands in for "now" when working out how long a truck has
+// been waiting at a border.
+type History = { createdAt: string | null; events: TripEvent[]; fetchedAt: number } | "loading" | "error";
+
+// The trip's history, refetched whenever the trip moves on (a status
+// change or a border event), and ignored if another trip was opened
+// before it arrived.
+function useTripHistory(trip: BoardTrip): History {
+  const [state, setState] = useState<{ key: string; history: History } | null>(null);
+  const key = [trip.trip_id, trip.status, trip.last_border_at, trip.pod_received_at].join("|");
+  useEffect(() => {
+    let current = true;
+    fetch(`/api/trips/${trip.trip_id}/events`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+      .then((body) => { if (current) setState({ key, history: { ...body, fetchedAt: Date.now() } }); })
+      .catch(() => { if (current) setState({ key, history: "error" }); });
+    return () => { current = false; };
+  }, [key, trip.trip_id]);
+  // While a refetch for the same trip is in flight, keep showing what it
+  // had rather than flashing "Loading…".
+  if (!state || !state.key.startsWith(trip.trip_id + "|")) return "loading";
+  return state.history;
+}
+
+// Origin -> each border -> destination, with how far the truck has got
+// and how long it waited at each border.
+function RouteLine({ trip, stops }: { trip: BoardTrip; stops: Stop[] }) {
+  const running = trip.days_running != null && ["loading", "in_transit", "at_border"].includes(trip.status);
+  return (
+    <div className="d-sec">
+      <h3 className="route-head">
+        <span>Route</span>
+        {running ? (
+          <span className={"route-day" + (trip.over_target ? " late" : "")}>
+            Day {trip.days_running}{trip.target_days ? ` of ${trip.target_days}` : ""}
+          </span>
+        ) : null}
+      </h3>
+      <ol className="route-line" aria-label={`Route: ${stops.map((s) => `${s.label} (${s.state === "done" ? "passed" : s.state === "here" ? "truck is here" : s.state === "next" ? "heading here" : "ahead"})`).join(", ")}`}>
+        {stops.map((s, i) => (
+          <li key={i} className={"route-stop " + s.state + " " + s.kind}>
+            <span className="route-dot" aria-hidden="true" />
+            <span className="route-name">{s.label}</span>
+            {s.note ? <span className="route-note">{s.note}</span> : null}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function TripHistory({ history }: { history: History }) {
+  return (
+    <div className="d-sec">
+      <h3>History</h3>
+      {history === "loading" ? (
+        <div className="d-hint">Loading…</div>
+      ) : history === "error" ? (
+        <div className="d-hint">Couldn&apos;t load the history.</div>
+      ) : (
+        <ol className="tl">
+          {buildTimeline(history.createdAt, history.events).map((e, i) => (
+            <li key={i} className={"tl-item " + e.tone}>
+              <div className="tl-top">
+                <span className="tl-title">{e.title}</span>
+                <time className="tl-when" dateTime={e.at} title={new Date(e.at).toLocaleString()}>{whenLabel(e.at)}</time>
+              </div>
+              {e.detail || e.by || e.sinceLast ? (
+                <div className="tl-sub">
+                  {[e.detail, e.sinceLast ? `${e.sinceLast} later` : null, e.by].filter(Boolean).join(" · ")}
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+const whenLabel = (iso: string) =>
+  new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
 function TripEditForm({
   trip,

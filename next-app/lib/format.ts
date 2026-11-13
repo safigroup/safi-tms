@@ -17,10 +17,17 @@ export const lab = (s: string | null | undefined) => String(s || "").replace(/_/
 
 export const today = () => new Date().toISOString().slice(0, 10);
 
-// How long ago something started, for waits at a border and the like.
-export function waitLabel(sinceIso: string, now: number) {
-  const hours = Math.max(0, (now - new Date(sinceIso).getTime()) / 3_600_000);
+// A length of time, read the way a dispatcher says it: "under 1h", "14h",
+// "3d 4h", and past a week just "12d".
+export function durationLabel(ms: number) {
+  const hours = Math.max(0, ms / 3_600_000);
   if (hours < 1) return "under 1h";
   if (hours < 48) return `${Math.floor(hours)}h`;
-  return `${Math.floor(hours / 24)}d ${Math.floor(hours % 24)}h`;
+  if (hours < 24 * 7) return `${Math.floor(hours / 24)}d ${Math.floor(hours % 24)}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
+// How long ago something started, for waits at a border and the like.
+export function waitLabel(sinceIso: string, now: number) {
+  return durationLabel(now - new Date(sinceIso).getTime());
 }

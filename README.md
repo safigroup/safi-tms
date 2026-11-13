@@ -70,17 +70,19 @@ Schema, RLS policies, and Postgres functions are tracked as migrations in `next-
 
 ### Security notes
 
-- RLS is enabled on every table, but the real security boundary in the Next.js app is server-side: `getAuthedOrgContext()` resolves the caller's `org_id` and role, and every route filters by it explicitly — RLS is defense-in-depth, not the primary gate. (This is the opposite of the old `index.html` app, where the anon key + RLS *was* the only gate — see below.)
+- RLS is enabled on every table, but the real security boundary in the Next.js app is server-side: `getAuthedOrgContext()` resolves the caller's `org_id` and role, and every route filters by it explicitly — RLS is defense-in-depth, not the primary gate.
+- The anon key ships to every browser, so anything it (or a signed-in user's own session) can reach through the Data API is public. The app only uses a user's session to read their own membership at sign-in; everything else goes through the service role. Keep it that way:
+  - **Every new function** needs `revoke execute on function … from public, anon, authenticated;` and `grant execute on function … to service_role;` in its migration — Postgres grants `EXECUTE` to `PUBLIC` by default, and the RPC functions trust the `p_org` they're passed. `current_org_ids()` is the one exception (RLS calls it for signed-in users). See `20261113130000_lock_down_public_key.sql`.
+  - **Every new view** needs `with (security_invoker = on)`, or it reads as its owner and skips RLS for everyone; revoke `select` from `anon` as well.
 - The service-role client is only ever obtained through `getAuthedOrgContext()` or `getAuthedPlatformAdmin()` (`lib/auth/`). Nothing else should import `lib/supabase/admin.ts` directly — a route handler that did would have no guarantee an org or platform-admin check ever ran.
 - Platform-admin access has no in-app grant path at all, by design (see above).
 
 ## Legacy `index.html` app
 
-The repo root still contains the original single-file, client-side app (`index.html`, `vendor/supabase-js.min.js`, `archives/`) that this Next.js app replaced. **As of this writing, GitHub Pages is still building and serving it from `main` at https://safigroup.github.io/safi-tms/**, pointed directly at the *production* Supabase project via its publishable/anon key, with no role-based permission enforcement — anyone who finds that URL can still use the old app against real production data. It is not part of active development; decommissioning the GitHub Pages deployment (repo Settings → Pages) is worth doing deliberately rather than by accident.
+The original single-file, client-side app that this Next.js app replaced has been removed from the repo and its GitHub Pages deployment decommissioned (commit `284101a`). Nothing outside the Next.js server calls the database functions any more, which is what let `20261113130000_lock_down_public_key.sql` restrict them to the service role.
 
 ## Known gaps / roadmap
 
 - **No automated tests** — FX conversion, invoice-splitting, margin, and breakeven-projection logic have zero test coverage.
 - **Company letterhead is still placeholder data** (`next-app/lib/company.ts`) — address, phone, email, and bank details printed on every invoice/report need replacing with real ones before those documents go out to customers.
 - **No cross-org audit trail** — creating an organization or switching a platform admin's active org isn't logged anywhere beyond Supabase's own request logs, unlike the field-level audit log that already covers trip/ledger overrides.
-- **Legacy GitHub Pages deployment** — see above.

@@ -19,3 +19,7 @@ export const CAN_OVERRIDE_RECORDS: ReadonlySet<OrgRole> = new Set(["owner", "adm
 // company-wide bank and cash balances aren't for operations staff or
 // viewers. Checked on every /api/cashbook route, reads included.
 export const CAN_USE_CASHBOOK: ReadonlySet<OrgRole> = new Set(["owner", "admin", "finance"]);
+// The Overview's money sections (period revenue/costs/margin, cash
+// collected, ready to invoice, receivables). Operations and viewers get
+// the operational view of the same page.
+export const CAN_SEE_FINANCE_OVERVIEW: ReadonlySet<OrgRole> = new Set(["owner", "admin", "finance"]);

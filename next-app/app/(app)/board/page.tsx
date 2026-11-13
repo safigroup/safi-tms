@@ -2,9 +2,9 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { m0, m2, today } from "@/lib/format";
+import { m0, m2, today, waitLabel } from "@/lib/format";
 import { useBusyGroup } from "@/lib/useBusyGroup";
 import { Spinner } from "@/lib/components/Spinner";
 import type { AuditLogEntry, BoardTrip, BootstrapPayload, TripStatus } from "@/lib/types";
@@ -65,13 +65,6 @@ function podHeldUsd(data: BootstrapPayload, tripId: string) {
   return (b?.milestones_due ?? []).filter((m) => m.blocked_reason === "awaiting_pod").reduce((s, m) => s + m.amount_usd, 0);
 }
 
-function waitLabel(sinceIso: string, now: number) {
-  const hours = Math.max(0, (now - new Date(sinceIso).getTime()) / 3_600_000);
-  if (hours < 1) return "under 1h";
-  if (hours < 48) return `${Math.floor(hours)}h`;
-  return `${Math.floor(hours / 24)}d ${Math.floor(hours % 24)}h`;
-}
-
 function matchesSearch(t: BoardTrip, q: string) {
   return [t.trip_no, t.customer, t.route, t.fleet_no, t.horse_reg, t.driver, t.container_no, t.commodity]
     .some((v) => v && v.toLowerCase().includes(q));
@@ -85,13 +78,18 @@ const CAN_OVERRIDE_RECORDS = ["owner", "admin"];
 
 export default function BoardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [data, setData] = useState<BootstrapPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState("active");
+  // ?filter= and ?trip= let the Overview link straight to a stage or a trip.
+  const [filter, setFilter] = useState(() => {
+    const wanted = searchParams.get("filter");
+    return FILTERS.some((f) => f[0] === wanted) ? wanted! : "active";
+  });
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("recent");
   const [loadedAt, setLoadedAt] = useState(0);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(() => searchParams.get("trip"));
   const [showNewTrip, setShowNewTrip] = useState(false);
 
   async function load() {

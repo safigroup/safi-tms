@@ -13,6 +13,7 @@ import type { BootstrapPayload, Organization } from "@/lib/types";
 const CASHBOOK_ROLES = ["owner", "admin", "finance"];
 
 const VIEWS = [
+  { href: "/overview", label: "Overview" },
   { href: "/board", label: "Board" },
   { href: "/docket", label: "Cost docket" },
   { href: "/billing", label: "Billing" },
@@ -82,7 +83,7 @@ export function Nav({
     // on the page (this one included) fetches its own data in a
     // mount-once effect, which a client-side transition wouldn't re-run.
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- deliberate: a router.push transition would leave stale client-fetched state (nav badges, bootstrap data) behind
-    window.location.assign("/board");
+    window.location.assign("/overview");
   }
 
   const roleViews = VIEWS.filter((v) => v.href !== "/cashbook" || CASHBOOK_ROLES.includes(role));
@@ -100,6 +101,7 @@ export function Nav({
     "/docket": [pod, pod > 0],
     "/billing": [billing, overdue > 0],
     "/admin": [0, false],
+    "/overview": [0, false],
   };
 
   // Most recent fx_rates row per non-USD currency, flagged if over 14 days old.

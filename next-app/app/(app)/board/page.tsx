@@ -8,6 +8,7 @@ import { m0, m2, today, waitLabel } from "@/lib/format";
 import { useBusyGroup } from "@/lib/useBusyGroup";
 import { Spinner } from "@/lib/components/Spinner";
 import { buildTimeline, routeProgress, type Stop } from "@/lib/trips/timeline";
+import { checkTimes, isTimeField, tripMilestones, type Milestone, type TimeEdits } from "@/lib/trips/milestones";
 import type { AuditLogEntry, BoardTrip, BootstrapPayload, TripEvent, TripStatus } from "@/lib/types";
 
 const PILL: Record<string, string> = {
@@ -275,7 +276,7 @@ export default function BoardPage() {
               }}
             />
           ) : selectedTrip ? (
-            <TripDetail trip={selectedTrip} data={data} onChanged={load} canWrite={canWrite} />
+            <TripDetail key={selectedTrip.trip_id} trip={selectedTrip} data={data} onChanged={load} canWrite={canWrite} />
           ) : (
             <div className="empty">Select a trip, or start a new one.</div>
           )}
@@ -299,6 +300,10 @@ function TripDetail({
   const { busy, run } = useBusyGroup();
   const [note, setNote] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [editingTimes, setEditingTimes] = useState(false);
+  // Bumped after a time correction, which changes the history without
+  // moving the trip on.
+  const [historyVersion, setHistoryVersion] = useState(0);
   const canOverride = CAN_OVERRIDE_RECORDS.includes(data.role);
   const m = Number(trip.margin_usd || 0);
   const nexts = NEXT[trip.status] || [];
@@ -307,7 +312,7 @@ function TripDetail({
   const canBill =
     (!trip.pod_in_hand && trip.status === "delivered") ||
     ["pod_received", "in_transit", "at_border", "loading"].includes(trip.status);
-  const history = useTripHistory(trip);
+  const history = useTripHistory(trip, historyVersion);
   const route = data.routes.find((r) => r.id === trip.route_id);
   const stops = typeof history === "object"
     ? routeProgress(trip, route, history.events, history.fetchedAt)
@@ -375,6 +380,18 @@ function TripDetail({
           data={data}
           onSaved={async () => { setEditing(false); await onChanged(); }}
           onCancel={() => setEditing(false)}
+        />
+      ) : editingTimes && typeof history === "object" ? (
+        <TimeEditor
+          trip={trip}
+          history={history}
+          onSaved={async () => {
+            // Close on the corrected trip, not the old one.
+            await onChanged();
+            setHistoryVersion((v) => v + 1);
+            setEditingTimes(false);
+          }}
+          onCancel={() => setEditingTimes(false)}
         />
       ) : (
         <>
@@ -458,11 +475,11 @@ function TripDetail({
         <h3>Timing</h3>
         <div className="d-kv"><span>Loaded</span><span>{trip.actual_load_date || "—"}</span></div>
         <div className="d-kv"><span>Planned ETA</span><span>{trip.planned_eta || "—"}</span></div>
-        <div className="d-kv"><span>Delivered</span><span>{trip.actual_delivery_at ? trip.actual_delivery_at.slice(0, 10) : "—"}</span></div>
+        <div className="d-kv"><span>Delivered</span><span>{trip.actual_delivery_at ? new Date(trip.actual_delivery_at).toLocaleDateString("en-CA") : "—"}</span></div>
         <div className="d-kv"><span>Days running</span><span>{trip.days_running != null ? trip.days_running + " of " + (trip.target_days ?? "?") : "—"}</span></div>
         <div className="d-kv"><span>Last border</span><span>{trip.last_border || "—"}</span></div>
       </div>
-      <TripHistory history={history} />
+      <TripHistory history={history} onEditTimes={canWrite ? () => setEditingTimes(true) : null} />
         </>
       )}
       {note ? <div className="panel-body" style={{ paddingTop: 0 }}><div className="note bad">{note}</div></div> : null}
@@ -472,14 +489,16 @@ function TripDetail({
 
 // fetchedAt stands in for "now" when working out how long a truck has
 // been waiting at a border.
-type History = { createdAt: string | null; events: TripEvent[]; fetchedAt: number } | "loading" | "error";
+// refreshing: what's shown is from before the latest change, and a fresh
+// copy is on its way.
+type History = { createdAt: string | null; events: TripEvent[]; fetchedAt: number; refreshing?: boolean } | "loading" | "error";
 
 // The trip's history, refetched whenever the trip moves on (a status
 // change or a border event), and ignored if another trip was opened
 // before it arrived.
-function useTripHistory(trip: BoardTrip): History {
+function useTripHistory(trip: BoardTrip, version: number): History {
   const [state, setState] = useState<{ key: string; history: History } | null>(null);
-  const key = [trip.trip_id, trip.status, trip.last_border_at, trip.pod_received_at].join("|");
+  const key = [trip.trip_id, trip.status, trip.last_border_at, trip.pod_received_at, version].join("|");
   useEffect(() => {
     let current = true;
     fetch(`/api/trips/${trip.trip_id}/events`)
@@ -491,7 +510,7 @@ function useTripHistory(trip: BoardTrip): History {
   // While a refetch for the same trip is in flight, keep showing what it
   // had rather than flashing "Loading…".
   if (!state || !state.key.startsWith(trip.trip_id + "|")) return "loading";
-  return state.history;
+  return state.key !== key && typeof state.history === "object" ? { ...state.history, refreshing: true } : state.history;
 }
 
 // Origin -> each border -> destination, with how far the truck has got
@@ -521,20 +540,30 @@ function RouteLine({ trip, stops }: { trip: BoardTrip; stops: Stop[] }) {
   );
 }
 
-function TripHistory({ history }: { history: History }) {
+function TripHistory({ history, onEditTimes }: { history: History; onEditTimes: (() => void) | null }) {
   return (
     <div className="d-sec">
-      <h3>History</h3>
+      <h3 className="tl-head">
+        <span>History</span>
+        {typeof history === "object" && history.refreshing ? (
+          <span className="tl-updating" role="status">Updating…</span>
+        ) : onEditTimes && typeof history === "object" ? (
+          <button type="button" className="act sm" onClick={onEditTimes}>Edit times</button>
+        ) : null}
+      </h3>
       {history === "loading" ? (
         <div className="d-hint">Loading…</div>
       ) : history === "error" ? (
         <div className="d-hint">Couldn&apos;t load the history.</div>
       ) : (
-        <ol className="tl">
+        <ol className={"tl" + (history.refreshing ? " stale" : "")}>
           {buildTimeline(history.createdAt, history.events).map((e, i) => (
             <li key={i} className={"tl-item " + e.tone}>
               <div className="tl-top">
-                <span className="tl-title">{e.title}</span>
+                <span className="tl-title">
+                  {e.title}
+                  {e.flag ? <span className="tl-flag" title={e.flag.title}>{e.flag.text}</span> : null}
+                </span>
                 <time className="tl-when" dateTime={e.at} title={new Date(e.at).toLocaleString()}>{whenLabel(e.at)}</time>
               </div>
               {e.detail || e.by || e.sinceLast ? (
@@ -552,6 +581,231 @@ function TripHistory({ history }: { history: History }) {
 
 const whenLabel = (iso: string) =>
   new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+// An edit-history value as people read it: dates and times spelled out,
+// anything else as stored.
+function auditValue(v: string | null) {
+  if (!v) return "—";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    return new Date(v + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v) && !isNaN(Date.parse(v))) {
+    return new Date(v).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+  return v;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+// Date-and-time inputs work in the browser's own time zone.
+function toLocalInput(iso: string) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+const inputValue = (m: Milestone) => (m.value ? (m.type === "date" ? m.value : toLocalInput(m.value)) : "");
+// Run on save, against the clock at that moment.
+const checkTimesNow = (ms: Milestone[], edits: TimeEdits, timeZone: string) => checkTimes(ms, edits, Date.now(), timeZone);
+// Rows sit under their stop: the loading point, each border crossing, delivery.
+const groupKey = (m: Milestone) => (m.key.includes(":") ? m.key.split(":").slice(0, 2).join(":") : m.group);
+
+// Correcting when each milestone happened: the load date, loading started,
+// departed, every border arrival and clearance (adding any nobody logged),
+// delivered and POD received. Checked here as you save, and again on the
+// server against the trip as it is by then.
+function TimeEditor({
+  trip,
+  history,
+  onSaved,
+  onCancel,
+}: {
+  trip: BoardTrip;
+  history: Exclude<History, "loading" | "error">;
+  onSaved: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  // Fixed when the editor opens: what the form shows is what the server
+  // is told it's changing from.
+  const [ms] = useState(() => tripMilestones(trip, history.events));
+  const [inputs, setInputs] = useState<Record<string, string>>(() => Object.fromEntries(ms.map((m) => [m.key, inputValue(m)])));
+  const [adding, setAdding] = useState<string[]>([]);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [corrections, setCorrections] = useState<AuditLogEntry[] | null>(null);
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  useEffect(() => {
+    fetch(`/api/trips/${trip.trip_id}`)
+      .then((res) => (res.ok ? res.json() : { entries: [] }))
+      .then((body) => setCorrections((body.entries ?? []).filter((h: AuditLogEntry) => isTimeField(h.field))))
+      .catch(() => setCorrections([]));
+  }, [trip.trip_id]);
+
+  const changed = (m: Milestone) => m.editable && !!inputs[m.key] && inputs[m.key] !== inputValue(m);
+
+  // What the form now says differs from the record.
+  function collect(values: Record<string, string>) {
+    const edits: TimeEdits = {};
+    const changes: { key: string; from: string | null; to: string }[] = [];
+    for (const m of ms) {
+      const v = values[m.key];
+      if (!m.editable || !v || v === inputValue(m)) continue;
+      const to = m.type === "date" ? v : new Date(v).toISOString();
+      edits[m.key] = to;
+      changes.push({ key: m.key, from: m.value, to });
+    }
+    return { edits, changes };
+  }
+
+  function update(values: Record<string, string>) {
+    const next = { ...inputs, ...values };
+    setInputs(next);
+    // Once problems are on show, keep them current as times are fixed.
+    if (Object.keys(errors).length) {
+      const found = checkTimesNow(ms, collect(next).edits, timeZone);
+      setErrors(found);
+      setFormError(Object.keys(found).length ? "Some times need fixing." : null);
+    } else {
+      setFormError(null);
+    }
+  }
+
+  function stopAdding(group: string, rows: Milestone[]) {
+    setAdding((prev) => prev.filter((g) => g !== group));
+    update(Object.fromEntries(rows.map((m) => [m.key, ""])));
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    const { edits, changes } = collect(inputs);
+    if (!changes.length) {
+      setFormError("Nothing has changed yet.");
+      return;
+    }
+    const found = checkTimesNow(ms, edits, timeZone);
+    setErrors(found);
+    if (Object.keys(found).length) {
+      setFormError("Some times need fixing.");
+      return;
+    }
+
+    setSaving(true);
+    setFormError(null);
+    const res = await fetch(`/api/trips/${trip.trip_id}/times`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ timeZone, changes }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setSaving(false);
+      setErrors(body.errors ?? {});
+      setFormError(body.error || res.statusText);
+      return;
+    }
+    toast.success(changes.length === 1 ? "Time corrected" : `${changes.length} times corrected`);
+    // Still "Saving…" while the Board reloads.
+    await onSaved();
+  }
+
+  const groups: { key: string; name: string; rows: Milestone[] }[] = [];
+  for (const m of ms) {
+    const g = groups.find((x) => x.key === groupKey(m));
+    if (g) g.rows.push(m);
+    else groups.push({ key: groupKey(m), name: m.group, rows: [m] });
+  }
+
+  return (
+    <div className="panel-body times">
+      <form onSubmit={handleSubmit}>
+        <h3 className="times-title">Correct times</h3>
+        <p className="d-hint times-intro">
+          In {timeZone.split("/").pop()!.replace(/_/g, " ")} time. Days running, border waits and the Overview follow
+          these. Every change is kept in the edit history.
+        </p>
+        {formError ? <div className="note bad">{formError}</div> : null}
+        {groups.map((g) => {
+          const notLogged = g.rows.every((m) => m.value == null && m.editable && m.add);
+          const open = !notLogged || adding.includes(g.key);
+          return (
+            <fieldset key={g.key} className="times-group">
+              <legend>{g.name}</legend>
+              {!open ? (
+                <div className="times-missing">
+                  <span>Not logged</span>
+                  <button type="button" className="act sm" onClick={() => setAdding((prev) => [...prev, g.key])}>
+                    Add crossing
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {g.rows.map((m) => {
+                    const id = "t-" + m.key.replace(/:/g, "-");
+                    const err = errors[m.key];
+                    const sub = err
+                      ? <span className="times-err" id={id + "-msg"}>{err}</span>
+                      : changed(m) && m.value
+                        ? <span id={id + "-msg"}>Was {auditValue(m.value)}</span>
+                        : m.value == null && m.editable && !notLogged
+                          ? <span id={id + "-msg"}>Not logged</span>
+                          : m.note
+                            ? <span id={id + "-msg"}>{m.note}</span>
+                            : null;
+                    return (
+                      <div key={m.key} className={"times-row" + (changed(m) ? " changed" : "")}>
+                        <label htmlFor={id}>{m.label}</label>
+                        {m.editable ? (
+                          <input
+                            id={id}
+                            type={m.type === "date" ? "date" : "datetime-local"}
+                            value={inputs[m.key]}
+                            required={m.value != null}
+                            aria-invalid={err ? true : undefined}
+                            aria-describedby={sub ? id + "-msg" : undefined}
+                            onChange={(e) => update({ [m.key]: e.target.value })}
+                          />
+                        ) : (
+                          <span id={id} className="times-fixed">{m.value ? whenLabel(m.value) : "—"}</span>
+                        )}
+                        {sub ? <div className="times-sub">{sub}</div> : null}
+                      </div>
+                    );
+                  })}
+                  {notLogged ? (
+                    <button type="button" className="times-undo" onClick={() => stopAdding(g.key, g.rows)}>
+                      Don&apos;t add
+                    </button>
+                  ) : null}
+                </>
+              )}
+            </fieldset>
+          );
+        })}
+        <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save times"}</button>
+        <button className="ghost" type="button" onClick={onCancel}>Cancel</button>
+      </form>
+      <div className="times-log">
+        <h3>Corrections</h3>
+        {corrections === null ? (
+          <div className="d-hint">Loading…</div>
+        ) : corrections.length ? (
+          <ul>
+            {corrections.map((h, i) => (
+              <li key={i}>
+                <div className="times-log-what">
+                  <span>{h.field === "actual_load_date" ? "Load date" : h.field === "actual_delivery_at" ? "Delivered" : h.field}</span>
+                  <span>{auditValue(h.old_value)} → {auditValue(h.new_value)}</span>
+                </div>
+                <div className="times-log-who">{h.edited_by_email} · {auditValue(h.edited_at)}</div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="d-hint">No times corrected yet.</div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function TripEditForm({
   trip,
@@ -578,9 +832,7 @@ function TripEditForm({
   const [sealNo, setSealNo] = useState(trip.seal_no ?? "");
   const [agentName, setAgentName] = useState(trip.agent_name ?? "");
   const [revenue, setRevenue] = useState(String(trip.revenue_usd));
-  const [actualLoadDate, setActualLoadDate] = useState(trip.actual_load_date ?? "");
   const [plannedEta, setPlannedEta] = useState(trip.planned_eta ?? "");
-  const [actualDeliveryAt, setActualDeliveryAt] = useState(trip.actual_delivery_at ? trip.actual_delivery_at.slice(0, 10) : "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState<AuditLogEntry[] | null>(null);
@@ -622,9 +874,7 @@ function TripEditForm({
         agent_name: agentName.trim() || null,
         borders: chosenPath ? chosenPath.borders : null,
         revenue_amount: rev,
-        actual_load_date: actualLoadDate || null,
         planned_eta: plannedEta || null,
-        actual_delivery_at: actualDeliveryAt || null,
       }),
     });
     setSaving(false);
@@ -711,19 +961,10 @@ function TripEditForm({
           <label htmlFor="eRev">Revenue (USD)</label>
           <input id="eRev" type="number" step="0.01" min="0" value={revenue} onChange={(e) => setRevenue(e.target.value)} />
         </div>
-        <div className="row">
-          <div className="field">
-            <label htmlFor="eLoad">Load date</label>
-            <input id="eLoad" type="date" value={actualLoadDate} onChange={(e) => setActualLoadDate(e.target.value)} />
-          </div>
-          <div className="field">
-            <label htmlFor="eEta">Planned ETA</label>
-            <input id="eEta" type="date" value={plannedEta} onChange={(e) => setPlannedEta(e.target.value)} />
-          </div>
-        </div>
         <div className="field">
-          <label htmlFor="eDelivered">Delivered</label>
-          <input id="eDelivered" type="date" value={actualDeliveryAt} onChange={(e) => setActualDeliveryAt(e.target.value)} />
+          <label htmlFor="eEta">Planned ETA</label>
+          <input id="eEta" type="date" value={plannedEta} onChange={(e) => setPlannedEta(e.target.value)} />
+          <div className="hint">The load date, delivery and other times are corrected with Edit times, in the trip&apos;s history.</div>
         </div>
         <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button>
         <button className="ghost" type="button" onClick={onCancel}>Cancel</button>
@@ -738,7 +979,7 @@ function TripEditForm({
               <li key={i}>
                 <div>
                   <div className="r-no">{lab(h.field)}</div>
-                  <div style={{ fontSize: 13 }}>{h.old_value ?? "—"} → {h.new_value ?? "—"}</div>
+                  <div style={{ fontSize: 13 }}>{auditValue(h.old_value)} → {auditValue(h.new_value)}</div>
                   <div className="r-mono">{h.edited_by_email} · {new Date(h.edited_at).toLocaleString()}</div>
                 </div>
               </li>

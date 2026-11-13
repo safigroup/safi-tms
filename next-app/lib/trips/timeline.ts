@@ -12,25 +12,36 @@ const rank = (s: string | null) => {
   // goes back and forth between them at every border.
   return s === "at_border" ? ORDER.indexOf("in_transit") : i;
 };
+export { rank as statusRank };
 
 // Border names are stored as written on the route ("Kasumbalesa/Whiskey"),
 // and shown by their first name.
 export const placeName = (location: string | null) => (location || "the border").split("/")[0].trim();
-const samePlace = (a: string | null, b: string | null) =>
+export const samePlace = (a: string | null, b: string | null) =>
   a === b || placeName(a).toLowerCase() === placeName(b).toLowerCase();
 
-export type BorderCrossing = { location: string | null; arrivedAt: string | null; clearedAt: string | null };
+export type BorderCrossing = {
+  location: string | null;
+  arrivedAt: string | null;
+  clearedAt: string | null;
+  // The history entries behind it, when the events passed in had ids.
+  arrivalId?: string;
+  clearedId?: string;
+};
 
 // Pairs each clearance with the arrival before it at the same border.
-export function borderCrossings(events: Pick<TripEvent, "event_type" | "location" | "occurred_at">[]): BorderCrossing[] {
+export function borderCrossings(
+  events: (Pick<TripEvent, "event_type" | "location" | "occurred_at"> & { id?: string })[],
+): BorderCrossing[] {
   const crossings: BorderCrossing[] = [];
   for (const e of [...events].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at))) {
+    const id = e.id ? { [e.event_type === "border_arrival" ? "arrivalId" : "clearedId"]: e.id } : {};
     if (e.event_type === "border_arrival") {
-      crossings.push({ location: e.location, arrivedAt: e.occurred_at, clearedAt: null });
+      crossings.push({ location: e.location, arrivedAt: e.occurred_at, clearedAt: null, ...id });
     } else if (e.event_type === "border_cleared") {
       const open = [...crossings].reverse().find((c) => !c.clearedAt && samePlace(c.location, e.location));
-      if (open) open.clearedAt = e.occurred_at;
-      else crossings.push({ location: e.location, arrivedAt: null, clearedAt: e.occurred_at });
+      if (open) Object.assign(open, { clearedAt: e.occurred_at, ...id });
+      else crossings.push({ location: e.location, arrivedAt: null, clearedAt: e.occurred_at, ...id });
     }
   }
   return crossings;
@@ -45,9 +56,32 @@ export type TimelineEntry = {
   // Time since the entry before it, when it's an hour or more (steps
   // logged together would otherwise all read "under 1h later").
   sinceLast: string | null;
+  // "time corrected" / "added later", with who and the time first logged.
+  flag: { text: string; title: string } | null;
 };
 
+const fullWhen = (iso: string) =>
+  new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+function flagFor(e: TripEvent): TimelineEntry["flag"] {
+  if (e.added_later) {
+    return { text: "added later", title: `Logged afterwards${e.recorded_by_email ? " by " + e.recorded_by_email : ""}` };
+  }
+  if (e.corrected_from) {
+    return {
+      text: "time corrected",
+      title: `First logged ${fullWhen(e.corrected_from)}${e.corrected_by_email ? ", corrected by " + e.corrected_by_email : ""}`,
+    };
+  }
+  return null;
+}
+
 const SAME_MOMENT_MS = 5_000;
+
+// Times are shown to the minute; time between them is counted the same
+// way, so 06:56 to 08:56 reads "2h" even when one was logged at 06:56:40.
+const minuteOf = (iso: string) => Math.floor(new Date(iso).getTime() / 60_000) * 60_000;
+const between = (from: string, to: string) => minuteOf(to) - minuteOf(from);
 
 function statusTitle(from: string | null, to: string | null): { title: string; tone: TimelineEntry["tone"] } {
   if (from === "closed" && to === "invoiced") return { title: "Reopened", tone: "warn" };
@@ -82,27 +116,28 @@ export function buildTimeline(createdAt: string | null, events: TripEvent[]): Ti
   const crossings = borderCrossings(sorted);
 
   const raw: Omit<TimelineEntry, "sinceLast">[] = [];
-  if (createdAt) raw.push({ at: createdAt, title: "Trip created", detail: null, tone: "neutral", by: null });
+  if (createdAt) raw.push({ at: createdAt, title: "Trip created", detail: null, tone: "neutral", by: null, flag: null });
   for (const e of sorted) {
     if (e.event_type === "border_arrival") {
-      raw.push({ at: e.occurred_at, title: `Arrived at ${placeName(e.location)}`, detail: null, tone: "neutral", by: e.recorded_by_email });
+      raw.push({ at: e.occurred_at, title: `Arrived at ${placeName(e.location)}`, detail: null, tone: "neutral", by: e.recorded_by_email, flag: flagFor(e) });
     } else if (e.event_type === "border_cleared") {
       const c = crossings.find((x) => x.clearedAt === e.occurred_at && samePlace(x.location, e.location));
-      const waited = c?.arrivedAt ? durationLabel(new Date(e.occurred_at).getTime() - new Date(c.arrivedAt).getTime()) : null;
+      const waited = c?.arrivedAt ? durationLabel(between(c.arrivedAt, e.occurred_at)) : null;
       raw.push({
         at: e.occurred_at,
         title: `Cleared ${placeName(e.location)}`,
         detail: waited ? `${waited} at the border` : "Arrival wasn't logged",
         tone: "neutral",
         by: e.recorded_by_email,
+        flag: flagFor(e),
       });
     } else if (e.event_type === "status_change" && !loggedWithBorder(e)) {
-      raw.push({ at: e.occurred_at, ...statusTitle(e.from_status, e.to_status), detail: null, by: e.recorded_by_email });
+      raw.push({ at: e.occurred_at, ...statusTitle(e.from_status, e.to_status), detail: null, by: e.recorded_by_email, flag: flagFor(e) });
     }
   }
 
   return raw.map((r, i) => {
-    const gap = i === 0 ? 0 : new Date(r.at).getTime() - new Date(raw[i - 1].at).getTime();
+    const gap = i === 0 ? 0 : between(raw[i - 1].at, r.at);
     // A clearance already says how long it took since the arrival.
     const saysItsOwnGap = r.detail?.endsWith("at the border") && raw[i - 1]?.title.startsWith("Arrived");
     return { ...r, sinceLast: gap >= 3_600_000 && !saysItsOwnGap ? durationLabel(gap) : null };
@@ -150,7 +185,7 @@ export function routeProgress(trip: BoardTrip, route: Route | undefined, events:
     let note: string | null = null;
     if (c?.clearedAt) {
       state = "done";
-      note = c.arrivedAt ? `${durationLabel(new Date(c.clearedAt).getTime() - new Date(c.arrivedAt).getTime())} wait` : "Cleared";
+      note = c.arrivedAt ? `${durationLabel(between(c.arrivedAt, c.clearedAt))} wait` : "Cleared";
     } else if (c?.arrivedAt && trip.status === "at_border") {
       state = "here";
       note = `Waiting ${durationLabel(now - new Date(c.arrivedAt).getTime())}`;

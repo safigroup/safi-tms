@@ -7,8 +7,10 @@ import { diffFields, writeAuditLog, getAuditLog } from "@/lib/auditLog";
 const EDITABLE_FIELDS = [
   "customer_id", "route_id", "truck_id", "driver_id",
   "commodity", "tonnage", "volume_cbm", "container_no", "seal_no", "borders", "agent_name",
-  "revenue_amount", "actual_load_date", "planned_eta", "actual_delivery_at",
+  "revenue_amount", "planned_eta",
 ];
+// The load date and delivery time are corrected with the trip's other
+// milestone times, through ./times, which keeps the trip's history in step.
 
 // Edit history for the trip -- trip_no and status are deliberately not
 // editable here: trip_no is the business identifier referenced on

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { m0, m2 } from "@/lib/format";
+import { durationLabel, m0, m2 } from "@/lib/format";
 import { Spinner } from "@/lib/components/Spinner";
 import {
   AGING,
@@ -16,6 +16,20 @@ import {
   tripMoney,
   type Period,
 } from "@/lib/dashboard/summary";
+import {
+  SPANS,
+  borderWaits,
+  lastMonths,
+  marginByRoute,
+  monthlyMoney,
+  niceMax,
+  profitByTruck,
+  short,
+  spanLabel,
+  truckUse,
+  type Month,
+  type TripCrossing,
+} from "@/lib/dashboard/trends";
 import type { BootstrapPayload } from "@/lib/types";
 
 // Mirrors CAN_SEE_FINANCE_OVERVIEW (lib/auth/permissions.ts); the
@@ -68,6 +82,9 @@ export default function OverviewPage() {
   const [loadedAt, setLoadedAt] = useState(0);
   const [day, setDay] = useState("");
   const [collections, setCollections] = useState<Collections | null>(null);
+  const [span, setSpan] = useState<number>(6);
+  const [crossings, setCrossings] = useState<TripCrossing[] | null>(null);
+  const [running, setRunning] = useState<Record<string, number> | null>(null);
 
   async function load() {
     const res = await fetch("/api/bootstrap");
@@ -92,6 +109,26 @@ export default function OverviewPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-once
   }, []);
+
+  // Border crossings (everyone) and truck running costs (finance) for the
+  // chosen span, refetched when it changes. A late answer for a span that's
+  // no longer chosen is dropped.
+  const role = data?.role;
+  useEffect(() => {
+    if (!day || !role) return;
+    const months = lastMonths(day, span);
+    const from = months[0].from;
+    let current = true;
+    fetch(`/api/dashboard/borders?from=${from}`)
+      .then((r) => (r.ok ? r.json() : { crossings: [] }))
+      .then((b) => { if (current) setCrossings(b.crossings); });
+    if (FINANCE_ROLES.includes(role)) {
+      fetch(`/api/dashboard/truck-costs?${new URLSearchParams({ from, to: day })}`)
+        .then((r) => (r.ok ? r.json() : { byTruck: {} }))
+        .then((b) => { if (current) setRunning(b.byTruck); });
+    }
+    return () => { current = false; };
+  }, [day, span, role]);
 
   if (error && !data) return <div className="note bad">{error}</div>;
   if (!data) return <div className="panel"><Spinner /></div>;
@@ -156,6 +193,17 @@ export default function OverviewPage() {
         {finance ? <ReadyToInvoice data={data} /> : null}
         {finance ? <Receivables data={data} /> : null}
       </div>
+
+      <Trends
+        data={data}
+        months={lastMonths(day, span)}
+        span={span}
+        onSpan={setSpan}
+        finance={finance}
+        crossings={crossings}
+        running={running}
+        now={loadedAt}
+      />
     </>
   );
 }
@@ -288,6 +336,277 @@ function Receivables({ data }: { data: BootstrapPayload }) {
       {recv.missingRates.length ? (
         <div className="panel-body"><div className="note warn" style={{ marginBottom: 0 }}>Invoices in {recv.missingRates.join(", ")} aren&apos;t included: no exchange rate on file.</div></div>
       ) : null}
+    </section>
+  );
+}
+
+// ---- Trends -------------------------------------------------------------
+
+function Trends({
+  data, months, span, onSpan, finance, crossings, running, now,
+}: {
+  data: BootstrapPayload;
+  months: Month[];
+  span: number;
+  onSpan: (n: number) => void;
+  finance: boolean;
+  crossings: TripCrossing[] | null;
+  running: Record<string, number> | null;
+  now: number;
+}) {
+  const from = months[0].from;
+  const to = months[months.length - 1].to;
+  return (
+    <>
+      <div className="dash-head trends-head">
+        <h2>Trends</h2>
+        <span className="r-mono">{spanLabel(months)}</span>
+        <div className="chips trend-spans" role="group" aria-label="Period">
+          {SPANS.map((n) => (
+            <button key={n} type="button" className={"chip" + (n === span ? " on" : "")} aria-pressed={n === span} onClick={() => onSpan(n)}>
+              {n} months
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="dash-grid">
+        {finance ? <MonthlyChart data={data} months={months} /> : null}
+        {finance ? <RouteMargins data={data} from={from} to={to} /> : null}
+        {finance ? <TruckProfit data={data} running={running} from={from} to={to} /> : null}
+        <BorderWaits data={data} crossings={crossings} from={from} to={to} now={now} />
+        <TruckUse data={data} now={now} />
+      </div>
+    </>
+  );
+}
+
+function MonthlyChart({ data, months }: { data: BootstrapPayload; months: Month[] }) {
+  const [asTable, setAsTable] = useState(false);
+  const rows = monthlyMoney(data.board, months);
+  const max = niceMax(Math.max(0, ...rows.flatMap((r) => [r.revenue, r.costs])));
+  const ticks = [0, max / 2, max];
+  const pct = (v: number) => `${(v / max) * 100}%`;
+  const total = rows.reduce((s, r) => ({ revenue: s.revenue + r.revenue, costs: s.costs + r.costs }), { revenue: 0, costs: 0 });
+  const totalPct = total.revenue > 0 ? ((total.revenue - total.costs) / total.revenue) * 100 : null;
+  return (
+    <section className="panel dash-wide">
+      <div className="panel-head mchart-head">
+        <h2>Revenue and costs by month</h2>
+        <div className="mchart-tools">
+          {asTable ? null : (
+            <span className="mchart-legend">
+              <span><i className="mkey rev" /> Revenue</span>
+              <span><i className="mkey cost" /> Trip costs</span>
+            </span>
+          )}
+          <button type="button" className="act" onClick={() => setAsTable(!asTable)}>{asTable ? "Chart" : "Table"}</button>
+        </div>
+      </div>
+      <div className="d-sec mchart-total">
+        <span>{m0(total.revenue - total.costs)} margin on {m0(total.revenue)} revenue{totalPct === null ? "" : ` · ${totalPct.toFixed(1)}%`}</span>
+        <span className="r-mono">USD · by month loaded</span>
+      </div>
+      {asTable ? (
+        <div className="mtable-wrap">
+          <table className="mtable">
+            <thead><tr><th>Month</th><th>Trips</th><th>Revenue</th><th>Trip costs</th><th>Margin</th><th>Margin %</th></tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.key}>
+                  <td>{r.label}{r.soFar ? " (to date)" : ""}</td>
+                  <td>{r.trips}</td>
+                  <td>{m0(r.revenue)}</td>
+                  <td>{m0(r.costs)}</td>
+                  <td className={r.margin < 0 ? "neg" : ""}>{m0(r.margin)}</td>
+                  <td className={r.margin < 0 ? "neg" : ""}>{r.marginPct === null ? "—" : `${r.marginPct.toFixed(1)}%`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="mchart">
+          <div className="mchart-y" aria-hidden="true">
+            {ticks.map((t) => <span key={t} style={{ bottom: pct(t) }}>{short(t)}</span>)}
+          </div>
+          <div className="mchart-plot" style={{ gridTemplateColumns: `repeat(${rows.length}, minmax(0, 1fr))` }}>
+            {ticks.map((t) => <span key={t} className="mgrid" style={{ bottom: pct(t) }} />)}
+            {rows.map((r) => {
+              const label = `${r.label}${r.soFar ? " (to date)" : ""}: revenue ${m0(r.revenue)}, trip costs ${m0(r.costs)}, margin ${m0(r.margin)}${r.marginPct === null ? "" : ` (${r.marginPct.toFixed(1)}%)`}, ${r.trips} trip${r.trips === 1 ? "" : "s"}`;
+              return (
+                <div key={r.key} className="mcol" title={label} aria-label={label} role="img">
+                  {r.revenue > 0 ? <span className="mbar rev" style={{ height: pct(r.revenue) }} /> : <span className="mbar none" />}
+                  {r.costs > 0 ? <span className="mbar cost" style={{ height: pct(r.costs) }} /> : <span className="mbar none" />}
+                </div>
+              );
+            })}
+          </div>
+          <span />
+          <div className="mchart-x" style={{ gridTemplateColumns: `repeat(${rows.length}, minmax(0, 1fr))` }}>
+            {rows.map((r) => (
+              <div key={r.key}>
+                <span className="mx-month">{r.label}{r.soFar ? <span className="mx-sofar"> so far</span> : null}</span>
+                <span className={"mx-margin" + (r.margin < 0 ? " neg" : "")}>{r.marginPct === null ? "—" : `${r.marginPct.toFixed(0)}%`}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+type BarRow = { key: string; title: string; sub: string; value: number; valueText: string; href?: string; pill?: string };
+
+// Rows with one thin bar each, on a shared scale from a common baseline.
+// A negative value (a loss) is drawn hatched and its figure marked.
+function BarRows({ rows, empty }: { rows: BarRow[]; empty: string }) {
+  if (!rows.length) return <div className="empty">{empty}</div>;
+  const max = Math.max(0, ...rows.map((r) => Math.abs(r.value))) || 1;
+  return (
+    <ul className="list link-list bar-rows">
+      {rows.map((r) => {
+        const body = (
+          <>
+            <div className="bar-label">
+              <div className="r-title" style={{ fontSize: 15 }}>{r.title}{r.pill ? <span className="pill warn">{r.pill}</span> : null}</div>
+              <div className="r-sub">{r.sub}</div>
+            </div>
+            <span className="bar-track">
+              {r.value !== 0 ? <span className={"bar" + (r.value < 0 ? " loss" : "")} style={{ width: `${(Math.abs(r.value) / max) * 100}%` }} /> : null}
+            </span>
+            <span className={"bar-v" + (r.value < 0 ? " neg" : "")}>{r.valueText}</span>
+          </>
+        );
+        return (
+          <li key={r.key}>
+            {r.href ? <Link className="link-row bar-row" href={r.href}>{body}</Link> : <div className="bar-row">{body}</div>}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+function RouteMargins({ data, from, to }: { data: BootstrapPayload; from: string; to: string }) {
+  const routes = marginByRoute(data.board, from, to);
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Margin by route</h2>
+        <span className="r-min">trip revenue less trip costs</span>
+      </div>
+      <BarRows
+        empty="No trips loaded in this period."
+        rows={routes.map((r) => ({
+          key: r.route_id,
+          title: r.route,
+          sub: `${plural(r.trips, "trip")} · ${m0(r.perTrip)} a trip${r.marginPct === null ? "" : ` · ${r.marginPct.toFixed(1)}%`}`,
+          value: r.margin,
+          valueText: m0(r.margin),
+        }))}
+      />
+    </section>
+  );
+}
+
+function TruckProfit({ data, running, from, to }: { data: BootstrapPayload; running: Record<string, number> | null; from: string; to: string }) {
+  if (!running) {
+    return (
+      <section className="panel">
+        <div className="panel-head"><h2>Profit per truck</h2></div>
+        <Spinner />
+      </section>
+    );
+  }
+  const { rows, tripsWithoutTruck } = profitByTruck(data.board, data.trucks, running, from, to);
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Profit per truck</h2>
+        <span className="r-min">trip margin less running costs</span>
+      </div>
+      <BarRows
+        empty="No trucks yet."
+        rows={rows.map((r) => ({
+          key: r.truck.id,
+          title: `${r.truck.fleet_no} · ${r.truck.horse_reg}`,
+          sub: `${plural(r.trips, "trip")} · ${m0(r.tripMargin)} trip margin · ${m0(r.running)} running`,
+          value: r.profit,
+          valueText: m0(r.profit),
+          href: `/reports?${new URLSearchParams({ truck: r.truck.id, from, to })}`,
+        }))}
+      />
+      <div className="panel-body bar-note">
+        Running costs are maintenance, insurance, tyres and the like; purchase costs are left out (see the truck report&apos;s breakeven).
+        {tripsWithoutTruck ? ` ${plural(tripsWithoutTruck, "trip")} with no truck assigned ${tripsWithoutTruck === 1 ? "isn't" : "aren't"} counted.` : ""}
+      </div>
+    </section>
+  );
+}
+
+function BorderWaits({ data, crossings, from, to, now }: { data: BootstrapPayload; crossings: TripCrossing[] | null; from: string; to: string; now: number }) {
+  if (!crossings) {
+    return (
+      <section className="panel">
+        <div className="panel-head"><h2>Border waiting times</h2></div>
+        <Spinner />
+      </section>
+    );
+  }
+  const borders = borderWaits(crossings, data.board, from, to, now);
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Border waiting times</h2>
+        <span className="r-min">arrival to clearance, average</span>
+      </div>
+      <BarRows
+        empty="No border crossings logged in this period."
+        rows={borders.map((b) => ({
+          key: b.border,
+          title: b.border,
+          sub: b.crossings
+            ? `${plural(b.crossings, "crossing")} · longest ${durationLabel(b.longestHours! * 3_600_000)}`
+            : "No crossings cleared in this period",
+          value: b.avgHours ?? 0,
+          valueText: b.avgHours === null ? "—" : durationLabel(b.avgHours * 3_600_000),
+          pill: b.waitingNow ? `${b.waitingNow} waiting, ${durationLabel(b.longestNowHours! * 3_600_000)}` : undefined,
+        }))}
+      />
+    </section>
+  );
+}
+
+function TruckUse({ data, now }: { data: BootstrapPayload; now: number }) {
+  const use = truckUse(data.board, data.trucks, now);
+  const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Trucks</h2>
+        <span className="r-min">right now · {plural(use.active, "active truck")}</span>
+      </div>
+      <div className="truck-use">
+        <div><span className="stage-n">{use.onTrip.length}</span><span className="stage-k">On a trip</span></div>
+        <div><span className="stage-n">{use.booked.length}</span><span className="stage-k">Booked</span></div>
+        <div><span className="stage-n">{use.free.length}</span><span className="stage-k">Free</span></div>
+      </div>
+      {use.free.length ? (
+        <ul className="list" style={{ maxHeight: "none" }}>
+          {use.free.map((f) => (
+            <li key={f.truck.id}>
+              <div>
+                <div className="r-title" style={{ fontSize: 15 }}>{f.truck.fleet_no} · {f.truck.horse_reg}</div>
+                <div className="r-sub">{f.lastTrip ? `Last trip ${f.lastTrip}, delivered ${day(f.since!)}` : "No trips yet"}</div>
+              </div>
+              <div className="r-amt">{f.days === null ? "—" : f.days === 0 ? "today" : `${f.days} day${f.days === 1 ? "" : "s"} free`}</div>
+            </li>
+          ))}
+        </ul>
+      ) : <div className="empty">Every active truck is on a trip or booked.</div>}
     </section>
   );
 }

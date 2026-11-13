@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
-
-const CAPITAL_CATEGORIES = new Set(["purchase", "clearing", "registration"]);
+import { CAPITAL_CATEGORIES } from "@/lib/trucks/costs";
 
 // Revenue/expense report for one truck over an optional date range.
 // Trip revenue+costs are anchored on the trip's actual_load_date (a trip's

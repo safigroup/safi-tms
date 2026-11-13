@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { m0, m2, num, lab, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
@@ -101,13 +101,18 @@ function BreakevenPanel({ breakeven }: { breakeven: Breakeven }) {
   );
 }
 
+const validDate = (d: string | null) => (d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : "");
+
 export default function ReportsPage() {
   const router = useRouter();
+  // ?truck=&from=&to= open one truck's report for a period (the Overview's
+  // profit-per-truck rows link here).
+  const searchParams = useSearchParams();
   const [data, setData] = useState<BootstrapPayload | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [truckId, setTruckId] = useState<string | null>(null);
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [truckId, setTruckId] = useState<string | null>(() => searchParams.get("truck"));
+  const [from, setFrom] = useState(() => validDate(searchParams.get("from")));
+  const [to, setTo] = useState(() => validDate(searchParams.get("to")));
   const [report, setReport] = useState<TruckReport | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);
   const [loadingReport, setLoadingReport] = useState(false);
@@ -129,7 +134,10 @@ export default function ReportsPage() {
     const payload: BootstrapPayload = await res.json();
     setData(payload);
     setLoadError(payload.fetchErrors.length ? `Couldn't load ${payload.fetchErrors.join(", ")}.` : null);
-    if (payload.trucks.length) setTruckId((cur) => cur ?? payload.trucks[0].id);
+    // A truck from the link is kept only if it's one of this org's.
+    if (payload.trucks.length) {
+      setTruckId((cur) => (cur && payload.trucks.some((t) => t.id === cur) ? cur : payload.trucks[0].id));
+    }
   }
 
   async function loadReport(id: string) {

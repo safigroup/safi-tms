@@ -22,7 +22,7 @@ const samePlace = (a: string | null, b: string | null) =>
 export type BorderCrossing = { location: string | null; arrivedAt: string | null; clearedAt: string | null };
 
 // Pairs each clearance with the arrival before it at the same border.
-export function borderCrossings(events: TripEvent[]): BorderCrossing[] {
+export function borderCrossings(events: Pick<TripEvent, "event_type" | "location" | "occurred_at">[]): BorderCrossing[] {
   const crossings: BorderCrossing[] = [];
   for (const e of [...events].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at))) {
     if (e.event_type === "border_arrival") {

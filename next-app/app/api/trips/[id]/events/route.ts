@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
 
 // One trip's history -- status changes and border arrivals/clearances,
-// oldest first -- for the Board's route line and timeline. Who recorded
-// each one is resolved to an email the same way the edit history does.
+// oldest first -- for the Board's route line, timeline and Edit times. Who
+// recorded (and who corrected) each one is resolved to an email the same
+// way the edit history does.
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -26,7 +27,7 @@ export async function GET(
 
   const { data: rows, error } = await ctx.admin
     .from("trip_events")
-    .select("id, event_type, location, occurred_at, from_status, to_status, recorded_by")
+    .select("id, event_type, location, occurred_at, from_status, to_status, recorded_by, detail")
     .eq("trip_id", id)
     .eq("org_id", ctx.orgId)
     .order("occurred_at");
@@ -34,7 +35,14 @@ export async function GET(
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  const userIds = Array.from(new Set((rows ?? []).map((r) => r.recorded_by).filter(Boolean)));
+  // detail.corrected_by / original_at / added_later: set by correct_trip_times.
+  const correctedBy = (r: { detail: unknown }) => {
+    const d = r.detail as Record<string, unknown> | null;
+    return typeof d?.corrected_by === "string" ? d.corrected_by : null;
+  };
+  const userIds = Array.from(
+    new Set((rows ?? []).flatMap((r) => [r.recorded_by, correctedBy(r)]).filter((u): u is string => !!u)),
+  );
   const emailById = new Map<string, string>();
   await Promise.all(
     userIds.map(async (uid) => {
@@ -45,9 +53,16 @@ export async function GET(
 
   return NextResponse.json({
     createdAt: trip.created_at,
-    events: (rows ?? []).map(({ recorded_by, ...e }) => ({
-      ...e,
-      recorded_by_email: (recorded_by && emailById.get(recorded_by)) || null,
-    })),
+    events: (rows ?? []).map(({ recorded_by, detail, ...e }) => {
+      const d = (detail ?? {}) as Record<string, unknown>;
+      const by = correctedBy({ detail });
+      return {
+        ...e,
+        recorded_by_email: (recorded_by && emailById.get(recorded_by)) || null,
+        corrected_from: typeof d.original_at === "string" ? d.original_at : null,
+        corrected_by_email: (by && emailById.get(by)) || null,
+        added_later: d.added_later === true,
+      };
+    }),
   });
 }

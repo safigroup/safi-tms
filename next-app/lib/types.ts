@@ -91,6 +91,12 @@ export type TripEvent = {
   from_status: string | null;
   to_status: string | null;
   recorded_by_email: string | null;
+  // Set once someone corrects the time: when it was first logged, and who
+  // corrected it (see correct_trip_times).
+  corrected_from: string | null;
+  corrected_by_email: string | null;
+  // A border crossing logged after the fact rather than as it happened.
+  added_later: boolean;
 };
 
 export type Customer = {

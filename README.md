@@ -2,7 +2,7 @@
 
 A transport management system for **Safi Transport and Logistics Limited** — trip tracking, cost capture, document management, billing, and per-truck financial reporting for cross-border freight (Zambia / Tanzania / DRC corridor).
 
-Production: https://next-app-mocha-psi.vercel.app (no custom domain configured yet) — the app lives in `next-app/`.
+Production: https://safitms.com — the app lives in `next-app/`. `www.safitms.com` and the old `next-app-mocha-psi.vercel.app` redirect there. The domain is registered at Squarespace, and its DNS records are managed there: `A @ → 216.198.79.1` and `CNAME www →` the project's Vercel CNAME.
 
 ## What this is
 
@@ -37,7 +37,7 @@ index.html, vendor/, archives/   the pre-Next.js single-file app — legacy, see
 
 Two separate Supabase projects — **staging** and **production** — that never share data. A schema change is written once as a migration and applied to both explicitly, one at a time (`supabase link --project-ref <ref>` then `supabase db push --linked`); nothing auto-syncs between them.
 
-Vercel deploys a Preview on every push. `safi-tms-staging.vercel.app` is a stable alias kept pointed at whichever preview is current, so there's always one URL to test against while iterating. Production is whatever's on `main`.
+Vercel deploys a Preview on every push. `safi-tms-staging.vercel.app` is a stable alias kept pointed at whichever preview is current, so there's always one URL to test against while iterating. Production is whatever's on `main`. Supabase Auth's Site URL and Redirect URLs (production project) must include `https://safitms.com`, or password-reset emails send people to the wrong address.
 
 ## Roles & permissions
 

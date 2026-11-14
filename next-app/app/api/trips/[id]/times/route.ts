@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
 import { CAN_MANAGE_TRIPS } from "@/lib/auth/permissions";
-import { validTimeZone } from "@/lib/format";
-import { checkTimes, dayIn, tripMilestones, type Milestone, type TimeEdits } from "@/lib/trips/milestones";
+import { dayIn, validTimeZone } from "@/lib/format";
+import { checkTimes, tripMilestones, type Milestone, type TimeEdits } from "@/lib/trips/milestones";
 
 // Corrects a trip's milestone times (the Board's Edit times): the load
 // date, loading started, departed, each border arrival/clearance, delivered
@@ -80,7 +80,7 @@ export async function POST(
     // Store times one way, whatever the browser sent.
     edits[c.key] = m.type === "datetime" && !isNaN(Date.parse(c.to)) ? new Date(c.to).toISOString() : c.to;
   }
-  const errors = checkTimes(ms, edits, Date.now(), timeZone);
+  const errors = checkTimes(ms, edits, Date.now(), timeZone, ctx.timeZone);
   if (Object.keys(errors).length) {
     return NextResponse.json({ error: "Some times need fixing.", errors }, { status: 400 });
   }
@@ -95,7 +95,9 @@ export async function POST(
     if (m.tripField) tripChanges[m.tripField] = to;
     if (m.eventId) eventChanges.push({ id: m.eventId, at: to });
     else if (m.add) additions.push({ kind: m.add.kind, location: m.add.location, at: to });
-    if (key === "pod") tripChanges.pod_received_on = dayIn(timeZone)(to);
+    // The POD document's date is the company's calendar day, as when it's
+    // marked received with the button.
+    if (key === "pod") tripChanges.pod_received_on = dayIn(ctx.timeZone)(to);
     audit.push({ field: m.name, old: m.value, new: to });
   }
   if (!audit.length) {

@@ -12,6 +12,7 @@ import { TripLedgerBody } from "@/lib/components/TripLedgerBody";
 import type { PrintLang } from "@/lib/print/translations";
 import type { AuditLogEntry, BootstrapPayload, BoardTrip, FxRate, TripAllocation, TripCost, TripDocument } from "@/lib/types";
 import { buildTripStatement } from "@/lib/tripStatement";
+import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 
 const CATS = [
   "fuel", "driver_advance", "driver_allowance", "border_fees", "customs_duty",
@@ -23,7 +24,8 @@ const DOCTYPES = [
   "delivery_note", "weighbridge_ticket", "insurance", "permit", "other",
 ];
 
-const emptyDraft: CostDraft = { cat: CATS[0], amt: "", cur: "", when: today(), desc: "", loc: "", paid: "driver_float", ref: "", liters: "", pricePerLiter: "", emptyReturn: false };
+// A blank cost entry dated today where the company is.
+const emptyDraft = (timeZone: string): CostDraft => ({ cat: CATS[0], amt: "", cur: "", when: today(timeZone), desc: "", loc: "", paid: "driver_float", ref: "", liters: "", pricePerLiter: "", emptyReturn: false });
 
 // Mirrors lib/auth/permissions.ts's CAN_MANAGE_TRIPS/CAN_OVERRIDE_RECORDS --
 // UI convenience only (hides actions a role can't use), the route handlers
@@ -41,7 +43,8 @@ export default function DocketPage() {
   const [allocations, setAllocations] = useState<TripAllocation[]>([]);
   const [documents, setDocuments] = useState<TripDocument[]>([]);
   const [tab, setTab] = useState<"ledger" | "balance" | "docs">("ledger");
-  const [draft, setDraft] = useState<CostDraft>(emptyDraft);
+  const timeZone = useCompanyTimeZone();
+  const [draft, setDraft] = useState<CostDraft>(() => emptyDraft(timeZone));
   const [restoredNote, setRestoredNote] = useState(false);
   const [costFile, setCostFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
@@ -120,13 +123,13 @@ export default function DocketPage() {
     if (d) {
       // Spread over emptyDraft so a draft saved before liters/pricePerLiter
       // existed doesn't come back with those fields undefined.
-      setDraft({ ...emptyDraft, ...d });
+      setDraft({ ...emptyDraft(timeZone), ...d });
       setRestoredNote(true);
     } else {
-      setDraft(emptyDraft);
+      setDraft(emptyDraft(timeZone));
       setRestoredNote(false);
     }
-  }, [tripId]);
+  }, [tripId, timeZone]);
 
   function updateDraft(patch: Partial<CostDraft>) {
     const next = { ...draft, ...patch };
@@ -215,7 +218,7 @@ export default function DocketPage() {
 
       toast.success(`${m2(amtNum, draft.cur)} → ${m2(amtNum * rateToUsd)}`);
       clearCostDraft(tripId);
-      setDraft({ ...emptyDraft, cat: draft.cat, cur: draft.cur, when: draft.when, paid: draft.paid, emptyReturn: draft.emptyReturn });
+      setDraft({ ...emptyDraft(timeZone), cat: draft.cat, cur: draft.cur, when: draft.when, paid: draft.paid, emptyReturn: draft.emptyReturn });
       setCostFile(null);
       await loadDetail(tripId);
       await loadBootstrap();
@@ -831,7 +834,7 @@ function BalanceTab({
   const statement = buildTripStatement(allocations, costs);
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("USD");
-  const [allocatedOn, setAllocatedOn] = useState(today());
+  const [allocatedOn, setAllocatedOn] = useState(today(useCompanyTimeZone()));
   const [description, setDescription] = useState("");
   const [reference, setReference] = useState("");
   const [saving, setSaving] = useState(false);

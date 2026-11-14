@@ -67,6 +67,10 @@ Schema, RLS policies, and Postgres functions are tracked as migrations in `next-
 
 - `CREATE OR REPLACE FUNCTION` does not replace a function whose **argument count** changes — Postgres creates a second overload instead, which shows up as a `PGRST203` ambiguous-function error. `DROP FUNCTION IF EXISTS <old signature>` first whenever a function gains or loses a parameter.
 - A PL/pgSQL function declared `RETURNS TABLE (id uuid, ...)` puts `id` in scope as a variable for the whole function body — any *unqualified* `id` (or other shared column name) in the function's own SQL collides with it and raises "column reference is ambiguous". Every such reference needs a table alias.
+- **Calendar dates are the company's, not UTC.** Each organization has a `time_zone` (e.g. `Africa/Lusaka`, set on the Organizations page). `CURRENT_DATE`, `timestamptz::date` and `toISOString().slice(0, 10)` all give the UTC date, which is still "yesterday" for the first hours of an African day. Instead:
+  - in SQL functions, use `org_today(org_id)`; in views, join `organizations` and use `(now() AT TIME ZONE o.time_zone)::date` (views run as the caller, who can't run `org_today`). See `trip_board` and `invoice_ar`.
+  - on the server, use `today(ctx.timeZone)` / `dayIn(ctx.timeZone)(timestamp)` from `lib/format.ts`; in the browser, the same with `useCompanyTimeZone()`.
+  - Durations (border waits, "delivered 3 days ago") are elapsed time and need no zone.
 
 ### Security notes
 

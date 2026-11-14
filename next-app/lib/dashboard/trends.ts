@@ -1,3 +1,4 @@
+import { dayIn } from "@/lib/format";
 import { placeName, type BorderCrossing } from "@/lib/trips/timeline";
 import type { BoardTrip, Truck } from "@/lib/types";
 import { tripMoney } from "./summary";
@@ -122,9 +123,10 @@ export function truckUse(board: BoardTrip[], trucks: Truck[], now: number) {
 
 export type TripCrossing = BorderCrossing & { trip_id: string };
 
-// Waits at each border for crossings cleared in the period, and the
-// trucks waiting there now.
-export function borderWaits(crossings: TripCrossing[], board: BoardTrip[], from: string, to: string, now: number) {
+// Waits at each border for crossings cleared in the period (on the
+// company's calendar), and the trucks waiting there now.
+export function borderWaits(crossings: TripCrossing[], board: BoardTrip[], from: string, to: string, now: number, timeZone: string) {
+  const dayOf = dayIn(timeZone);
   const atBorder = new Set(board.filter((t) => t.status === "at_border").map((t) => t.trip_id));
   const byBorder = new Map<string, { border: string; waits: number[]; waitingNow: number[] }>();
   const entry = (location: string | null) => {
@@ -138,7 +140,7 @@ export function borderWaits(crossings: TripCrossing[], board: BoardTrip[], from:
   const latestOpen = new Map<string, TripCrossing>();
   for (const c of crossings) {
     if (c.arrivedAt && c.clearedAt) {
-      const day = c.clearedAt.slice(0, 10);
+      const day = dayOf(c.clearedAt);
       if (day >= from && day <= to) {
         entry(c.location).waits.push((new Date(c.clearedAt).getTime() - new Date(c.arrivedAt).getTime()) / HOUR_MS);
       }

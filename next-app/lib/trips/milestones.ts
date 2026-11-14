@@ -1,3 +1,4 @@
+import { dayIn } from "@/lib/format";
 import type { TripEvent } from "@/lib/types";
 import { borderCrossings, placeName, samePlace, statusRank, type BorderCrossing } from "./timeline";
 
@@ -159,12 +160,6 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 // Clocks on phones drift; a minute either way isn't "the future".
 const FUTURE_SLACK_MS = 60_000;
 
-// The calendar day of a time in a time zone, as YYYY-MM-DD.
-export function dayIn(timeZone: string) {
-  const f = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
-  return (iso: string) => f.format(new Date(iso));
-}
-
 function whenIn(timeZone: string) {
   const f = new Intl.DateTimeFormat("en-GB", { timeZone, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   return (iso: string) => f.format(new Date(iso));
@@ -180,13 +175,18 @@ const validValue = (m: Milestone, v: string) =>
 // can be saved. Only a change is held to the order: times already out of
 // order (a POD logged before the last border, say) don't block fixing
 // something else.
-export function checkTimes(ms: Milestone[], edits: TimeEdits, now: number, timeZone: string): Record<string, string> {
+//
+// Times in messages are in `timeZone`, the viewer's clock that the times
+// were typed in. Calendar dates -- today, the day a later step happened
+// compared with the load date -- are the company's (`dayZone`), the same
+// calendar days running is counted on.
+export function checkTimes(ms: Milestone[], edits: TimeEdits, now: number, timeZone: string, dayZone = timeZone): Record<string, string> {
   const errors: Record<string, string> = {};
   const fail = (key: string, message: string) => {
     if (!errors[key]) errors[key] = message;
   };
   const byKey = new Map(ms.map((m) => [m.key, m]));
-  const day = dayIn(timeZone);
+  const day = dayIn(dayZone);
   const when = whenIn(timeZone);
   const today = day(new Date(now).toISOString());
 

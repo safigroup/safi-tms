@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { durationLabel, m0, m2 } from "@/lib/format";
+import { durationLabel, m0, m2, today } from "@/lib/format";
+import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 import { Spinner } from "@/lib/components/Spinner";
 import {
   AGING,
@@ -41,13 +42,6 @@ const INVOICE_ITEMS_SHOWN = 6;
 type Collections = { current: number; previous: number; missingRates: string[] };
 type Delta = { text: string; tone: "good" | "bad" | "flat" };
 
-// The user's own calendar date -- trip dates are entered as local dates,
-// so a UTC date would put late-evening entries in the wrong day.
-function localToday() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 // Change against the comparison period, coloured by whether that direction
 // is good news for this figure.
 function pctDelta(cur: number, prev: number, upIsGood: boolean): Delta {
@@ -77,6 +71,9 @@ function Kpi({ label, value, delta, vs, note }: { label: string; value: string; 
 
 export default function OverviewPage() {
   const router = useRouter();
+  // Months and "today" are the company's calendar, the same one trip dates
+  // are entered in -- not UTC, and not the viewer's own clock.
+  const timeZone = useCompanyTimeZone();
   const [data, setData] = useState<BootstrapPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadedAt, setLoadedAt] = useState(0);
@@ -91,7 +88,7 @@ export default function OverviewPage() {
     if (res.status === 401) return router.push("/login");
     if (!res.ok) return setError("Couldn't load — try refreshing.");
     const payload: BootstrapPayload = await res.json();
-    const todayIso = localToday();
+    const todayIso = today(timeZone);
     setData(payload);
     setLoadedAt(Date.now());
     setDay(todayIso);
@@ -240,8 +237,9 @@ function FinanceRow({ data, current, previous, collections }: { data: BootstrapP
 }
 
 function OpsRow({ data, current, previous }: { data: BootstrapPayload; current: Period; previous: Period }) {
-  const now = tripCounts(data.board, current);
-  const before = tripCounts(data.board, previous);
+  const timeZone = useCompanyTimeZone();
+  const now = tripCounts(data.board, current, timeZone);
+  const before = tripCounts(data.board, previous, timeZone);
   const rolling = data.board.filter((t) => ["loading", "in_transit", "at_border"].includes(t.status));
   const late = rolling.filter((t) => t.over_target);
   return (
@@ -548,6 +546,7 @@ function TruckProfit({ data, running, from, to }: { data: BootstrapPayload; runn
 }
 
 function BorderWaits({ data, crossings, from, to, now }: { data: BootstrapPayload; crossings: TripCrossing[] | null; from: string; to: string; now: number }) {
+  const timeZone = useCompanyTimeZone();
   if (!crossings) {
     return (
       <section className="panel">
@@ -556,7 +555,7 @@ function BorderWaits({ data, crossings, from, to, now }: { data: BootstrapPayloa
       </section>
     );
   }
-  const borders = borderWaits(crossings, data.board, from, to, now);
+  const borders = borderWaits(crossings, data.board, from, to, now, timeZone);
   return (
     <section className="panel">
       <div className="panel-head">

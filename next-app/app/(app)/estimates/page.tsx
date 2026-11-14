@@ -10,6 +10,7 @@ import { estimateTripCost, type CostTemplateLine, type CostEstimate } from "@/li
 import type { RouteCostAnalysis } from "@/lib/insights/computeRouteCostDeltas";
 import { t, catLabel, type PrintLang } from "@/lib/print/translations";
 import type { BootstrapPayload, Customer, Route } from "@/lib/types";
+import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 
 type Finding = { finding: string; suggestion: string };
 type InsightsResult =
@@ -318,6 +319,7 @@ function EstimatePrintSheet({
   lang: PrintLang;
   onDone: () => void;
 }) {
+  const timeZone = useCompanyTimeZone();
   useEffect(() => {
     const handler = () => onDone();
     window.addEventListener("afterprint", handler);
@@ -339,7 +341,7 @@ function EstimatePrintSheet({
         </div>
         <div className="im">
           <div className="big">{t(lang, "cost_estimate")}</div>
-          {route.name}<br />{t(lang, "printed")} {today()}
+          {route.name}<br />{t(lang, "printed")} {today(timeZone)}
         </div>
       </div>
       <div className="parties">

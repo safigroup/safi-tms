@@ -19,6 +19,9 @@ type AuthedOrgContext = {
   email: string;
   orgId: string;
   orgName: string;
+  // Where the organization is (e.g. "Africa/Lusaka"): calendar dates --
+  // today, days running, invoice dates -- are counted in this zone.
+  timeZone: string;
   role: OrgRole;
   admin: SupabaseClient;
   isPlatformAdmin: boolean;
@@ -83,7 +86,7 @@ export async function getAuthedOrgContext(): Promise<
       const admin = createAdminClientInternal();
       const { data: org } = await admin
         .from("organizations")
-        .select("id, name")
+        .select("id, name, time_zone")
         .eq("id", activeOrgId)
         .maybeSingle();
       if (org) {
@@ -93,6 +96,7 @@ export async function getAuthedOrgContext(): Promise<
           email: user.email ?? "",
           orgId: org.id,
           orgName: org.name,
+          timeZone: org.time_zone,
           role: "owner",
           admin,
           isPlatformAdmin: true,
@@ -105,13 +109,13 @@ export async function getAuthedOrgContext(): Promise<
 
   const { data: membership, error: membershipError } = await supabase
     .from("memberships")
-    .select("org_id, role, organizations(name)")
+    .select("org_id, role, organizations(name, time_zone)")
     .eq("user_id", user.id)
     .limit(1)
     .maybeSingle<{
       org_id: string;
       role: OrgRole;
-      organizations: { name: string } | null;
+      organizations: { name: string; time_zone: string } | null;
     }>();
 
   if (!membership) {
@@ -134,6 +138,7 @@ export async function getAuthedOrgContext(): Promise<
     email: user.email ?? "",
     orgId: membership.org_id,
     orgName: membership.organizations?.name ?? "",
+    timeZone: membership.organizations?.time_zone ?? "UTC",
     role: membership.role,
     admin: createAdminClientInternal(),
     isPlatformAdmin,

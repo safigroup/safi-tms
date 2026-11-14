@@ -81,6 +81,9 @@ export type BoardTrip = {
   truck_id: string | null;
   seal_no: string | null;
   agent_name: string | null;
+  // From the New trip form. actual_load_date stays empty until the trip
+  // starts loading.
+  planned_load_date: string | null;
 };
 
 // One row of a trip's history: a status change (logged by the database

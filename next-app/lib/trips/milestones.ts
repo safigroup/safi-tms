@@ -9,6 +9,7 @@ import { borderCrossings, placeName, samePlace, statusRank, type BorderCrossing 
 export type TimesTrip = {
   status: string;
   borders: string[] | null;
+  planned_load_date: string | null;
   actual_load_date: string | null;
   actual_delivery_at: string | null;
   pod_received_at: string | null;
@@ -33,7 +34,7 @@ export type Milestone = {
   // Only a planned load date may be in the future.
   mayBeFuture: boolean;
   // Where it's kept: a trips column, a history entry, or both.
-  tripField: "actual_load_date" | "actual_delivery_at" | "pod_received_at" | null;
+  tripField: "planned_load_date" | "actual_load_date" | "actual_delivery_at" | "pod_received_at" | null;
   eventId: string | null;
   // Never logged: the border history entry adding it creates.
   add: { kind: "arrival" | "cleared"; location: string } | null;
@@ -54,20 +55,30 @@ export function tripMilestones(trip: TimesTrip, events: HistoryEvent[]): Milesto
   const base = { editable: true, mayBeFuture: false, tripField: null, eventId: null, add: null, note: null, inChain: true };
   const ms: Milestone[] = [];
 
+  // The actual load date is set when the trip starts loading. Until then
+  // the planned one is shown and corrected here instead.
   ms.push({
     ...base,
     key: "load",
     group: "Loading",
-    label: "Load date",
-    name: "Load date",
     type: "date",
-    value: trip.actual_load_date,
-    mayBeFuture: !started,
-    tripField: "actual_load_date",
-    note: started
-      ? "Days running count from it, and the trip's money counts in its month."
-      : "Planned. The trip hasn't started loading.",
     inChain: false,
+    ...(started
+      ? {
+          label: "Load date",
+          name: "Load date",
+          value: trip.actual_load_date,
+          tripField: "actual_load_date" as const,
+          note: "Days running count from it, and the trip's money counts in its month.",
+        }
+      : {
+          label: "Planned load date",
+          name: "Planned load date",
+          value: trip.planned_load_date,
+          mayBeFuture: true,
+          tripField: "planned_load_date" as const,
+          note: "The trip hasn't started loading. Its load date is set when it does.",
+        }),
   });
 
   const loading = statusEvent((e) => e.to_status === "loading");
@@ -248,5 +259,5 @@ export function checkTimes(ms: Milestone[], edits: TimeEdits, now: number, timeZ
 
 // Edit-history fields written by a time correction (and by Edit trip
 // before these moved here).
-const TIME_FIELDS = new Set(["Load date", "Loading started", "Departed", "Delivered", "POD received", "actual_load_date", "actual_delivery_at"]);
+const TIME_FIELDS = new Set(["Planned load date", "Load date", "Loading started", "Departed", "Delivered", "POD received", "actual_load_date", "actual_delivery_at"]);
 export const isTimeField = (field: string) => TIME_FIELDS.has(field) || /^(Arrived at|Cleared) /.test(field);

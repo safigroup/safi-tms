@@ -5,7 +5,7 @@ import { dayIn, validTimeZone } from "@/lib/format";
 import { checkTimes, tripMilestones, type Milestone, type TimeEdits } from "@/lib/trips/milestones";
 
 // Corrects a trip's milestone times (the Board's Edit times): the load
-// date, loading started, departed, each border arrival/clearance, delivered
+// date (the planned one until the trip starts loading), loading started, departed, each border arrival/clearance, delivered
 // and POD received, including border crossings that were never logged.
 //
 // Body: { timeZone, changes: [{ key, from, to }] } -- `from` is the value
@@ -45,7 +45,7 @@ export async function POST(
 
   const { data: trip } = await ctx.admin
     .from("trip_board")
-    .select("status, borders, actual_load_date, actual_delivery_at, pod_received_at")
+    .select("status, borders, planned_load_date, actual_load_date, actual_delivery_at, pod_received_at")
     .eq("trip_id", id)
     .eq("org_id", ctx.orgId)
     .maybeSingle();

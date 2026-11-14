@@ -111,18 +111,33 @@ export async function GET(
 
   // Fuel's liters/avg-price-per-liter rides along on the same category
   // breakdown -- no separate query, since these rows are already fetched.
+  // The average only counts entries that recorded liters: a fill-up logged
+  // as a plain amount would otherwise add its dollars but none of its
+  // liters, inflating the price per liter. That spend is returned
+  // separately so the report can say what the average leaves out.
   const sumByCategory = (rows: { category: string; amount_usd: number; liters?: number | null }[]) => {
-    const totals = new Map<string, { amountUsd: number; liters: number }>();
+    const totals = new Map<string, { amountUsd: number; liters: number; withLitersUsd: number }>();
     for (const r of rows) {
-      const cur = totals.get(r.category) ?? { amountUsd: 0, liters: 0 };
-      cur.amountUsd += Number(r.amount_usd || 0);
-      cur.liters += Number(r.liters || 0);
+      const cur = totals.get(r.category) ?? { amountUsd: 0, liters: 0, withLitersUsd: 0 };
+      const usd = Number(r.amount_usd || 0);
+      const liters = Number(r.liters || 0);
+      cur.amountUsd += usd;
+      if (liters > 0) {
+        cur.liters += liters;
+        cur.withLitersUsd += usd;
+      }
       totals.set(r.category, cur);
     }
-    return Array.from(totals, ([category, { amountUsd, liters }]) => ({
+    return Array.from(totals, ([category, { amountUsd, liters, withLitersUsd }]) => ({
       category,
       amountUsd,
-      ...(category === "fuel" && liters > 0 ? { liters, avgPricePerLiterUsd: amountUsd / liters } : {}),
+      ...(category === "fuel" && liters > 0
+        ? {
+            liters,
+            avgPricePerLiterUsd: withLitersUsd / liters,
+            withoutLitersUsd: Math.round((amountUsd - withLitersUsd) * 100) / 100,
+          }
+        : {}),
     })).sort((a, b) => b.amountUsd - a.amountUsd);
   };
 

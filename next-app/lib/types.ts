@@ -329,9 +329,11 @@ export type TruckReportTrip = BoardTrip & { costs?: TripCost[]; allocations?: Tr
 export type CategoryAmount = {
   category: string;
   amountUsd: number;
-  // Only populated for the "fuel" row.
+  // Only populated for the "fuel" row. The average covers only entries
+  // that recorded liters; withoutLitersUsd is the fuel spend it leaves out.
   liters?: number;
   avgPricePerLiterUsd?: number;
+  withoutLitersUsd?: number;
 };
 
 export type BreakevenMonth = {

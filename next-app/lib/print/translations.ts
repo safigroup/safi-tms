@@ -107,6 +107,7 @@ const STRINGS: Record<string, { en: string; fr: string }> = {
   standing_cost: { en: "Standing cost", fr: "Charge fixe" },
   trip_prefix: { en: "Trip", fr: "Voyage" },
   standing_prefix: { en: "Standing", fr: "Charge fixe" },
+  without_liters: { en: "without liters, not in the average", fr: "sans litres, hors moyenne" },
   profit_and_loss: { en: "Profit & loss", fr: "Compte de résultat" },
   total_expenses: { en: "Total expenses", fr: "Dépenses totales" },
   net_profit_loss: { en: "Net profit / (loss)", fr: "Résultat net / (perte)" },

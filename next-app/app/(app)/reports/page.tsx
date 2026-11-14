@@ -248,6 +248,7 @@ export default function ReportsPage() {
                     {c.liters ? (
                       <div className="d-hint" style={{ paddingLeft: 14, marginTop: -2 }}>
                         {num(c.liters)} L · avg {m2(c.avgPricePerLiterUsd)}/L
+                        {c.withoutLitersUsd ? ` · ${m2(c.withoutLitersUsd)} logged without liters, not in the average` : null}
                       </div>
                     ) : null}
                   </div>
@@ -544,7 +545,7 @@ function ReportPrintSheet({ report, lang, onDone }: { report: TruckReport; lang:
           <tr><td>{t(lang, "revenue")}</td><td className="num">{m2(report.tripRevenue)}</td></tr>
           {report.tripExpensesByCategory.map((c) => (
             <tr key={"t-" + c.category}>
-              <td>{t(lang, "trip_prefix")}: {catLabel(lang, c.category)}{c.liters ? ` (${num(c.liters)} L · avg ${m2(c.avgPricePerLiterUsd)}/L)` : ""}</td>
+              <td>{t(lang, "trip_prefix")}: {catLabel(lang, c.category)}{c.liters ? ` (${num(c.liters)} L · avg ${m2(c.avgPricePerLiterUsd)}/L${c.withoutLitersUsd ? ` · ${m2(c.withoutLitersUsd)} ${t(lang, "without_liters")}` : ""})` : ""}</td>
               <td className="num">− {m2(c.amountUsd)}</td>
             </tr>
           ))}

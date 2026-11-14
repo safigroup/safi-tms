@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuthedPlatformAdmin } from "@/lib/auth/getAuthedPlatformAdmin";
+import { validTimeZone } from "@/lib/format";
 
-const EDITABLE_FIELDS = ["name", "country", "base_currency", "trip_prefix", "invoice_prefix"] as const;
+const EDITABLE_FIELDS = ["name", "country", "base_currency", "trip_prefix", "invoice_prefix", "time_zone"] as const;
 const UPPERCASE_FIELDS = new Set(["base_currency", "trip_prefix", "invoice_prefix"]);
 
 export async function PATCH(
@@ -22,6 +23,10 @@ export async function PATCH(
       const value = body[field].trim();
       changed[field] = UPPERCASE_FIELDS.has(field) ? value.toUpperCase() : value;
     }
+  }
+
+  if ("time_zone" in changed && !validTimeZone(changed.time_zone)) {
+    return NextResponse.json({ error: `Unknown time zone "${changed.time_zone}".` }, { status: 400 });
   }
 
   if (!Object.keys(changed).length) {

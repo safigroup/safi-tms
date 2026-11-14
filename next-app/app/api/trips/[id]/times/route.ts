@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
 import { CAN_MANAGE_TRIPS } from "@/lib/auth/permissions";
-import { checkTimes, dayIn, tripMilestones, validTimeZone, type Milestone, type TimeEdits } from "@/lib/trips/milestones";
+import { validTimeZone } from "@/lib/format";
+import { checkTimes, dayIn, tripMilestones, type Milestone, type TimeEdits } from "@/lib/trips/milestones";
 
 // Corrects a trip's milestone times (the Board's Edit times): the load
 // date, loading started, departed, each border arrival/clearance, delivered

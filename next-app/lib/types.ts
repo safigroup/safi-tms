@@ -12,6 +12,8 @@ export type Organization = {
   base_currency: string;
   trip_prefix: string;
   invoice_prefix: string;
+  // Days running and the late flag count calendar days in this zone.
+  time_zone: string;
   created_at: string;
 };
 

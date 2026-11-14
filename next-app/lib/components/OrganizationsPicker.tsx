@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { setActiveOrg } from "@/app/(app)/actions";
 import type { Organization } from "@/lib/types";
@@ -85,7 +85,7 @@ export function OrganizationsPicker() {
               <li key={o.id}>
                 <div>
                   <div className="r-title">{o.name}</div>
-                  <div className="r-mono">{o.country} · {o.base_currency} · {o.trip_prefix} / {o.invoice_prefix}</div>
+                  <div className="r-mono">{o.country} · {o.base_currency} · {o.time_zone.replace(/_/g, " ")} · {o.trip_prefix} / {o.invoice_prefix}</div>
                 </div>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <button className="ghost" type="button" style={{ marginTop: 0, width: "auto" }} onClick={() => setEditingId(o.id)}>
@@ -110,6 +110,7 @@ function NewOrgForm({ onCreated, onCancel }: { onCreated: () => Promise<void>; o
   const [baseCurrency, setBaseCurrency] = useState("USD");
   const [tripPrefix, setTripPrefix] = useState("");
   const [invoicePrefix, setInvoicePrefix] = useState("");
+  const [timeZone, setTimeZone] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -128,6 +129,7 @@ function NewOrgForm({ onCreated, onCancel }: { onCreated: () => Promise<void>; o
         baseCurrency: baseCurrency.trim(),
         tripPrefix: tripPrefix.trim(),
         invoicePrefix: invoicePrefix.trim(),
+        timeZone,
         ownerEmail: ownerEmail.trim(),
       }),
     });
@@ -178,6 +180,7 @@ function NewOrgForm({ onCreated, onCancel }: { onCreated: () => Promise<void>; o
           <input id="oCur" type="text" placeholder="USD" value={baseCurrency} onChange={(e) => setBaseCurrency(e.target.value)} />
         </div>
       </div>
+      <TimeZoneField id="oTz" value={timeZone} onChange={setTimeZone} />
       <div className="row">
         <div className="field">
           <label htmlFor="oTripPfx">Trip prefix</label>
@@ -212,6 +215,7 @@ function EditOrgForm({
   const [baseCurrency, setBaseCurrency] = useState(org.base_currency);
   const [tripPrefix, setTripPrefix] = useState(org.trip_prefix);
   const [invoicePrefix, setInvoicePrefix] = useState(org.invoice_prefix);
+  const [timeZone, setTimeZone] = useState(org.time_zone);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -228,6 +232,7 @@ function EditOrgForm({
         base_currency: baseCurrency.trim(),
         trip_prefix: tripPrefix.trim(),
         invoice_prefix: invoicePrefix.trim(),
+        time_zone: timeZone,
       }),
     });
     setSaving(false);
@@ -256,6 +261,7 @@ function EditOrgForm({
           <input id="eoCur" type="text" value={baseCurrency} onChange={(e) => setBaseCurrency(e.target.value)} />
         </div>
       </div>
+      <TimeZoneField id="eoTz" value={timeZone} onChange={setTimeZone} />
       <div className="row">
         <div className="field">
           <label htmlFor="eoTripPfx">Trip prefix</label>
@@ -269,5 +275,39 @@ function EditOrgForm({
       <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button>
       <button className="ghost" type="button" onClick={onCancel}>Cancel</button>
     </form>
+  );
+}
+
+// Every zone the browser knows, with its offset from UTC today, so DR
+// Congo's two zones (Kinshasa UTC+1, Lubumbashi UTC+2) can be told apart.
+// The current value is always offered, even if this browser's list lacks it.
+function timeZoneOptions(current: string) {
+  const now = new Date();
+  const zones = Intl.supportedValuesOf("timeZone");
+  if (current && !zones.includes(current)) zones.unshift(current);
+  return zones.map((zone) => {
+    let offset = "";
+    try {
+      offset = new Intl.DateTimeFormat("en", { timeZone: zone, timeZoneName: "shortOffset" })
+        .formatToParts(now)
+        .find((p) => p.type === "timeZoneName")?.value ?? "";
+    } catch {
+      // A zone this browser can't format still gets listed, just without an offset.
+    }
+    return { zone, label: `${zone.replace(/_/g, " ")}${offset ? ` (${offset.replace("GMT", "UTC")})` : ""}` };
+  });
+}
+
+function TimeZoneField({ id, value, onChange }: { id: string; value: string; onChange: (zone: string) => void }) {
+  const options = useMemo(() => timeZoneOptions(value), [value]);
+  return (
+    <div className="field">
+      <label htmlFor={id}>Time zone</label>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+        {value ? null : <option value="">Choose a time zone…</option>}
+        {options.map((o) => <option key={o.zone} value={o.zone}>{o.label}</option>)}
+      </select>
+      <div className="hint">Days running and late trips count calendar days in this zone.</div>
+    </div>
   );
 }

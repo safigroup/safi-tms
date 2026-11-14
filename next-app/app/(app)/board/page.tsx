@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -276,6 +276,7 @@ export default function BoardPage() {
                 await load();
                 setSelected(tripId);
               }}
+              onAdded={load}
             />
           ) : selectedTrip ? (
             <TripDetail key={selectedTrip.trip_id} trip={selectedTrip} data={data} onChanged={load} canWrite={canWrite} />
@@ -1009,15 +1010,22 @@ function NewTripForm({
   data,
   onCancel,
   onCreated,
+  onAdded,
 }: {
   data: BootstrapPayload;
   onCancel: () => void;
   onCreated: (tripId: string) => void;
+  // "Create and add another": the trip is saved and the form stays open
+  // for the next truck on the same job.
+  onAdded: () => Promise<void>;
 }) {
   const companyToday = today(useCompanyTimeZone());
   const [customerId, setCustomerId] = useState("");
   const [routeId, setRouteId] = useState("");
   const [borderPathId, setBorderPathId] = useState("");
+  const [commodity, setCommodity] = useState("");
+  const [tonnage, setTonnage] = useState("");
+  const [volumeCbm, setVolumeCbm] = useState("");
   const [revenue, setRevenue] = useState("");
   // Where the revenue figure came from. A rate card's price is kept in
   // step with the form and cleared once no card applies; a price someone
@@ -1025,19 +1033,30 @@ function NewTripForm({
   const [revenueFrom, setRevenueFrom] = useState<"rate" | "typed" | null>(null);
   const [truckId, setTruckId] = useState("");
   const [driverId, setDriverId] = useState("");
-  const [commodity, setCommodity] = useState("");
-  const [tonnage, setTonnage] = useState("");
-  const [volumeCbm, setVolumeCbm] = useState("");
+  const [loadDate, setLoadDate] = useState(companyToday);
+  const [eta, setEta] = useState("");
+  // An ETA someone typed isn't replaced when the route or load date changes.
+  const [etaTyped, setEtaTyped] = useState(false);
   const [containerNo, setContainerNo] = useState("");
   const [sealNo, setSealNo] = useState("");
   const [agentName, setAgentName] = useState("");
-  const [loadDate, setLoadDate] = useState(companyToday);
-  const [eta, setEta] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Field messages appear once someone tries to save, then follow the form.
+  const [tried, setTried] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Trips made with "Create and add another", for the note at the top.
+  const [added, setAdded] = useState<string[]>([]);
+  const errorRef = useRef<HTMLDivElement>(null);
+
+  // A save that fails shows its message at the top of a long form.
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [error]);
 
   const inputs: RateInputs = { customerId, routeId, tonnage, volumeCbm, commodity, loadDate };
   const rate = rateFor(data.rateCards, inputs, companyToday);
+  const fields = { customerId, routeId, tonnage, volumeCbm, revenue, loadDate, eta };
+  const fieldErrors = tried ? checkNewTrip(fields) : {};
 
   // Called with whichever field just changed. Keeps a rate-card price in
   // step, and clears it once no card prices this trip any more, so a
@@ -1068,22 +1087,25 @@ function NewTripForm({
   }
 
   function applyEta(route: string, load: string) {
+    if (etaTyped) return;
     const r = data.routes.find((x) => x.id === route);
-    if (r?.target_days && load) {
-      const d = new Date(load);
-      d.setDate(d.getDate() + r.target_days);
-      setEta(d.toISOString().slice(0, 10));
-    }
+    if (r?.target_days && load) setEta(addDays(load, r.target_days));
   }
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!customerId || !routeId) return setError("Customer and route are both required.");
-    const rev = parseFloat(revenue);
-    if (isNaN(rev) || rev <= 0) return setError("Enter the agreed revenue.");
+    const another = (e.nativeEvent as SubmitEvent).submitter?.getAttribute("name") === "another";
+    setTried(true);
+    const errors = checkNewTrip(fields);
+    const first = (Object.keys(NEW_TRIP_FIELD_IDS) as (keyof NewTripErrors)[]).find((k) => errors[k]);
+    if (first) {
+      const el = document.getElementById(NEW_TRIP_FIELD_IDS[first]);
+      el?.focus();
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      return;
+    }
 
     const chosenPath = data.routeBorderPaths.find((p) => p.id === borderPathId);
-
     setSaving(true);
     setError(null);
     const res = await fetch("/api/trips", {
@@ -1092,12 +1114,12 @@ function NewTripForm({
       body: JSON.stringify({
         customerId,
         routeId,
-        revenue: rev,
+        revenue: Number(revenue),
         truckId: truckId || null,
         driverId: driverId || null,
         commodity: commodity.trim() || null,
-        tonnage: tonnage ? Number(tonnage) : null,
-        volumeCbm: volumeCbm ? Number(volumeCbm) : null,
+        tonnage: tonnage.trim() ? Number(tonnage) : null,
+        volumeCbm: volumeCbm.trim() ? Number(volumeCbm) : null,
         containerNo: containerNo.trim() || null,
         sealNo: sealNo.trim() || null,
         agentName: agentName.trim() || null,
@@ -1113,39 +1135,65 @@ function NewTripForm({
     }
     const body = await res.json();
     toast.success(`${body.tripNo} created`);
-    onCreated(body.id);
+    if (!another) return onCreated(body.id);
+
+    // Same job, next truck: keep the customer, route, cargo, price and
+    // dates; clear what's particular to one truck.
+    const fleet = data.trucks.find((t) => t.id === truckId)?.fleet_no;
+    setAdded((a) => [...a, fleet ? `${body.tripNo} (${fleet})` : body.tripNo]);
+    setTruckId("");
+    setDriverId("");
+    setContainerNo("");
+    setSealNo("");
+    setTried(false);
+    document.getElementById("nTruck")?.focus();
+    // Refreshes the Board, so the truck just used shows as on its trip.
+    await onAdded();
   }
 
   const activeCustomers = data.customers.filter((c) => c.is_active !== false);
   const activeRoutes = data.routes.filter((r) => r.is_active !== false);
-  const activeTrucks = data.trucks.filter((t) => t.is_active !== false);
-  const activeDrivers = data.drivers.filter((d) => d.is_active !== false);
   const pathsForRoute = data.routeBorderPaths.filter((p) => p.route_id === routeId);
+  const invalid = (k: keyof NewTripErrors) => (fieldErrors[k] ? { "aria-invalid": true, "aria-describedby": `${NEW_TRIP_FIELD_IDS[k]}-err` } : {});
+  const fieldError = (k: keyof NewTripErrors) =>
+    fieldErrors[k] ? <div className="field-err" id={`${NEW_TRIP_FIELD_IDS[k]}-err`}>{fieldErrors[k]}</div> : null;
+  const required = <span className="req" aria-hidden="true"> *</span>;
 
   return (
-    <form className="panel-body" onSubmit={handleSubmit}>
-      {error ? <div className="note bad">{error}</div> : null}
+    <form className="panel-body" onSubmit={handleSubmit} noValidate>
+      {error ? <div className="note bad" ref={errorRef}>{error}</div> : null}
+      {added.length ? (
+        <div className="note good">Created {added.join(", ")}. Pick the next truck, or press Done.</div>
+      ) : null}
+
+      <h3 className="form-part">Customer &amp; cargo</h3>
       <div className="field">
-        <label htmlFor="nCust">Customer</label>
+        <label htmlFor="nCust">Customer{required}</label>
         <select
           id="nCust"
+          aria-required="true"
+          {...invalid("customer")}
           value={customerId}
           onChange={(e) => { setCustomerId(e.target.value); reprice({ customerId: e.target.value }); }}
         >
           <option value="">—</option>
           {activeCustomers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
+        {fieldError("customer")}
       </div>
       <div className="field">
-        <label htmlFor="nRoute">Route</label>
+        <label htmlFor="nRoute">Route{required}</label>
         <select
           id="nRoute"
+          aria-required="true"
+          {...invalid("route")}
           value={routeId}
           onChange={(e) => { setRouteId(e.target.value); setBorderPathId(""); reprice({ routeId: e.target.value }); applyEta(e.target.value, loadDate); }}
         >
           <option value="">—</option>
           {activeRoutes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
+        {fieldError("route")}
       </div>
       {pathsForRoute.length ? (
         <div className="field">
@@ -1157,50 +1205,22 @@ function NewTripForm({
         </div>
       ) : null}
       <div className="field">
-        <label htmlFor="nRev">Revenue (USD)</label>
-        <input
-          id="nRev"
-          type="number"
-          step="0.01"
-          min="0"
-          placeholder="0.00"
-          value={revenue}
-          onChange={(e) => { setRevenue(e.target.value); setRevenueFrom(e.target.value.trim() ? "typed" : null); }}
-        />
-      </div>
-      <RateHint rate={rate} revenue={revenue} revenueFrom={revenueFrom} commodity={commodity} onDate={loadDate || companyToday} onUsePrice={takeRatePrice} onChooseCommodity={chooseCommodity} />
-      <div className="row">
-        <div className="field">
-          <label htmlFor="nTruck">Truck</label>
-          <select id="nTruck" value={truckId} onChange={(e) => setTruckId(e.target.value)}>
-            <option value="">—</option>
-            {activeTrucks.map((t) => <option key={t.id} value={t.id}>{t.fleet_no}</option>)}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="nDriver">Driver</label>
-          <select id="nDriver" value={driverId} onChange={(e) => setDriverId(e.target.value)}>
-            <option value="">—</option>
-            {activeDrivers.map((d) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
-          </select>
-        </div>
-      </div>
-      <div className="field">
         <label htmlFor="nComm">Commodity</label>
-        <input id="nComm" type="text" placeholder="General cargo" value={commodity} onChange={(e) => { setCommodity(e.target.value); reprice({ commodity: e.target.value }); }} />
+        <input id="nComm" type="text" placeholder="e.g. copper cathodes" value={commodity} onChange={(e) => { setCommodity(e.target.value); reprice({ commodity: e.target.value }); }} />
       </div>
       <div className="row">
         <div className="field">
-          <label htmlFor="nTon">Tonnage</label>
+          <label htmlFor="nTon">Tonnage (t)</label>
           <input
             id="nTon"
             type="number"
             step="0.001"
             min="0"
-            placeholder="28.500"
+            {...invalid("tonnage")}
             value={tonnage}
             onChange={(e) => { setTonnage(e.target.value); reprice({ tonnage: e.target.value }); }}
           />
+          {fieldError("tonnage")}
         </div>
         <div className="field">
           <label htmlFor="nVol">Volume (m³)</label>
@@ -1209,12 +1229,50 @@ function NewTripForm({
             type="number"
             step="0.001"
             min="0"
-            placeholder="e.g. for tankers/tippers"
+            {...invalid("volume")}
             value={volumeCbm}
             onChange={(e) => { setVolumeCbm(e.target.value); reprice({ volumeCbm: e.target.value }); }}
           />
+          {fieldError("volume")}
         </div>
       </div>
+      <div className="field">
+        <label htmlFor="nRev">Revenue (USD){required}</label>
+        <input
+          id="nRev"
+          type="number"
+          step="0.01"
+          min="0"
+          aria-required="true"
+          {...invalid("revenue")}
+          value={revenue}
+          onChange={(e) => { setRevenue(e.target.value); setRevenueFrom(e.target.value.trim() ? "typed" : null); }}
+        />
+        {fieldError("revenue")}
+      </div>
+      <RateHint rate={rate} revenue={revenue} revenueFrom={revenueFrom} commodity={commodity} onDate={loadDate || companyToday} onUsePrice={takeRatePrice} onChooseCommodity={chooseCommodity} />
+
+      <h3 className="form-part">Truck &amp; schedule</h3>
+      <TruckDriverFields
+        idPrefix="n"
+        data={data}
+        truckId={truckId}
+        driverId={driverId}
+        onChange={(next) => { setTruckId(next.truckId); setDriverId(next.driverId); }}
+      />
+      <div className="row">
+        <div className="field">
+          <label htmlFor="nLoad">Planned load date</label>
+          <input id="nLoad" type="date" value={loadDate} onChange={(e) => { setLoadDate(e.target.value); reprice({ loadDate: e.target.value }); applyEta(routeId, e.target.value); }} />
+        </div>
+        <div className="field">
+          <label htmlFor="nEta">Planned ETA</label>
+          <input id="nEta" type="date" {...invalid("eta")} value={eta} onChange={(e) => { setEta(e.target.value); setEtaTyped(!!e.target.value); }} />
+          {fieldError("eta")}
+        </div>
+      </div>
+
+      <h3 className="form-part">Cargo papers</h3>
       <div className="row">
         <div className="field">
           <label htmlFor="nCont">Container</label>
@@ -1227,23 +1285,134 @@ function NewTripForm({
       </div>
       <div className="field">
         <label htmlFor="nAgent">Agent</label>
-        <input id="nAgent" type="text" placeholder="Clearing/booking agent" value={agentName} onChange={(e) => setAgentName(e.target.value)} />
+        <input id="nAgent" type="text" placeholder="Clearing or booking agent" value={agentName} onChange={(e) => setAgentName(e.target.value)} />
       </div>
-      <div className="row">
-        <div className="field">
-          <label htmlFor="nLoad">Planned load date</label>
-          <input id="nLoad" type="date" value={loadDate} onChange={(e) => { setLoadDate(e.target.value); reprice({ loadDate: e.target.value }); applyEta(routeId, e.target.value); }} />
-        </div>
-        <div className="field">
-          <label htmlFor="nEta">Planned ETA</label>
-          <input id="nEta" type="date" value={eta} onChange={(e) => setEta(e.target.value)} />
-        </div>
-      </div>
-      <button className="primary" type="submit" disabled={saving}>
+
+      <button className="primary" type="submit" name="create" disabled={saving}>
         {saving ? "Creating…" : "Create trip"}
       </button>
-      <button className="ghost" type="button" onClick={onCancel}>Cancel</button>
+      <button className="ghost" type="submit" name="another" disabled={saving}>Create and add another</button>
+      <button className="ghost" type="button" onClick={onCancel}>{added.length ? "Done" : "Cancel"}</button>
     </form>
+  );
+}
+
+type NewTripErrors = Partial<Record<"customer" | "route" | "tonnage" | "volume" | "revenue" | "eta", string>>;
+// In the order they appear, so the first one wrong is the one focused.
+const NEW_TRIP_FIELD_IDS = { customer: "nCust", route: "nRoute", tonnage: "nTon", volume: "nVol", revenue: "nRev", eta: "nEta" } as const;
+
+function checkNewTrip(f: { customerId: string; routeId: string; tonnage: string; volumeCbm: string; revenue: string; loadDate: string; eta: string }): NewTripErrors {
+  const e: NewTripErrors = {};
+  const quantity = (v: string) => !v.trim() || (Number.isFinite(Number(v)) && Number(v) >= 0);
+  if (!f.customerId) e.customer = "Choose the customer.";
+  if (!f.routeId) e.route = "Choose the route.";
+  if (!quantity(f.tonnage)) e.tonnage = "Enter tonnes, 0 or more.";
+  if (!quantity(f.volumeCbm)) e.volume = "Enter m³, 0 or more.";
+  const rev = Number(f.revenue);
+  if (!f.revenue.trim() || !Number.isFinite(rev) || rev <= 0) e.revenue = "Enter the agreed price.";
+  if (f.eta && f.loadDate && f.eta < f.loadDate) e.eta = "Can't be before the planned load date.";
+  return e;
+}
+
+const addDays = (day: string, n: number) => {
+  const d = new Date(day + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
+// A trip holds its truck and driver from allocation until delivery.
+const COMMITTED = new Set<TripStatus>(["allocated", "loading", "in_transit", "at_border"]);
+
+// Which trips each truck and driver is already on.
+function commitments(board: BoardTrip[], exceptTripId?: string) {
+  const trucks = new Map<string, BoardTrip[]>();
+  const drivers = new Map<string, BoardTrip[]>();
+  for (const t of board) {
+    if (t.trip_id === exceptTripId || !COMMITTED.has(t.status)) continue;
+    if (t.truck_id) trucks.set(t.truck_id, [...(trucks.get(t.truck_id) ?? []), t]);
+    if (t.driver_id) drivers.set(t.driver_id, [...(drivers.get(t.driver_id) ?? []), t]);
+  }
+  return { trucks, drivers };
+}
+
+const onTrips = (trips: BoardTrip[]) => trips.map((t) => `${t.trip_no} (${lab(t.status)})`).join(", ");
+
+// The driver on a truck's latest trip, if they're still active.
+function usualDriver(data: BootstrapPayload, truckId: string) {
+  const last = data.board
+    .filter((t) => t.truck_id === truckId && t.driver_id)
+    .sort((a, b) => b.trip_no.localeCompare(a.trip_no))[0];
+  return last && data.drivers.some((d) => d.id === last.driver_id && d.is_active !== false) ? last.driver_id : null;
+}
+
+// Truck and driver pickers for the New trip form and for allocating a
+// draft: each option says if it's already on a trip (still allowed -- a
+// truck can be booked for its next job while it's on the road), and a
+// truck brings its usual driver along unless one was picked by hand.
+function TruckDriverFields({
+  idPrefix,
+  data,
+  truckId,
+  driverId,
+  onChange,
+  exceptTripId,
+}: {
+  idPrefix: string;
+  data: BootstrapPayload;
+  truckId: string;
+  driverId: string;
+  onChange: (next: { truckId: string; driverId: string }) => void;
+  exceptTripId?: string;
+}) {
+  // The driver was filled in as the truck's usual one, so choosing another
+  // truck swaps them too.
+  const [driverAuto, setDriverAuto] = useState(false);
+  const busy = commitments(data.board, exceptTripId);
+  const trucks = data.trucks.filter((t) => t.is_active !== false || t.id === truckId);
+  const drivers = data.drivers.filter((d) => d.is_active !== false || d.id === driverId);
+  const truckBusy = truckId ? busy.trucks.get(truckId) : undefined;
+  const driverBusy = driverId ? busy.drivers.get(driverId) : undefined;
+
+  function pickTruck(id: string) {
+    if (driverId && !driverAuto) return onChange({ truckId: id, driverId });
+    const usual = id ? usualDriver(data, id) : null;
+    setDriverAuto(!!usual);
+    onChange({ truckId: id, driverId: usual ?? "" });
+  }
+
+  return (
+    <div className="row">
+      <div className="field">
+        <label htmlFor={`${idPrefix}Truck`}>Truck</label>
+        <select id={`${idPrefix}Truck`} value={truckId} onChange={(e) => pickTruck(e.target.value)}>
+          <option value="">—</option>
+          {trucks.map((t) => (
+            <option key={t.id} value={t.id}>
+              {[t.fleet_no, t.horse_reg, t.truck_type !== "flatbed" ? t.truck_type : null].filter(Boolean).join(" · ")}
+              {busy.trucks.has(t.id) ? ` — on ${busy.trucks.get(t.id)!.map((x) => x.trip_no).join(", ")}` : ""}
+            </option>
+          ))}
+        </select>
+        {truckBusy ? <div className="hint warn">Already on {onTrips(truckBusy)}.</div> : null}
+      </div>
+      <div className="field">
+        <label htmlFor={`${idPrefix}Driver`}>Driver</label>
+        <select id={`${idPrefix}Driver`} value={driverId} onChange={(e) => { setDriverAuto(false); onChange({ truckId, driverId: e.target.value }); }}>
+          <option value="">—</option>
+          {drivers.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.full_name}
+              {busy.drivers.has(d.id) ? ` — on ${busy.drivers.get(d.id)!.map((x) => x.trip_no).join(", ")}` : ""}
+            </option>
+          ))}
+        </select>
+        {driverBusy ? (
+          <div className="hint warn">Already on {onTrips(driverBusy)}.</div>
+        ) : driverAuto && driverId ? (
+          <div className="hint">This truck&apos;s usual driver.</div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -1262,27 +1431,17 @@ function AllocateTrip({
 }) {
   const [truckId, setTruckId] = useState(trip.truck_id ?? "");
   const [driverId, setDriverId] = useState(trip.driver_id ?? "");
-  const trucks = data.trucks.filter((t) => t.is_active !== false || t.id === trip.truck_id);
-  const drivers = data.drivers.filter((d) => d.is_active !== false || d.id === trip.driver_id);
   return (
     <div className="d-sec">
       <h3>Next step</h3>
-      <div className="row">
-        <div className="field">
-          <label htmlFor="aTruck">Truck</label>
-          <select id="aTruck" value={truckId} onChange={(e) => setTruckId(e.target.value)}>
-            <option value="">—</option>
-            {trucks.map((t) => <option key={t.id} value={t.id}>{t.fleet_no}</option>)}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="aDriver">Driver</label>
-          <select id="aDriver" value={driverId} onChange={(e) => setDriverId(e.target.value)}>
-            <option value="">—</option>
-            {drivers.map((d) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
-          </select>
-        </div>
-      </div>
+      <TruckDriverFields
+        idPrefix="a"
+        data={data}
+        truckId={truckId}
+        driverId={driverId}
+        exceptTripId={trip.trip_id}
+        onChange={(next) => { setTruckId(next.truckId); setDriverId(next.driverId); }}
+      />
       <div className="acts">
         <button className="act" type="button" disabled={busy || !truckId || !driverId} onClick={() => onAllocate(truckId, driverId)}>
           Allocate truck

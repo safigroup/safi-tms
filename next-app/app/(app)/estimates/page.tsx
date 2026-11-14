@@ -238,12 +238,12 @@ export default function EstimatesPage() {
             </div>
             <div className="row">
               <div className="field">
-                <label htmlFor="eTon">Tonnage</label>
-                <input id="eTon" type="number" step="0.001" min="0" placeholder="28.500" value={tonnage} onChange={(e) => setTonnage(e.target.value)} />
+                <label htmlFor="eTon">Tonnage (t)</label>
+                <input id="eTon" type="number" step="0.001" min="0" value={tonnage} onChange={(e) => setTonnage(e.target.value)} />
               </div>
               <div className="field">
                 <label htmlFor="eVol">Volume (m³)</label>
-                <input id="eVol" type="number" step="0.001" min="0" placeholder="e.g. for tankers/tippers" value={volumeCbm} onChange={(e) => setVolumeCbm(e.target.value)} />
+                <input id="eVol" type="number" step="0.001" min="0" value={volumeCbm} onChange={(e) => setVolumeCbm(e.target.value)} />
               </div>
             </div>
           </div>

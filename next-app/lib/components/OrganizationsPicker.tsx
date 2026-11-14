@@ -61,10 +61,9 @@ export function OrganizationsPicker() {
       </div>
       {creating ? (
         <NewOrgForm
-          onCreated={async () => {
-            setCreating(false);
-            await load();
-          }}
+          // Stay open: the form now shows the first owner's invite link,
+          // which is shown only once. Its Done button closes it.
+          onCreated={load}
           onCancel={() => setCreating(false)}
         />
       ) : (

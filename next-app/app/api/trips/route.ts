@@ -29,6 +29,21 @@ export async function POST(request: Request) {
     );
   }
 
+  // Quantities are optional but, when given, a number of 0 or more.
+  const quantity = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
+  const tonnage = quantity(body.tonnage);
+  const volumeCbm = quantity(body.volumeCbm);
+  if ((tonnage !== null && !(tonnage >= 0)) || (volumeCbm !== null && !(volumeCbm >= 0))) {
+    return NextResponse.json({ error: "Tonnage and volume must be numbers, 0 or more." }, { status: 400 });
+  }
+  const day = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  if ((body.loadDate && !day(body.loadDate)) || (body.eta && !day(body.eta))) {
+    return NextResponse.json({ error: "Dates must be YYYY-MM-DD." }, { status: 400 });
+  }
+  if (body.loadDate && body.eta && body.eta < body.loadDate) {
+    return NextResponse.json({ error: "The planned ETA can't be before the planned load date." }, { status: 400 });
+  }
+
   const { data, error } = await ctx.admin
     .rpc("create_trip", {
       p_org: ctx.orgId,
@@ -38,7 +53,7 @@ export async function POST(request: Request) {
       p_truck: body.truckId || null,
       p_driver: body.driverId || null,
       p_commodity: body.commodity?.trim() || null,
-      p_tonnage: body.tonnage ? Number(body.tonnage) : null,
+      p_tonnage: tonnage,
       p_container_no: body.containerNo?.trim() || null,
       p_seal_no: body.sealNo?.trim() || null,
       p_load_date: body.loadDate || null,
@@ -46,7 +61,7 @@ export async function POST(request: Request) {
       p_user: ctx.userId,
       p_borders: Array.isArray(body.borders) && body.borders.length ? body.borders : null,
       p_agent_name: body.agentName?.trim() || null,
-      p_volume_cbm: body.volumeCbm ? Number(body.volumeCbm) : null,
+      p_volume_cbm: volumeCbm,
     })
     .single();
 

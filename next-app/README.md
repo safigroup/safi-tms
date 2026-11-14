@@ -45,7 +45,7 @@ curl -X POST -H "Authorization: Bearer sk_..." -H "Content-Type: application/jso
 ```
 
 - `GET /api/agent/routes` — lists the org's routes (`origin`, `destination`, `distanceKm`, `targetDays`, `defaultBorders`, `alternateBorderPaths`, and a `costTemplate` summary), so an agent can browse options before estimating.
-- `POST /api/agent/estimate` — body `{ routeId, tonnage?, volumeCbm?, customerId? }`. Computes the cost breakdown via the same `lib/estimates/estimateTripCost.ts` function the `/estimates` page itself uses (so the two can never disagree), and — if `customerId` matches a rate card for that route — an estimated revenue and margin. Returns 404 if the route doesn't belong to the caller's org.
+- `POST /api/agent/estimate` — body `{ routeId, tonnage?, volumeCbm?, customerId?, commodity? }`. Computes the cost breakdown via the same `lib/estimates/estimateTripCost.ts` function the `/estimates` page itself uses (so the two can never disagree), and — if `customerId` has a rate card for that route valid today — an estimated revenue and margin. The card is chosen by `lib/rates/pickRateCard.ts`, the same rule the New trip form uses; pass `commodity` when the customer has a different rate per commodity. Returns 404 if the route doesn't belong to the caller's org.
 
 Both return `401` for a missing/invalid/revoked key, and never touch `trips`, `trip_costs`, or `invoices`.
 

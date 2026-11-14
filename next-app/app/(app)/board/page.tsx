@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -9,7 +9,8 @@ import { useBusyGroup } from "@/lib/useBusyGroup";
 import { Spinner } from "@/lib/components/Spinner";
 import { buildTimeline, routeProgress, type Stop } from "@/lib/trips/timeline";
 import { checkTimes, isTimeField, tripMilestones, type Milestone, type TimeEdits } from "@/lib/trips/milestones";
-import type { AuditLogEntry, BoardTrip, BootstrapPayload, TripEvent, TripStatus } from "@/lib/types";
+import type { AuditLogEntry, BoardTrip, BootstrapPayload, RateCard, TripEvent, TripStatus } from "@/lib/types";
+import { pickRateCard, type RatePick } from "@/lib/rates/pickRateCard";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 
 const PILL: Record<string, string> = {
@@ -37,7 +38,7 @@ const FILTERS: [string, string, (t: BoardTrip) => boolean][] = [
 ];
 
 const NEXT: Record<string, [TripStatus, string][]> = {
-  draft: [["allocated", "Allocate truck"]],
+  // draft -> allocated goes through AllocateTrip, which asks for the truck and driver.
   allocated: [["loading", "Start loading"]],
   loading: [["in_transit", "Depart"]],
   in_transit: [["delivered", "Mark delivered"]],
@@ -323,13 +324,13 @@ function TripDetail({
     ? stops.filter((s) => s.kind === "border" && s.state !== "done").map((s) => s.location!)
     : borders;
 
-  async function advance(status: TripStatus) {
+  async function advance(status: TripStatus, allocation?: { truckId: string; driverId: string }) {
     setNote(null);
     await run(async () => {
       const res = await fetch(`/api/trips/${trip.trip_id}/advance`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, ...allocation }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -404,7 +405,15 @@ function TripDetail({
           {canOverride ? <button className="act" type="button" onClick={() => setEditing(true)}>Edit trip</button> : null}
         </div>
       </div>
-      {nexts.length && canWrite ? (
+      {trip.status === "draft" && canWrite ? (
+        <AllocateTrip
+          key={trip.trip_id}
+          trip={trip}
+          data={data}
+          busy={busy}
+          onAllocate={(truckId, driverId) => advance("allocated", { truckId, driverId })}
+        />
+      ) : nexts.length && canWrite ? (
         <div className="d-sec">
           <h3>Next step</h3>
           <div className="acts">
@@ -1004,11 +1013,15 @@ function NewTripForm({
   onCancel: () => void;
   onCreated: (tripId: string) => void;
 }) {
+  const companyToday = today(useCompanyTimeZone());
   const [customerId, setCustomerId] = useState("");
   const [routeId, setRouteId] = useState("");
   const [borderPathId, setBorderPathId] = useState("");
   const [revenue, setRevenue] = useState("");
-  const [rateHint, setRateHint] = useState<{ text: string; kind: "good" | "warn" } | null>(null);
+  // Where the revenue figure came from. A rate card's price is kept in
+  // step with the form and cleared once no card applies; a price someone
+  // typed is never replaced.
+  const [revenueFrom, setRevenueFrom] = useState<"rate" | "typed" | null>(null);
   const [truckId, setTruckId] = useState("");
   const [driverId, setDriverId] = useState("");
   const [commodity, setCommodity] = useState("");
@@ -1017,43 +1030,40 @@ function NewTripForm({
   const [containerNo, setContainerNo] = useState("");
   const [sealNo, setSealNo] = useState("");
   const [agentName, setAgentName] = useState("");
-  const [loadDate, setLoadDate] = useState(today(useCompanyTimeZone()));
+  const [loadDate, setLoadDate] = useState(companyToday);
   const [eta, setEta] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Re-run on customer/route change (as before) and now also on
-  // tonnage/volume change, since a per_tonne/per_cbm rate card needs
-  // whichever quantity its basis calls for -- entered later in the form
-  // than customer/route, so this can't just be a one-shot lookup.
-  function applyRate(cust: string, route: string, ton: string, vol: string) {
-    const hit = data.rateCards.find((r) => r.route_id === route && (r.customer_id === cust || !r.customer_id));
-    if (hit) {
-      const basis = hit.rate_basis;
-      const qty = basis === "per_tonne" ? parseFloat(ton) : basis === "per_cbm" ? parseFloat(vol) : 1;
-      if (basis !== "per_trip" && !(Number.isFinite(qty) && qty > 0)) {
-        setRateHint({
-          text: `${m2(hit.rate_amount)} ${basis === "per_tonne" ? "per tonne" : "per m³"}${hit.commodity ? " · " + hit.commodity : ""} — enter ${basis === "per_tonne" ? "tonnage" : "volume"} to calculate.`,
-          kind: "warn",
-        });
-        // Leave revenue as whatever the user already has -- don't stomp
-        // it with a wrong figure just because the quantity isn't in yet.
-      } else {
-        const amount = basis === "per_trip" ? Number(hit.rate_amount) : Number(hit.rate_amount) * qty;
-        setRevenue(amount.toFixed(2));
-        setRateHint({
-          text: "Filled from the rate card"
-            + (hit.commodity ? " · " + hit.commodity : "")
-            + (basis !== "per_trip" ? ` (${m2(hit.rate_amount)} × ${qty} ${basis === "per_tonne" ? "t" : "m³"})` : ""),
-          kind: "good",
-        });
-      }
-      if (hit.commodity && !commodity) setCommodity(hit.commodity);
-    } else if (cust && route) {
-      setRateHint({ text: "No rate card for this pairing. Enter the agreed price.", kind: "warn" });
-    } else {
-      setRateHint(null);
+  const inputs: RateInputs = { customerId, routeId, tonnage, volumeCbm, commodity, loadDate };
+  const rate = rateFor(data.rateCards, inputs, companyToday);
+
+  // Called with whichever field just changed. Keeps a rate-card price in
+  // step, and clears it once no card prices this trip any more, so a
+  // figure from a previous customer or route can't be saved by mistake.
+  function reprice(changed: Partial<RateInputs>) {
+    const next = { ...inputs, ...changed };
+    const r = rateFor(data.rateCards, next, companyToday);
+    if (r?.card?.commodity && !next.commodity.trim()) setCommodity(r.card.commodity.trim());
+    if (revenueFrom === "typed") return;
+    if (r?.price != null) {
+      setRevenue(r.price.toFixed(2));
+      setRevenueFrom("rate");
+    } else if (revenueFrom === "rate") {
+      setRevenue("");
+      setRevenueFrom(null);
     }
+  }
+
+  function takeRatePrice() {
+    if (rate?.price == null) return;
+    setRevenue(rate.price.toFixed(2));
+    setRevenueFrom("rate");
+  }
+
+  function chooseCommodity(c: string) {
+    setCommodity(c);
+    reprice({ commodity: c });
   }
 
   function applyEta(route: string, load: string) {
@@ -1119,7 +1129,7 @@ function NewTripForm({
         <select
           id="nCust"
           value={customerId}
-          onChange={(e) => { setCustomerId(e.target.value); applyRate(e.target.value, routeId, tonnage, volumeCbm); }}
+          onChange={(e) => { setCustomerId(e.target.value); reprice({ customerId: e.target.value }); }}
         >
           <option value="">—</option>
           {activeCustomers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -1130,7 +1140,7 @@ function NewTripForm({
         <select
           id="nRoute"
           value={routeId}
-          onChange={(e) => { setRouteId(e.target.value); setBorderPathId(""); applyRate(customerId, e.target.value, tonnage, volumeCbm); applyEta(e.target.value, loadDate); }}
+          onChange={(e) => { setRouteId(e.target.value); setBorderPathId(""); reprice({ routeId: e.target.value }); applyEta(e.target.value, loadDate); }}
         >
           <option value="">—</option>
           {activeRoutes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
@@ -1147,13 +1157,17 @@ function NewTripForm({
       ) : null}
       <div className="field">
         <label htmlFor="nRev">Revenue (USD)</label>
-        <input id="nRev" type="number" step="0.01" min="0" placeholder="0.00" value={revenue} onChange={(e) => setRevenue(e.target.value)} />
+        <input
+          id="nRev"
+          type="number"
+          step="0.01"
+          min="0"
+          placeholder="0.00"
+          value={revenue}
+          onChange={(e) => { setRevenue(e.target.value); setRevenueFrom(e.target.value.trim() ? "typed" : null); }}
+        />
       </div>
-      {rateHint ? (
-        <div className="hint" style={{ color: rateHint.kind === "good" ? "var(--settled)" : "var(--waiting)", margin: "-8px 0 13px" }}>
-          {rateHint.text}
-        </div>
-      ) : null}
+      <RateHint rate={rate} revenue={revenue} revenueFrom={revenueFrom} commodity={commodity} onDate={loadDate || companyToday} onUsePrice={takeRatePrice} onChooseCommodity={chooseCommodity} />
       <div className="row">
         <div className="field">
           <label htmlFor="nTruck">Truck</label>
@@ -1172,7 +1186,7 @@ function NewTripForm({
       </div>
       <div className="field">
         <label htmlFor="nComm">Commodity</label>
-        <input id="nComm" type="text" placeholder="General cargo" value={commodity} onChange={(e) => setCommodity(e.target.value)} />
+        <input id="nComm" type="text" placeholder="General cargo" value={commodity} onChange={(e) => { setCommodity(e.target.value); reprice({ commodity: e.target.value }); }} />
       </div>
       <div className="row">
         <div className="field">
@@ -1184,7 +1198,7 @@ function NewTripForm({
             min="0"
             placeholder="28.500"
             value={tonnage}
-            onChange={(e) => { setTonnage(e.target.value); applyRate(customerId, routeId, e.target.value, volumeCbm); }}
+            onChange={(e) => { setTonnage(e.target.value); reprice({ tonnage: e.target.value }); }}
           />
         </div>
         <div className="field">
@@ -1196,7 +1210,7 @@ function NewTripForm({
             min="0"
             placeholder="e.g. for tankers/tippers"
             value={volumeCbm}
-            onChange={(e) => { setVolumeCbm(e.target.value); applyRate(customerId, routeId, tonnage, e.target.value); }}
+            onChange={(e) => { setVolumeCbm(e.target.value); reprice({ volumeCbm: e.target.value }); }}
           />
         </div>
       </div>
@@ -1217,7 +1231,7 @@ function NewTripForm({
       <div className="row">
         <div className="field">
           <label htmlFor="nLoad">Load date</label>
-          <input id="nLoad" type="date" value={loadDate} onChange={(e) => { setLoadDate(e.target.value); applyEta(routeId, e.target.value); }} />
+          <input id="nLoad" type="date" value={loadDate} onChange={(e) => { setLoadDate(e.target.value); reprice({ loadDate: e.target.value }); applyEta(routeId, e.target.value); }} />
         </div>
         <div className="field">
           <label htmlFor="nEta">Planned ETA</label>
@@ -1230,4 +1244,125 @@ function NewTripForm({
       <button className="ghost" type="button" onClick={onCancel}>Cancel</button>
     </form>
   );
+}
+
+// A draft trip's next step: pick the truck and driver, then allocate.
+// Starts from whatever the trip already has, if anything.
+function AllocateTrip({
+  trip,
+  data,
+  busy,
+  onAllocate,
+}: {
+  trip: BoardTrip;
+  data: BootstrapPayload;
+  busy: boolean;
+  onAllocate: (truckId: string, driverId: string) => void;
+}) {
+  const [truckId, setTruckId] = useState(trip.truck_id ?? "");
+  const [driverId, setDriverId] = useState(trip.driver_id ?? "");
+  const trucks = data.trucks.filter((t) => t.is_active !== false || t.id === trip.truck_id);
+  const drivers = data.drivers.filter((d) => d.is_active !== false || d.id === trip.driver_id);
+  return (
+    <div className="d-sec">
+      <h3>Next step</h3>
+      <div className="row">
+        <div className="field">
+          <label htmlFor="aTruck">Truck</label>
+          <select id="aTruck" value={truckId} onChange={(e) => setTruckId(e.target.value)}>
+            <option value="">—</option>
+            {trucks.map((t) => <option key={t.id} value={t.id}>{t.fleet_no}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="aDriver">Driver</label>
+          <select id="aDriver" value={driverId} onChange={(e) => setDriverId(e.target.value)}>
+            <option value="">—</option>
+            {drivers.map((d) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="acts">
+        <button className="act" type="button" disabled={busy || !truckId || !driverId} onClick={() => onAllocate(truckId, driverId)}>
+          Allocate truck
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type RateInputs = { customerId: string; routeId: string; tonnage: string; volumeCbm: string; commodity: string; loadDate: string };
+type TripRate = (RatePick<RateCard> & { price: number | null; qty: number | null; needs: "tonnage" | "volume" | null }) | null;
+
+// The rate card that prices the form as filled in, and its price -- null
+// until a per-tonne or per-m³ card has the quantity it needs. Valid on
+// the load date, so a rate change takes effect from its own start date.
+function rateFor(cards: RateCard[], f: RateInputs, fallbackDate: string): TripRate {
+  if (!f.customerId || !f.routeId) return null;
+  const pick = pickRateCard(cards, { customerId: f.customerId, routeId: f.routeId, commodity: f.commodity, onDate: f.loadDate || fallbackDate });
+  const card = pick.card;
+  if (!card) return { ...pick, price: null, qty: null, needs: null };
+  const qty = card.rate_basis === "per_tonne" ? parseFloat(f.tonnage) : card.rate_basis === "per_cbm" ? parseFloat(f.volumeCbm) : 1;
+  if (!(Number.isFinite(qty) && qty > 0)) {
+    return { ...pick, price: null, qty: null, needs: card.rate_basis === "per_tonne" ? "tonnage" : "volume" };
+  }
+  return { ...pick, price: Math.round(Number(card.rate_amount) * qty * 100) / 100, qty, needs: null };
+}
+
+function RateHint({
+  rate,
+  revenue,
+  revenueFrom,
+  commodity,
+  onDate,
+  onUsePrice,
+  onChooseCommodity,
+}: {
+  rate: TripRate;
+  revenue: string;
+  revenueFrom: "rate" | "typed" | null;
+  commodity: string;
+  onDate: string;
+  onUsePrice: () => void;
+  onChooseCommodity: (commodity: string) => void;
+}) {
+  if (!rate) return null;
+  const box = (kind: "good" | "warn", body: ReactNode) => (
+    <div className="hint" style={{ color: kind === "good" ? "var(--settled)" : "var(--waiting)", margin: "-8px 0 13px" }}>{body}</div>
+  );
+  const choices = (buttons: ReactNode) => <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>{buttons}</div>;
+  const card = rate.card;
+
+  if (!card) {
+    if (rate.ambiguous) {
+      return box("warn", <>
+        This customer has a different rate for each commodity. Which is it?
+        {choices(rate.commodities.map((c) => (
+          <button key={c} type="button" className="chip" onClick={() => onChooseCommodity(c)}>{c}</button>
+        )))}
+      </>);
+    }
+    const typed = commodity.trim();
+    return box("warn",
+      typed && rate.commodities.length
+        ? `No rate card for ${typed} on this route (rates on file for ${rate.commodities.join(", ")}). Enter the agreed price.`
+        : rate.outOfDate
+          ? `No rate card for this customer and route is valid on ${onDate}. Enter the agreed price.`
+          : "No rate card for this pairing. Enter the agreed price.");
+  }
+
+  if (rate.needs) {
+    return box("warn", `${m2(card.rate_amount)} per ${rate.needs === "tonnage" ? "tonne" : "m³"}${card.commodity ? " · " + card.commodity : ""} — enter ${rate.needs} to calculate.`);
+  }
+
+  const unit = card.rate_basis === "per_tonne" ? "t" : "m³";
+  const detail = (card.commodity ? " · " + card.commodity : "")
+    + (card.rate_basis === "per_tonne" || card.rate_basis === "per_cbm" ? ` (${m2(card.rate_amount)} × ${rate.qty} ${unit})` : "");
+  if (revenue.trim() && Number(revenue) === rate.price) {
+    return box("good", `${revenueFrom === "typed" ? "Matches" : "Filled from"} the rate card${detail}`);
+  }
+  return box("warn", <>
+    The rate card price is {m2(rate.price)}{detail}.{revenueFrom === "typed" ? " Your price is kept." : ""}
+    {choices(<button type="button" className="chip" onClick={onUsePrice}>Use {m2(rate.price)}</button>)}
+  </>);
 }

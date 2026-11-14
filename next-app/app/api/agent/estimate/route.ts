@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthedApiKey } from "@/lib/auth/getAuthedApiKey";
 import { estimateTripCost, type CostTemplateLine } from "@/lib/estimates/estimateTripCost";
+import { pickRateCard } from "@/lib/rates/pickRateCard";
 
 // Read-only: computes the same estimate the Estimator page shows (reusing
 // the exact same estimateTripCost() function, so the two can never
@@ -49,14 +50,20 @@ export async function POST(request: Request) {
   const customerId = typeof body.customerId === "string" ? body.customerId : null;
   if (customerId) {
     // Fetched and matched in JS rather than a .or() filter string built
-    // from request input -- mirrors the exact lookup NewTripForm's
-    // applyRate() already does client-side against bootstrap data.
-    const { data: rateCards } = await ctx.admin
-      .from("rate_cards")
-      .select("customer_id, rate_amount, rate_currency, rate_basis")
-      .eq("org_id", ctx.orgId)
-      .eq("route_id", routeId);
-    const rateCard = (rateCards ?? []).find((r) => r.customer_id === customerId || !r.customer_id);
+    // from request input, with the same pickRateCard() the New trip form
+    // and the Estimator page use: the card valid today in the company's
+    // time zone, for the commodity if one is given.
+    const [{ data: rateCards }, { data: orgToday }] = await Promise.all([
+      ctx.admin
+        .from("rate_cards")
+        .select("customer_id, route_id, commodity, rate_amount, rate_currency, rate_basis, valid_from, valid_to")
+        .eq("org_id", ctx.orgId)
+        .eq("route_id", routeId),
+      ctx.admin.rpc("org_today", { p_org: ctx.orgId }),
+    ]);
+    const commodity = typeof body.commodity === "string" ? body.commodity : null;
+    const onDate = typeof orgToday === "string" ? orgToday : new Date().toISOString().slice(0, 10);
+    const rateCard = pickRateCard(rateCards ?? [], { customerId, routeId, commodity, onDate }).card;
 
     if (rateCard) {
       const revenueEstimate = estimateTripCost(

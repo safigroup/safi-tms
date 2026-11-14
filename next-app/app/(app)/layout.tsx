@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
+import { CompanyTimeZoneProvider } from "@/lib/components/CompanyTimeZone";
 import { Nav } from "@/lib/components/Nav";
 import { OrganizationsPicker } from "@/lib/components/OrganizationsPicker";
 import { signOut } from "./actions";
@@ -30,7 +31,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="wrap">
       <Nav orgTitle={orgTitle} orgId={ctx.orgId} email={ctx.email} role={ctx.role} isPlatformAdmin={ctx.isPlatformAdmin} signOutAction={signOut} />
-      {children}
+      <CompanyTimeZoneProvider timeZone={ctx.timeZone}>{children}</CompanyTimeZoneProvider>
     </div>
   );
 }

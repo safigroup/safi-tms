@@ -10,6 +10,7 @@ import { Spinner } from "@/lib/components/Spinner";
 import { TripLedgerBody } from "@/lib/components/TripLedgerBody";
 import { t, catLabel, type PrintLang } from "@/lib/print/translations";
 import type { BootstrapPayload, Breakeven, TruckReport } from "@/lib/types";
+import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 
 // Mirrors lib/auth/permissions.ts's CAN_EDIT_COMMERCIAL -- UI convenience
 // only (hides actions a role can't use), the route handlers are the real check.
@@ -396,7 +397,7 @@ function AddTruckCostForm({
   const [category, setCategory] = useState(CATS[0]);
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState(curOpts[0] ?? "USD");
-  const [incurredOn, setIncurredOn] = useState(today());
+  const [incurredOn, setIncurredOn] = useState(today(useCompanyTimeZone()));
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);

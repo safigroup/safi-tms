@@ -1,4 +1,4 @@
-import { waitLabel } from "@/lib/format";
+import { dayIn, waitLabel } from "@/lib/format";
 import type { ArInvoice, BillableTrip, BoardTrip, FxRate } from "@/lib/types";
 
 // Everything the Overview page shows, derived from data the app already
@@ -25,7 +25,8 @@ export function monthToDate(todayIso: string): { current: Period; previous: Peri
   };
 }
 
-const inPeriod = (date: string | null, p: Period) => !!date && date.slice(0, 10) >= p.from && date.slice(0, 10) <= p.to;
+// `day` is a calendar date (YYYY-MM-DD) where the company is.
+const inPeriod = (day: string | null, p: Period) => !!day && day >= p.from && day <= p.to;
 
 // Revenue and costs land in the period a trip loaded in, the same rule the
 // truck reports use, so the two never disagree.
@@ -36,10 +37,13 @@ export function tripMoney(board: BoardTrip[], p: Period) {
   return { trips: trips.length, revenue, costs, margin: revenue - costs, marginPct: revenue > 0 ? ((revenue - costs) / revenue) * 100 : null };
 }
 
-export function tripCounts(board: BoardTrip[], p: Period) {
+// A delivery counts on the day it happened in the company's time zone, not
+// the UTC day its timestamp falls on.
+export function tripCounts(board: BoardTrip[], p: Period, timeZone: string) {
+  const day = dayIn(timeZone);
   return {
     loaded: board.filter((t) => inPeriod(t.actual_load_date, p)).length,
-    delivered: board.filter((t) => inPeriod(t.actual_delivery_at, p)).length,
+    delivered: board.filter((t) => !!t.actual_delivery_at && inPeriod(day(t.actual_delivery_at), p)).length,
   };
 }
 

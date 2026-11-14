@@ -1,8 +1,9 @@
-import { m2, today } from "@/lib/format";
+import { dayIn, m2, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
 import { t, catLabel, statusLabel, type PrintLang } from "@/lib/print/translations";
 import type { BoardTrip, TripAllocation, TripCost } from "@/lib/types";
 import { buildTripStatement } from "@/lib/tripStatement";
+import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 
 // The inner content of a trip's printed ledger -- everything but the
 // #sheet portal/afterprint wiring, which differs between its two callers:
@@ -23,6 +24,7 @@ export function TripLedgerBody({
   allocations?: TripAllocation[];
   lang: PrintLang;
 }) {
+  const timeZone = useCompanyTimeZone();
   const total = costs.reduce((s, c) => s + Number(c.amount_usd), 0);
   const statement = buildTripStatement(allocations, costs);
 
@@ -35,7 +37,7 @@ export function TripLedgerBody({
         </div>
         <div className="im">
           <div className="big">{t(lang, "trip_ledger")}</div>
-          {trip.trip_no}<br />{t(lang, "printed")} {today()}
+          {trip.trip_no}<br />{t(lang, "printed")} {today(timeZone)}
         </div>
       </div>
       <div className="parties">
@@ -56,7 +58,7 @@ export function TripLedgerBody({
           <div style={{ fontSize: 13 }}>{statusLabel(lang, trip.status)}</div>
           <div style={{ fontSize: 12, color: "#333", marginTop: 8 }}>
             {trip.actual_load_date ? <>{t(lang, "loaded")} {trip.actual_load_date}<br /></> : null}
-            {trip.actual_delivery_at ? <>{t(lang, "delivered")} {trip.actual_delivery_at.slice(0, 10)}</> : null}
+            {trip.actual_delivery_at ? <>{t(lang, "delivered")} {dayIn(timeZone)(trip.actual_delivery_at)}</> : null}
           </div>
         </div>
       </div>

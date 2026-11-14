@@ -10,6 +10,7 @@ import { t, type PrintLang } from "@/lib/print/translations";
 import { buildCashStatement, type CashStatement } from "@/lib/cashbook/statement";
 import { ACCOUNT_KIND_LABEL, DEFAULT_CATEGORIES } from "@/lib/cashbook/categories";
 import type { CashAccount, CashAccountKind, CashAccountSummary, CashTransaction } from "@/lib/types";
+import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 
 type Overview = { accounts: CashAccountSummary[]; currencies: string[]; usedCategories: { in: string[]; out: string[] } };
 type Mode = "in" | "out" | "transfer" | "new-account" | "edit-account";
@@ -267,7 +268,7 @@ function EntryForm({
   onSaved: () => Promise<void>;
 }) {
   const [accountId, setAccountId] = useState(defaultAccountId);
-  const [occurredOn, setOccurredOn] = useState(today());
+  const [occurredOn, setOccurredOn] = useState(today(useCompanyTimeZone()));
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [counterparty, setCounterparty] = useState("");
@@ -357,7 +358,7 @@ function TransferForm({
 }) {
   const [fromId, setFromId] = useState(defaultFromId);
   const [toId, setToId] = useState(accounts.find((a) => a.id !== defaultFromId)?.id ?? "");
-  const [occurredOn, setOccurredOn] = useState(today());
+  const [occurredOn, setOccurredOn] = useState(today(useCompanyTimeZone()));
   const [amountOut, setAmountOut] = useState("");
   const [amountIn, setAmountIn] = useState("");
   const [description, setDescription] = useState("");
@@ -565,6 +566,7 @@ function StatementPrintSheet({
   lang: PrintLang;
   onDone: () => void;
 }) {
+  const timeZone = useCompanyTimeZone();
   useEffect(() => {
     const handler = () => onDone();
     window.addEventListener("afterprint", handler);
@@ -581,7 +583,7 @@ function StatementPrintSheet({
         </div>
         <div className="im">
           <div className="big">{t(lang, "account_statement")}</div>
-          {account.name}<br />{t(lang, "printed")} {today()}
+          {account.name}<br />{t(lang, "printed")} {today(timeZone)}
         </div>
       </div>
       <div className="parties">
@@ -592,7 +594,7 @@ function StatementPrintSheet({
         </div>
         <div style={{ textAlign: "right" }}>
           <h4>{t(lang, "period")}</h4>
-          <div style={{ fontSize: 13 }}>{statement.from} → {statement.to ?? today()}</div>
+          <div style={{ fontSize: 13 }}>{statement.from} → {statement.to ?? today(timeZone)}</div>
         </div>
       </div>
       <table>

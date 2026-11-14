@@ -15,7 +15,17 @@ export const num = (n: number | string | null | undefined) =>
 
 export const lab = (s: string | null | undefined) => String(s || "").replace(/_/g, " ");
 
-export const today = () => new Date().toISOString().slice(0, 10);
+// The calendar date of a moment in a time zone, as YYYY-MM-DD. Calendar
+// dates -- today, the day a trip was delivered -- are the company's: pass
+// useCompanyTimeZone() in the browser, ctx.timeZone on the server. Never
+// UTC, which is still "yesterday" for the first hours of an African day.
+export function dayIn(timeZone: string) {
+  const f = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+  return (when: string | number | Date) => f.format(new Date(when));
+}
+
+// Today's date in a time zone, as YYYY-MM-DD.
+export const today = (timeZone: string) => dayIn(timeZone)(Date.now());
 
 // Whether a time zone name (e.g. "Africa/Lusaka") is one this runtime knows.
 export function validTimeZone(timeZone: unknown): timeZone is string {

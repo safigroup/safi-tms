@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
 import { CAN_MANAGE_TRIPS } from "@/lib/auth/permissions";
+import { today } from "@/lib/format";
 
 // Ports saveDoc() (index.html): existence-check-then-insert-or-update by
 // (trip_id, doc_type) -- create_trip() seeds 4 pending rows per trip
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
     storage_path: storagePath,
     doc_number: body.docNumber?.trim() || null,
     status: "issued",
-    issued_on: new Date().toISOString().slice(0, 10),
+    issued_on: today(ctx.timeZone),
     uploaded_by: ctx.userId,
   };
 

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { num, today, lab } from "@/lib/format";
 import { Spinner } from "@/lib/components/Spinner";
 import type { BootstrapPayload, Customer, Route, FxRate, RouteBorderPath, PaymentMilestone, RouteCostTemplateLine } from "@/lib/types";
+import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 
 // Mirrors lib/estimates/validateCostTemplate.ts's ESTIMATE_CATEGORIES --
 // duplicated client-side the same way the Cost Docket's own CATS list is
@@ -27,7 +28,7 @@ type FieldConfig = {
   type: FieldType;
   req?: boolean;
   half?: boolean;
-  def?: string | number | boolean | (() => string);
+  def?: string | number | boolean | ((timeZone: string) => string);
   hint?: string;
   opts?: string[];
   from?: "customers" | "routes";
@@ -46,7 +47,7 @@ const CAN_MANAGE_TEAM = ["owner", "admin"];
 // Deliberately NOT the security boundary (that's lib/admin/entities.ts,
 // server-only); this just drives what the form looks like. `permission`
 // mirrors that file's field of the same name (fleet vs. commercial data).
-const ENT_UI: Record<string, { label: string; permission: "fleet" | "commercial"; fields: FieldConfig[]; row: (r: Record<string, unknown>, data: BootstrapPayload) => RowView }> = {
+const ENT_UI: Record<string, { label: string; permission: "fleet" | "commercial"; fields: FieldConfig[]; row: (r: Record<string, unknown>, data: BootstrapPayload, timeZone: string) => RowView }> = {
   customers: {
     label: "Customers",
     permission: "commercial",
@@ -130,12 +131,12 @@ const ENT_UI: Record<string, { label: string; permission: "fleet" | "commercial"
       { k: "valid_from", label: "Valid from", type: "date", def: today, half: true },
       { k: "valid_to", label: "Valid to", type: "date", hint: "Blank while it's current." },
     ],
-    row: (r, data) => ({
+    row: (r, data, timeZone) => ({
       t: data.customers.find((c) => c.id === r.customer_id)?.name || "—",
       s: data.routes.find((x) => x.id === r.route_id)?.name || "—",
       m: [r.commodity, (r.rate_basis as string)?.replace("_", " ")].filter(Boolean).join(" · "),
       r: `${r.rate_currency} ${num(r.rate_amount as number)}`,
-      tag: r.valid_to && (r.valid_to as string) < today() ? ["grey", "expired"] : ["good", "current"],
+      tag: r.valid_to && (r.valid_to as string) < today(timeZone) ? ["grey", "expired"] : ["good", "current"],
     }),
   },
 };
@@ -647,12 +648,13 @@ function EntityList({
   selected: string | null;
   onSelect: (id: string) => void;
 }) {
+  const timeZone = useCompanyTimeZone();
   const ui = ENT_UI[entity];
   return (
     <ul className="list">
       {rows.length ? rows.map((raw) => {
         const r = raw as Record<string, unknown> & { id: string };
-        const v = ui.row(r, data);
+        const v = ui.row(r, data, timeZone);
         return (
           <li key={r.id} className={"tap" + (selected === r.id ? " sel" : "") + (v.off ? " off" : "")} onClick={() => onSelect(r.id)}>
             <div>
@@ -685,6 +687,7 @@ function EntityForm({
   onCancel: () => void;
   canEdit: boolean;
 }) {
+  const timeZone = useCompanyTimeZone();
   const ui = ENT_UI[entity];
   const masters: Record<string, unknown[]> = {
     customers: data.customers, trucks: data.trucks, drivers: data.drivers, routes: data.routes, rate_cards: data.rateCards,
@@ -695,7 +698,7 @@ function EntityForm({
     const v: Record<string, unknown> = {};
     for (const f of ui.fields) {
       if (existing) v[f.k] = existing[f.k];
-      else v[f.k] = typeof f.def === "function" ? f.def() : f.def ?? (f.type === "bool" ? false : "");
+      else v[f.k] = typeof f.def === "function" ? f.def(timeZone) : f.def ?? (f.type === "bool" ? false : "");
     }
     return v;
   });
@@ -1264,7 +1267,7 @@ function FxForm({ onSaved }: { onSaved: () => Promise<void> }) {
   const currencies = ["TZS", "ZMW", "CDF", "USD", "RWF", "ZAR"];
   const [currency, setCurrency] = useState(currencies[0]);
   const [per, setPer] = useState("");
-  const [effectiveOn, setEffectiveOn] = useState(today());
+  const [effectiveOn, setEffectiveOn] = useState(today(useCompanyTimeZone()));
   const [source, setSource] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);

@@ -4,11 +4,12 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { m0, m2, lab, today } from "@/lib/format";
+import { dayIn, m0, m2, lab, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
 import { Spinner } from "@/lib/components/Spinner";
 import { t, invoiceTypeLabel, type PrintLang } from "@/lib/print/translations";
 import type { ArInvoice, BillableTrip, BootstrapPayload } from "@/lib/types";
+import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 
 // Mirrors lib/auth/permissions.ts's CAN_MANAGE_BILLING -- UI convenience
 // only (hides actions a role can't use), the route handlers are the real check.
@@ -317,7 +318,8 @@ function InvoiceDetailPanel({
   const [cancelNote, setCancelNote] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [payAmt, setPayAmt] = useState(i ? Number(i.outstanding).toFixed(2) : "");
-  const [payDate, setPayDate] = useState(today());
+  const timeZone = useCompanyTimeZone();
+  const [payDate, setPayDate] = useState(today(timeZone));
   const [payMethod, setPayMethod] = useState("Bank transfer");
   const [payRef, setPayRef] = useState("");
   const [payNote, setPayNote] = useState<string | null>(null);
@@ -401,7 +403,7 @@ function InvoiceDetailPanel({
       {cancelled ? (
         <div className="d-sec">
           <h3>Cancelled</h3>
-          <div className="d-hint">{i.cancelled_at ? i.cancelled_at.slice(0, 10) : ""} — {i.cancel_reason || "no reason recorded"}</div>
+          <div className="d-hint">{i.cancelled_at ? dayIn(timeZone)(i.cancelled_at) : ""} — {i.cancel_reason || "no reason recorded"}</div>
         </div>
       ) : null}
       <div className="d-sec">

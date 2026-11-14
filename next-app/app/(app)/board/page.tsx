@@ -10,6 +10,7 @@ import { Spinner } from "@/lib/components/Spinner";
 import { buildTimeline, routeProgress, type Stop } from "@/lib/trips/timeline";
 import { checkTimes, isTimeField, tripMilestones, type Milestone, type TimeEdits } from "@/lib/trips/milestones";
 import type { AuditLogEntry, BoardTrip, BootstrapPayload, TripEvent, TripStatus } from "@/lib/types";
+import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 
 const PILL: Record<string, string> = {
   draft: "grey",
@@ -603,7 +604,7 @@ function toLocalInput(iso: string) {
 }
 const inputValue = (m: Milestone) => (m.value ? (m.type === "date" ? m.value : toLocalInput(m.value)) : "");
 // Run on save, against the clock at that moment.
-const checkTimesNow = (ms: Milestone[], edits: TimeEdits, timeZone: string) => checkTimes(ms, edits, Date.now(), timeZone);
+const checkTimesNow = (ms: Milestone[], edits: TimeEdits, timeZone: string, dayZone: string) => checkTimes(ms, edits, Date.now(), timeZone, dayZone);
 // Rows sit under their stop: the loading point, each border crossing, delivery.
 const groupKey = (m: Milestone) => (m.key.includes(":") ? m.key.split(":").slice(0, 2).join(":") : m.group);
 
@@ -632,6 +633,7 @@ function TimeEditor({
   const [saving, setSaving] = useState(false);
   const [corrections, setCorrections] = useState<AuditLogEntry[] | null>(null);
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const companyTimeZone = useCompanyTimeZone();
 
   useEffect(() => {
     fetch(`/api/trips/${trip.trip_id}`)
@@ -661,7 +663,7 @@ function TimeEditor({
     setInputs(next);
     // Once problems are on show, keep them current as times are fixed.
     if (Object.keys(errors).length) {
-      const found = checkTimesNow(ms, collect(next).edits, timeZone);
+      const found = checkTimesNow(ms, collect(next).edits, timeZone, companyTimeZone);
       setErrors(found);
       setFormError(Object.keys(found).length ? "Some times need fixing." : null);
     } else {
@@ -681,7 +683,7 @@ function TimeEditor({
       setFormError("Nothing has changed yet.");
       return;
     }
-    const found = checkTimesNow(ms, edits, timeZone);
+    const found = checkTimesNow(ms, edits, timeZone, companyTimeZone);
     setErrors(found);
     if (Object.keys(found).length) {
       setFormError("Some times need fixing.");
@@ -1015,7 +1017,7 @@ function NewTripForm({
   const [containerNo, setContainerNo] = useState("");
   const [sealNo, setSealNo] = useState("");
   const [agentName, setAgentName] = useState("");
-  const [loadDate, setLoadDate] = useState(today());
+  const [loadDate, setLoadDate] = useState(today(useCompanyTimeZone()));
   const [eta, setEta] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);

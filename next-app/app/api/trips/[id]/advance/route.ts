@@ -12,7 +12,8 @@ export async function POST(
   }
 
   const { id } = await params;
-  const { status } = await request.json();
+  const body = await request.json();
+  const { status } = body;
 
   const { data: trip } = await ctx.admin
     .from("trips")
@@ -34,12 +35,30 @@ export async function POST(
     return NextResponse.json({ error: "not permitted" }, { status: 403 });
   }
 
-  const { error } = await ctx.admin.rpc("advance_trip_status", {
-    p_trip: id,
-    p_org: ctx.orgId,
-    p_status: status,
-    p_user: ctx.userId,
-  });
+  // Allocating names the truck and driver in the same step -- a trip
+  // can't be allocated without both (allocate_trip and
+  // advance_trip_status both refuse it).
+  let error;
+  if (status === "allocated") {
+    const { truckId, driverId } = body;
+    if (typeof truckId !== "string" || !truckId || typeof driverId !== "string" || !driverId) {
+      return NextResponse.json({ error: "Choose a truck and driver to allocate the trip." }, { status: 400 });
+    }
+    ({ error } = await ctx.admin.rpc("allocate_trip", {
+      p_trip: id,
+      p_org: ctx.orgId,
+      p_truck: truckId,
+      p_driver: driverId,
+      p_user: ctx.userId,
+    }));
+  } else {
+    ({ error } = await ctx.admin.rpc("advance_trip_status", {
+      p_trip: id,
+      p_org: ctx.orgId,
+      p_status: status,
+      p_user: ctx.userId,
+    }));
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });

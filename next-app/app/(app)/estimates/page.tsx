@@ -11,6 +11,7 @@ import type { RouteCostAnalysis } from "@/lib/insights/computeRouteCostDeltas";
 import { t, catLabel, type PrintLang } from "@/lib/print/translations";
 import type { BootstrapPayload, Customer, Route } from "@/lib/types";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
+import { pickRateCard } from "@/lib/rates/pickRateCard";
 
 type Finding = { finding: string; suggestion: string };
 type InsightsResult =
@@ -37,6 +38,7 @@ export default function EstimatesPage() {
   const [insightsByRoute, setInsightsByRoute] = useState<Record<string, InsightsResult>>({});
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [printLang, setPrintLang] = useState<PrintLang>("en");
+  const timeZone = useCompanyTimeZone();
 
   async function load() {
     const res = await fetch("/api/bootstrap");
@@ -118,9 +120,12 @@ export default function EstimatesPage() {
   const estimate = estimateTripCost(templateLines, quantities);
 
   const customer = data.customers.find((c) => c.id === customerId) ?? null;
-  const matchedRate = customerId
-    ? data.rateCards.find((r) => r.route_id === routeId && (r.customer_id === customerId || !r.customer_id))
+  // Today's rate. The Estimator has no commodity field, so a customer with
+  // a different rate per commodity on this route gets no single figure.
+  const ratePick = customerId && routeId
+    ? pickRateCard(data.rateCards, { customerId, routeId, onDate: today(timeZone) })
     : null;
+  const matchedRate = ratePick?.card ?? null;
   const revenueEstimate: CostEstimate | null = matchedRate
     ? estimateTripCost(
         [{ category: "revenue", amount: matchedRate.rate_amount, currency: matchedRate.rate_currency, basis: matchedRate.rate_basis as CostTemplateLine["basis"] }],
@@ -195,7 +200,9 @@ export default function EstimatesPage() {
                 </div>
               ) : customerId ? (
                 <div className="d-hint" style={{ marginTop: templateLines.length ? 16 : 0 }}>
-                  No rate card on file for this customer and route.
+                  {ratePick?.ambiguous
+                    ? `This customer has a different rate for each commodity on this route (${ratePick.commodities.join(", ")}), so there's no single revenue figure.`
+                    : "No current rate card for this customer and route."}
                 </div>
               ) : null}
               <RouteInsights result={insightsByRoute[routeId]} loading={insightsLoading && !insightsByRoute[routeId]} />

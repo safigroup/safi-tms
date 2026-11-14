@@ -10,7 +10,7 @@ A Next.js 16 (App Router, TypeScript) application, deployed on Vercel. All datab
 
 ### Views
 
-- **Board** — trip lifecycle: draft → allocated → loading → in transit → at border → delivered → POD received → invoiced → closed. Routes can have multiple alternate border-crossing paths (e.g. via Kasumbalesa or via Mokambo); owner/admin can retroactively edit trip details with a field-level audit trail.
+- **Board** — trip lifecycle: draft → allocated → loading → in transit → at border → delivered → POD received → invoiced → closed. A new trip has only a planned load date; its actual load date (which days running, the revenue month and the truck reports count from) is set when it starts loading. Routes can have multiple alternate border-crossing paths (e.g. via Kasumbalesa or via Mokambo); owner/admin can retroactively edit trip details with a field-level audit trail.
 - **Cost docket** — record trip costs (fuel with liters/price-per-liter auto-costing, border fees, tolls, etc.) with receipt photos; bulk-import costs from CSV/Excel; bulk-select and delete ledger entries; print a trip's full cost ledger; manage trip documents (POD, consignment note, T1 transit, etc.).
 - **Billing** — raise invoices (50% on loading / 50% on delivery, delivery half gated on POD being in hand), record payments, track receivables ageing, cancel invoices.
 - **Reports** — per-truck revenue/expense P&L with a category breakdown, a standing-cost ledger (maintenance, insurance, tyres, licensing, etc.), and asset breakeven tracking: purchase/clearing/registration costs are kept separate from running costs so the app can show cumulative net cashflow since a truck's purchase date and either when it broke even or a projected date at its recent pace.

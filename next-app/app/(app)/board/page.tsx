@@ -483,6 +483,7 @@ function TripDetail({
       </div>
       <div className="d-sec">
         <h3>Timing</h3>
+        <div className="d-kv"><span>Planned load</span><span>{trip.planned_load_date || "—"}</span></div>
         <div className="d-kv"><span>Loaded</span><span>{trip.actual_load_date || "—"}</span></div>
         <div className="d-kv"><span>Planned ETA</span><span>{trip.planned_eta || "—"}</span></div>
         <div className="d-kv"><span>Delivered</span><span>{trip.actual_delivery_at ? new Date(trip.actual_delivery_at).toLocaleDateString("en-CA") : "—"}</span></div>
@@ -1230,7 +1231,7 @@ function NewTripForm({
       </div>
       <div className="row">
         <div className="field">
-          <label htmlFor="nLoad">Load date</label>
+          <label htmlFor="nLoad">Planned load date</label>
           <input id="nLoad" type="date" value={loadDate} onChange={(e) => { setLoadDate(e.target.value); reprice({ loadDate: e.target.value }); applyEta(routeId, e.target.value); }} />
         </div>
         <div className="field">

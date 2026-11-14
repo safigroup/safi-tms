@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthedPlatformAdmin } from "@/lib/auth/getAuthedPlatformAdmin";
+import { validTimeZone } from "@/lib/format";
 
 export async function GET() {
   const ctx = await getAuthedPlatformAdmin();
@@ -9,7 +10,7 @@ export async function GET() {
 
   const { data, error } = await ctx.admin
     .from("organizations")
-    .select("id, name, country, base_currency, trip_prefix, invoice_prefix, created_at")
+    .select("id, name, country, base_currency, trip_prefix, invoice_prefix, time_zone, created_at")
     .order("name");
 
   if (error) {
@@ -39,10 +40,13 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { name, country, baseCurrency, tripPrefix, invoicePrefix, ownerEmail } = body;
+  const { name, country, baseCurrency, tripPrefix, invoicePrefix, timeZone, ownerEmail } = body;
 
   if (!name?.trim() || !country?.trim() || !baseCurrency?.trim() || !tripPrefix?.trim() || !invoicePrefix?.trim()) {
     return NextResponse.json({ error: "Name, country, currency, and both prefixes are required." }, { status: 400 });
+  }
+  if (!validTimeZone(timeZone)) {
+    return NextResponse.json({ error: "Choose the organization's time zone." }, { status: 400 });
   }
   if (!ownerEmail?.trim()) {
     return NextResponse.json({ error: "The new organization's owner email is required." }, { status: 400 });
@@ -65,6 +69,7 @@ export async function POST(request: Request) {
       base_currency: baseCurrency.trim().toUpperCase(),
       trip_prefix: tripPrefix.trim().toUpperCase(),
       invoice_prefix: invoicePrefix.trim().toUpperCase(),
+      time_zone: timeZone,
     })
     .select("id, name")
     .single();

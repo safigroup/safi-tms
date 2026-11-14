@@ -159,16 +159,6 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 // Clocks on phones drift; a minute either way isn't "the future".
 const FUTURE_SLACK_MS = 60_000;
 
-export function validTimeZone(timeZone: unknown): timeZone is string {
-  if (typeof timeZone !== "string" || !timeZone) return false;
-  try {
-    new Intl.DateTimeFormat("en", { timeZone });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 // The calendar day of a time in a time zone, as YYYY-MM-DD.
 export function dayIn(timeZone: string) {
   const f = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });

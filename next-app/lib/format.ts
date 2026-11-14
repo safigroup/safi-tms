@@ -17,6 +17,17 @@ export const lab = (s: string | null | undefined) => String(s || "").replace(/_/
 
 export const today = () => new Date().toISOString().slice(0, 10);
 
+// Whether a time zone name (e.g. "Africa/Lusaka") is one this runtime knows.
+export function validTimeZone(timeZone: unknown): timeZone is string {
+  if (typeof timeZone !== "string" || !timeZone) return false;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // A length of time, read the way a dispatcher says it: "under 1h", "14h",
 // "3d 4h", and past a week just "12d".
 export function durationLabel(ms: number) {

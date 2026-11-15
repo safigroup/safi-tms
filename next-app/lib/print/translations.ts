@@ -100,6 +100,11 @@ const STRINGS: Record<string, { en: string; fr: string }> = {
   paid_office: { en: "paid by office", fr: "payé par le bureau" },
   paid_agent: { en: "paid by agent", fr: "payé par l'agent" },
   paid_card: { en: "paid by card", fr: "payé par carte" },
+  // cashbook monthly summary groups
+  sum_payments: { en: "Customer payments", fr: "Paiements clients" },
+  sum_allocations: { en: "Trip allocations", fr: "Fonds alloués aux voyages" },
+  sum_trip_costs: { en: "Trip costs", fr: "Coûts de voyage" },
+  sum_truck_costs: { en: "Truck costs", fr: "Coûts camion" },
 
   // basis suffixes (estimate table)
   flat: { en: "flat", fr: "forfait" },

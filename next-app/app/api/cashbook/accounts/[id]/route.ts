@@ -32,7 +32,7 @@ export async function GET(
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await ctx.admin
       .from("cash_entries")
-      .select("id, account_id, occurred_on, direction, amount, category, counterparty, description, reference, transfer_id, source, detail, paid_by, trip_id, trip_no, record_amount, record_currency, created_at")
+      .select("id, account_id, occurred_on, direction, amount, category, counterparty, description, reference, transfer_id, source, detail, paid_by, trip_id, trip_no, record_amount, record_currency, amount_usd, reconciled_at, created_at")
       .eq("org_id", ctx.orgId)
       .eq("account_id", id)
       .order("occurred_on")

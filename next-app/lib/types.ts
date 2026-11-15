@@ -260,6 +260,11 @@ export type CashEntry = {
   trip_no: string | null;
   record_amount: number | null;
   record_currency: string | null;
+  // USD at the rate locked on the entry; null for a payment in another
+  // currency (converted at the rate on file the day it arrived instead)
+  amount_usd: number | null;
+  // ticked off against the account's own statement (bank, wallet, count)
+  reconciled_at: string | null;
   created_at: string;
 };
 

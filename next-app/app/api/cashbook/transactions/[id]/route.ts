@@ -29,9 +29,16 @@ export async function DELETE(
   }
 
   const del = ctx.admin.from("cash_transactions").delete().eq("org_id", ctx.orgId);
-  const { error } = tx.transfer_id ? await del.eq("transfer_id", tx.transfer_id) : await del.eq("id", id);
+  const { data: gone, error } = tx.transfer_id
+    ? await del.eq("transfer_id", tx.transfer_id).select("id")
+    : await del.eq("id", id).select("id");
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+  // their reconciliation ticks go with them
+  const ids = (gone ?? []).map((g) => g.id);
+  if (ids.length) {
+    await ctx.admin.from("cash_reconciliations").delete().eq("org_id", ctx.orgId).eq("source", "manual").in("record_id", ids);
   }
   return NextResponse.json({ ok: true });
 }

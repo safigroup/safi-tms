@@ -7,9 +7,10 @@ import { m2, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
 import { Spinner } from "@/lib/components/Spinner";
 import { t, type PrintLang } from "@/lib/print/translations";
-import { buildCashStatement, type CashStatement } from "@/lib/cashbook/statement";
+import { buildCashStatement, reconciledBalance, type CashStatement } from "@/lib/cashbook/statement";
 import { ACCOUNT_KIND_LABEL, DEFAULT_CATEGORIES } from "@/lib/cashbook/categories";
 import { entryLabel, entryText } from "@/lib/cashbook/describe";
+import { addMonths, monthLabel, type CashSummary } from "@/lib/cashbook/summary";
 import type { CashAccount, CashAccountKind, CashAccountSummary, CashEntry, CashToPlace } from "@/lib/types";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 
@@ -34,6 +35,10 @@ export default function CashbookPage() {
   const [mode, setMode] = useState<Mode>("out");
   const [printLang, setPrintLang] = useState<PrintLang>("en");
   const [printing, setPrinting] = useState<CashStatement | null>(null);
+  const [view, setView] = useState<"statements" | "summary">("statements");
+  const [openOnly, setOpenOnly] = useState(false);
+  const [bankBalance, setBankBalance] = useState("");
+  const timeZone = useCompanyTimeZone();
 
   async function loadOverview() {
     const res = await fetch("/api/cashbook");
@@ -84,9 +89,37 @@ export default function CashbookPage() {
   const account = detail && detail.account.id === selectedId ? detail.account : null;
   const statement = account ? buildCashStatement(account, detail!.entries, from || null, to || null) : null;
   const formMode: Mode = accounts.length ? mode : "new-account";
+  // Reconciliation: what the bank (wallet, cash count) should show at the
+  // end of the period, from the lines ticked off so far.
+  const asOf = to || today(timeZone);
+  const recBalance = account ? reconciledBalance(account, detail!.entries, asOf) : 0;
+  const openRows = statement ? statement.rows.filter((r) => !r.tx.reconciled_at) : [];
+  const shownRows = statement ? (openOnly ? openRows : statement.rows) : [];
+  const allShownTicked = shownRows.length > 0 && shownRows.every((r) => r.tx.reconciled_at);
+  const bankNum = parseFloat(bankBalance);
+  const firstMonth = accounts.length ? accounts.map((a) => a.opening_date).sort()[0].slice(0, 7) : null;
+
+  // Ticked or unticked straight away on screen; put back if the save fails.
+  async function setReconciled(lines: CashEntry[], reconciled: boolean) {
+    if (!lines.length) return;
+    const keys = new Set(lines.map((l) => l.source + ":" + l.id));
+    const stamp = reconciled ? new Date().toISOString() : null;
+    setDetail((d) => d && { ...d, entries: d.entries.map((e) => (keys.has(e.source + ":" + e.id) ? { ...e, reconciled_at: stamp } : e)) });
+    const res = await fetch("/api/cashbook/reconcile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: lines.map((l) => ({ source: l.source, id: l.id })), reconciled }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      toast.error(body.error || res.statusText);
+      if (selectedId) await loadDetail(selectedId);
+    }
+  }
 
   async function handleDelete(tx: CashEntry) {
-    if (!confirm(tx.transfer_id ? "Remove this transfer from both accounts?" : "Remove this entry?")) return;
+    const what = tx.transfer_id ? "Remove this transfer from both accounts?" : "Remove this entry?";
+    if (!confirm(tx.reconciled_at ? `${what} It's been reconciled with the account's statement.` : what)) return;
     const res = await fetch(`/api/cashbook/transactions/${tx.id}`, { method: "DELETE" });
     if (res.ok) {
       toast.success(tx.transfer_id ? "Transfer removed" : "Entry removed");
@@ -117,7 +150,15 @@ export default function CashbookPage() {
       <div className="panel" style={{ marginBottom: 18 }}>
         <div className="panel-head">
           <h2>Cashbook</h2>
-          <button className="act" type="button" onClick={() => setMode("new-account")}>+ New account</button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {accounts.length ? (
+              <div className="chips" role="group" aria-label="View" style={{ margin: 0 }}>
+                <button type="button" className={"chip" + (view === "statements" ? " on" : "")} onClick={() => setView("statements")}>Statements</button>
+                <button type="button" className={"chip" + (view === "summary" ? " on" : "")} onClick={() => setView("summary")}>Monthly summary</button>
+              </div>
+            ) : null}
+            <button className="act" type="button" onClick={() => { setView("statements"); setMode("new-account"); }}>+ New account</button>
+          </div>
         </div>
         {accounts.length ? (
           <div className="acct-grid">
@@ -141,6 +182,10 @@ export default function CashbookPage() {
         )}
       </div>
 
+      {view === "summary" && firstMonth ? (
+        <SummaryView firstMonth={firstMonth} thisMonth={today(timeZone).slice(0, 7)} />
+      ) : (
+      <>
       {toPlace && toPlace.items.length && active.length ? (
         <ToPlacePanel list={toPlace} accounts={active} onPlaced={refresh} />
       ) : null}
@@ -182,11 +227,44 @@ export default function CashbookPage() {
                     <div className={"v" + (statement.closingBalance < 0 ? " neg" : "")}>{m2(statement.closingBalance, account.currency)}</div>
                   </div>
                 </div>
+                <div className="rec-bar">
+                  <div className="rec-fig">
+                    <div className="k">Reconciled balance · {asOf}</div>
+                    <div className="v">{m2(recBalance, account.currency)}</div>
+                    <div className="r-min">
+                      {openRows.length ? `${openRows.length} line${openRows.length === 1 ? "" : "s"} in this period not reconciled yet` : "Every line in this period is reconciled"}
+                    </div>
+                  </div>
+                  <div className="field rec-bank">
+                    <label htmlFor="cbBank">The account&apos;s own statement says</label>
+                    <input id="cbBank" type="number" inputMode="decimal" step="0.01" placeholder={`${account.currency} on ${asOf}`} value={bankBalance} onChange={(e) => setBankBalance(e.target.value)} />
+                    {Number.isFinite(bankNum) ? (
+                      <div className={"hint rec-diff" + (Math.abs(bankNum - recBalance) < 0.005 ? " ok" : "")}>
+                        {Math.abs(bankNum - recBalance) < 0.005
+                          ? "Matches the reconciled balance."
+                          : `Difference ${m2(Math.round((bankNum - recBalance) * 100) / 100, account.currency)}: tick the lines that appear on it.`}
+                      </div>
+                    ) : null}
+                  </div>
+                  <button type="button" className={"chip" + (openOnly ? " on" : "")} onClick={() => setOpenOnly((v) => !v)}>
+                    Not reconciled only
+                  </button>
+                </div>
               </div>
               <div className="stmt-wrap">
                 <table className="stmt">
                   <thead>
                     <tr>
+                      <th className="rec-col">
+                        <input
+                          type="checkbox"
+                          checked={allShownTicked}
+                          disabled={!shownRows.length}
+                          onChange={() => setReconciled(shownRows.filter((r) => !!r.tx.reconciled_at === allShownTicked).map((r) => r.tx), !allShownTicked)}
+                          aria-label={allShownTicked ? "Untick every line shown" : "Tick every line shown as reconciled"}
+                          title="Reconciled with the account's own statement"
+                        />
+                      </th>
                       <th>Date</th>
                       <th>Description</th>
                       <th className="num">Money in (Dr)</th>
@@ -197,6 +275,7 @@ export default function CashbookPage() {
                   </thead>
                   <tbody>
                     <tr className="bf">
+                      <td />
                       <td className="mono">{statement.from}</td>
                       <td>{statement.from === account.opening_date ? "Opening balance" : "Balance brought forward"}</td>
                       <td className="num" />
@@ -204,8 +283,17 @@ export default function CashbookPage() {
                       <td className={"num" + (statement.openingBalance < 0 ? " neg" : "")}>{m2(statement.openingBalance, account.currency)}</td>
                       <td />
                     </tr>
-                    {statement.rows.map((r) => (
-                      <tr key={r.tx.source + r.tx.id}>
+                    {shownRows.map((r) => (
+                      <tr key={r.tx.source + r.tx.id} className={r.tx.reconciled_at ? "rec" : undefined}>
+                        <td className="rec-col">
+                          <input
+                            type="checkbox"
+                            checked={!!r.tx.reconciled_at}
+                            onChange={(e) => setReconciled([r.tx], e.target.checked)}
+                            aria-label={`Reconciled: ${entryLabel(r.tx, "en")} on ${r.tx.occurred_on}`}
+                            title="Reconciled with the account's own statement"
+                          />
+                        </td>
                         <td className="mono">{r.tx.occurred_on}</td>
                         <td>
                           <span className={"pill " + pillTone(r.tx)}>{entryLabel(r.tx, "en")}</span>{" "}
@@ -234,7 +322,7 @@ export default function CashbookPage() {
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colSpan={2}>Totals</td>
+                      <td colSpan={3}>Totals</td>
                       <td className="num">{m2(statement.totalIn, account.currency)}</td>
                       <td className="num">{m2(statement.totalOut, account.currency)}</td>
                       <td className={"num" + (statement.closingBalance < 0 ? " neg" : "")}>{m2(statement.closingBalance, account.currency)}</td>
@@ -242,7 +330,11 @@ export default function CashbookPage() {
                     </tr>
                   </tfoot>
                 </table>
-                {!statement.rows.length ? <div className="empty">No entries in this period.</div> : null}
+                {!statement.rows.length ? (
+                  <div className="empty">No entries in this period.</div>
+                ) : !shownRows.length ? (
+                  <div className="empty">Every line in this period is reconciled.</div>
+                ) : null}
               </div>
             </>
           ) : accounts.length ? (
@@ -291,6 +383,8 @@ export default function CashbookPage() {
           )}
         </div>
       </div>
+      </>
+      )}
 
       {printing && account ? (
         <StatementPrintSheet account={account} statement={printing} lang={printLang} onDone={() => setPrinting(null)} />
@@ -597,6 +691,126 @@ function AccountForm({
         {onCancel ? <button className="ghost" type="button" onClick={onCancel}>Cancel</button> : null}
       </form>
     </>
+  );
+}
+
+// Money in against money out by category, month by month, across every
+// account in USD (lib/cashbook/summary.ts), and the same months as an
+// Excel workbook for the accountant.
+function SummaryView({ firstMonth, thisMonth }: { firstMonth: string; thisMonth: string }) {
+  const [fromMonth, setFromMonth] = useState(() => {
+    const sixBack = addMonths(thisMonth, -5);
+    return sixBack < firstMonth ? firstMonth : sixBack;
+  });
+  const [toMonth, setToMonth] = useState(thisMonth);
+  const [lang, setLang] = useState<PrintLang>("en");
+  const key = `${fromMonth}|${toMonth}`;
+  const [loaded, setLoaded] = useState<{ key: string; summary: CashSummary | null; error: string | null } | null>(null);
+  const valid = /^\d{4}-\d{2}$/.test(fromMonth) && /^\d{4}-\d{2}$/.test(toMonth) && fromMonth <= toMonth;
+
+  useEffect(() => {
+    if (!valid) return;
+    let current = true;
+    fetch(`/api/cashbook/summary?${new URLSearchParams({ from: fromMonth, to: toMonth })}`)
+      .then(async (res) => {
+        const body = await res.json().catch(() => ({}));
+        if (current) setLoaded({ key, summary: res.ok ? body : null, error: res.ok ? null : body.error || res.statusText });
+      })
+      .catch(() => {
+        if (current) setLoaded({ key, summary: null, error: "Couldn't load the summary." });
+      });
+    return () => {
+      current = false;
+    };
+  }, [key, fromMonth, toMonth, valid]);
+
+  const s = loaded?.key === key ? loaded.summary : null;
+  const usd = (n: number | undefined) => (n ? m2(n) : "");
+  const exportHref = `/api/cashbook/export?${new URLSearchParams({ from: fromMonth, to: toMonth, lang })}`;
+
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <h2>Monthly summary</h2>
+        <span className="r-min">USD, every account · transfers between accounts left out</span>
+      </div>
+      <div className="panel-body sum-tools">
+        <div className="field">
+          <label htmlFor="smFrom">From</label>
+          <input id="smFrom" type="month" min={firstMonth} max={toMonth} value={fromMonth} onChange={(e) => setFromMonth(e.target.value)} />
+        </div>
+        <div className="field">
+          <label htmlFor="smTo">To</label>
+          <input id="smTo" type="month" min={fromMonth} value={toMonth} onChange={(e) => setToMonth(e.target.value)} />
+        </div>
+        <div className="sum-export">
+          <button type="button" className={"chip" + (lang === "en" ? " on" : "")} onClick={() => setLang("en")}>EN</button>
+          <button type="button" className={"chip" + (lang === "fr" ? " on" : "")} onClick={() => setLang("fr")}>FR</button>
+          {valid ? <a className="act" href={exportHref} download>Export to Excel</a> : null}
+        </div>
+      </div>
+      {!valid ? (
+        <div className="panel-body"><div className="note warn" style={{ marginBottom: 0 }}>Pick a From month on or before the To month.</div></div>
+      ) : loaded?.key === key && loaded.error ? (
+        <div className="panel-body"><div className="note bad" style={{ marginBottom: 0 }}>{loaded.error}</div></div>
+      ) : !s ? (
+        <Spinner />
+      ) : (
+        <>
+          {s.missingRates.length ? (
+            <div className="panel-body" style={{ paddingTop: 0 }}>
+              <div className="note warn" style={{ marginBottom: 0 }}>Left out: no exchange rate on file for {s.missingRates.join(", ")}.</div>
+            </div>
+          ) : null}
+          <div className="stmt-wrap">
+            <table className="stmt sum-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  {s.months.map((m) => <th key={m} className="num">{monthLabel(m, "en")}</th>)}
+                  <th className="num">Total</th>
+                </tr>
+              </thead>
+              {(["in", "out"] as const).map((direction) => {
+                const rows = s.rows.filter((r) => r.direction === direction);
+                const totals = direction === "in" ? s.totalIn : s.totalOut;
+                return (
+                  <tbody key={direction}>
+                    <tr className="sum-sec">
+                      <td colSpan={s.months.length + 2}>{direction === "in" ? "Money in" : "Money out"}</td>
+                    </tr>
+                    {rows.length ? rows.map((r) => (
+                      <tr key={r.key}>
+                        <td className="sum-label">{r.label}</td>
+                        {s.months.map((m) => <td key={m} className="num">{usd(r.byMonth[m])}</td>)}
+                        <td className="num">{m2(r.total)}</td>
+                      </tr>
+                    )) : (
+                      <tr><td className="sum-label" colSpan={s.months.length + 2} style={{ color: "var(--ink-soft)" }}>Nothing in these months.</td></tr>
+                    )}
+                    <tr className="sum-total">
+                      <td>{direction === "in" ? "Total money in" : "Total money out"}</td>
+                      {s.months.map((m) => <td key={m} className="num">{m2(totals[m])}</td>)}
+                      <td className="num">{m2(direction === "in" ? s.grand.in : s.grand.out)}</td>
+                    </tr>
+                  </tbody>
+                );
+              })}
+              <tfoot>
+                <tr>
+                  <td>Net (in − out)</td>
+                  {s.months.map((m) => <td key={m} className={"num" + (s.net[m] < 0 ? " neg" : "")}>{m2(s.net[m])}</td>)}
+                  <td className={"num" + (s.grand.net < 0 ? " neg" : "")}>{m2(s.grand.net)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <div className="panel-body bar-note">
+            Each line in USD at the rate locked when it was entered; customer payments in other currencies at the rate on file the day they arrived. Trip costs paid from a driver&apos;s float aren&apos;t here: they&apos;re inside the trip allocations.
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

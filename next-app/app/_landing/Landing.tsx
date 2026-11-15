@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ComponentType, type RefObject } from "react";
 import Link from "next/link";
 import { ThemeToggle } from "@/lib/components/ThemeToggle";
-import { COPY, LANG_COOKIE, type Lang } from "./copy";
+import { COPY, LANG_COOKIE, WHATSAPP, type Lang } from "./copy";
 import { DemoRequestForm } from "./DemoRequestForm";
 import { BillingPreview, BorderPreview, DispatchPreview, LiveTrip, OverviewPreview, ReviewPreview, RoadPreview } from "./previews";
 import s from "./landing.module.css";
@@ -19,6 +19,18 @@ const STEP_PREVIEWS: Record<string, ComponentType> = {
 function rememberLang(lang: Lang) {
   document.cookie = `${LANG_COOKIE}=${lang}; path=/; max-age=31536000; samesite=lax`;
   document.title = COPY[lang].meta.title;
+}
+
+// A chat opened on that number with the greeting already typed.
+const waLink = (wa: string, greeting: string) => `https://wa.me/${wa}?text=${encodeURIComponent(greeting)}`;
+
+function ChatIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" className={s.waIcon}>
+      <path d="M12 3.2a8.8 8.8 0 0 0-7.6 13.2L3.2 20.8l4.5-1.2A8.8 8.8 0 1 0 12 3.2Z" />
+      <path d="M9.1 8.2c.3 0 .5 0 .6.4l.8 1.9c.1.2 0 .4-.1.6l-.6.7c-.1.1-.1.3 0 .5a6.4 6.4 0 0 0 3 2.6c.2.1.4 0 .5-.1l.7-.8c.2-.2.4-.2.6-.1l1.8.9c.2.1.3.3.3.5 0 1-.8 1.9-1.9 2A7.6 7.6 0 0 1 7.4 10c.1-1 .9-1.8 1.7-1.8Z" className={s.waHandset} />
+    </svg>
+  );
 }
 
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -146,6 +158,17 @@ export function Landing({ initialLang, year }: { initialLang: Lang; year: number
                 <a href="#how" className={`${s.btn} ${s.btnHeroGhost}`}>{c.hero.secondary}</a>
               </div>
               <p className={s.reassure}>{c.hero.reassurance}</p>
+              <p className={s.heroWa}>
+                <span>{c.whatsapp.hero}</span>
+                {WHATSAPP.map((n, i) => (
+                  <span key={n.wa}>
+                    {i ? <span aria-hidden="true"> · </span> : null}
+                    <a href={waLink(n.wa, c.whatsapp.greeting)} target="_blank" rel="noopener noreferrer" title={n.display}>
+                      {n.country[lang]}
+                    </a>
+                  </span>
+                ))}
+              </p>
               <p className={s.credibility}>{c.hero.credibility}</p>
             </div>
             <LiveTrip caption={c.hero.liveCaption} />
@@ -302,6 +325,21 @@ export function Landing({ initialLang, year }: { initialLang: Lang; year: number
               <ol className={s.next}>
                 {c.demo.next.map((n, i) => <li key={i}>{n}</li>)}
               </ol>
+              <div className={s.wa}>
+                <p className={s.waLead}>{c.whatsapp.lead}</p>
+                <p className={s.waBody}>{c.whatsapp.body}</p>
+                <div className={s.waRow}>
+                  {WHATSAPP.map((n) => (
+                    <a key={n.wa} className={s.waBtn} href={waLink(n.wa, c.whatsapp.greeting)} target="_blank" rel="noopener noreferrer">
+                      <ChatIcon />
+                      <span className={s.waText}>
+                        <span className={s.waCountry}>{n.country[lang]}</span>
+                        <span className={s.waNum}>{n.display}</span>
+                      </span>
+                    </a>
+                  ))}
+                </div>
+              </div>
             </div>
             <DemoRequestForm lang={lang} c={c.demo.form} />
           </div>
@@ -313,6 +351,15 @@ export function Landing({ initialLang, year }: { initialLang: Lang; year: number
           <span className={s.brand}>
             <span className={s.brandName}>Safi TMS</span>
             <span className={s.footerMeta}>{c.footer.tagline}</span>
+          </span>
+          <span className={s.footerMeta}>
+            {c.whatsapp.footer}{" "}
+            {WHATSAPP.map((n, i) => (
+              <span key={n.wa}>
+                {i ? " · " : null}
+                <a href={waLink(n.wa, c.whatsapp.greeting)} target="_blank" rel="noopener noreferrer" className={s.footerLink}>{n.display}</a>
+              </span>
+            ))}
           </span>
           <span className={s.footerMeta}>
             <Link href="/login" className={s.signIn}>{c.footer.signIn}</Link>

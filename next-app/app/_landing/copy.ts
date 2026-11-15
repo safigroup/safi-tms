@@ -4,6 +4,13 @@ export type Lang = "en" | "fr";
 // rendered straight away, with no flash of the other language.
 export const LANG_COOKIE = "safi_lang";
 
+// The sales team's WhatsApp numbers. `wa` is the number as wa.me wants it:
+// digits only, country code first.
+export const WHATSAPP = [
+  { country: { en: "Tanzania", fr: "Tanzanie" }, display: "+255 745 931 016", wa: "255745931016" },
+  { country: { en: "Zambia", fr: "Zambie" }, display: "+260 978 731 593", wa: "260978731593" },
+] as const;
+
 // Screen names (Overview, Board, Cost docket, Billing, Cashbook, Reports,
 // Estimator) stay in English in both languages: they are the labels the
 // signed-in app actually shows.
@@ -203,9 +210,16 @@ const en = {
       },
       {
         q: "How do we get started?",
-        a: "Request a demo below. We'll walk you through Safi TMS on your own routes. If it's a fit, we set up your company's workspace and you invite your team.",
+        a: "Request a demo below, or message us on WhatsApp. We'll walk you through Safi TMS on your own routes. If it's a fit, we set up your company's workspace and you invite your team.",
       },
     ],
+  },
+  whatsapp: {
+    hero: "Or message us on WhatsApp:",
+    lead: "Prefer WhatsApp?",
+    body: "Message us directly, in English or French.",
+    greeting: "Hello Safi TMS, I'd like to see a demo.",
+    footer: "WhatsApp",
   },
   demo: {
     kicker: "Get started",
@@ -449,9 +463,16 @@ const fr: LandingCopy = {
       },
       {
         q: "Comment démarrer ?",
-        a: "Demandez une démo ci-dessous. Nous vous présentons Safi TMS sur vos propres itinéraires. Si cela vous convient, nous créons l'espace de votre entreprise et vous y invitez votre équipe.",
+        a: "Demandez une démo ci-dessous, ou écrivez-nous sur WhatsApp. Nous vous présentons Safi TMS sur vos propres itinéraires. Si cela vous convient, nous créons l'espace de votre entreprise et vous y invitez votre équipe.",
       },
     ],
+  },
+  whatsapp: {
+    hero: "Ou écrivez-nous sur WhatsApp :",
+    lead: "Vous préférez WhatsApp ?",
+    body: "Écrivez-nous directement, en français ou en anglais.",
+    greeting: "Bonjour Safi TMS, je souhaite voir une démo.",
+    footer: "WhatsApp",
   },
   demo: {
     kicker: "Commencer",

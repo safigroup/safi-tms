@@ -27,6 +27,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  // Absolute URLs for the share card (app/opengraph-image.tsx) and the
+  // like resolve against the production domain.
+  metadataBase: new URL("https://safitms.com"),
   title: "Safi TMS",
 };
 

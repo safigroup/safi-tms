@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
 import { CAN_USE_CASHBOOK } from "@/lib/auth/permissions";
 import { getOrgCashAccount, rateToUsd } from "@/lib/cashbook/server";
 
 const PAGE = 1000;
 
-// One account and all of its transactions, for its statement. Paged
-// because the API caps a single read at 1,000 rows and a statement needs
-// every earlier movement to carry its balance forward correctly.
+// One account and every line of its statement -- manual entries and the
+// TMS records placed in it (the cash_entries view). Paged because the API
+// caps a single read at 1,000 rows and a statement needs every earlier
+// movement to carry its balance forward correctly.
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -26,24 +28,34 @@ export async function GET(
     return NextResponse.json({ error: "account not found" }, { status: 404 });
   }
 
-  const transactions = [];
+  const entries = [];
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await ctx.admin
-      .from("cash_transactions")
-      .select("id, account_id, occurred_on, direction, amount, fx_rate_to_usd, amount_usd, category, counterparty, description, reference, transfer_id, created_at")
+      .from("cash_entries")
+      .select("id, account_id, occurred_on, direction, amount, category, counterparty, description, reference, transfer_id, source, detail, paid_by, trip_id, trip_no, record_amount, record_currency, created_at")
       .eq("org_id", ctx.orgId)
       .eq("account_id", id)
       .order("occurred_on")
       .order("created_at")
+      .order("id")
       .range(from, from + PAGE - 1);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    transactions.push(...(data ?? []));
+    entries.push(...(data ?? []));
     if (!data || data.length < PAGE) break;
   }
 
-  return NextResponse.json({ account, transactions });
+  return NextResponse.json({ account, entries });
+}
+
+// How many statement lines an account has, optionally only those dated
+// before a day -- manual entries and placed TMS records alike.
+async function countEntries(admin: SupabaseClient, accountId: string, before?: string) {
+  let q = admin.from("cash_entries").select("id", { count: "exact", head: true }).eq("account_id", accountId);
+  if (before) q = q.lt("occurred_on", before);
+  const { count } = await q;
+  return count ?? 0;
 }
 
 // Rename, deactivate, or correct the type, opening balance/date -- or
@@ -86,11 +98,7 @@ export async function PATCH(
     if (typeof body.currency !== "string" || (await rateToUsd(ctx.admin, ctx.orgId, body.currency)) === null) {
       return NextResponse.json({ error: "Pick a currency with an exchange rate on file." }, { status: 400 });
     }
-    const { count } = await ctx.admin
-      .from("cash_transactions")
-      .select("id", { count: "exact", head: true })
-      .eq("account_id", id);
-    if (count) {
+    if (await countEntries(ctx.admin, id)) {
       return NextResponse.json(
         { error: `This account already has entries in ${account.currency}, so its currency can't change. Delete them first, or open a new account.` },
         { status: 400 },
@@ -107,13 +115,8 @@ export async function PATCH(
     if (!/^\d{4}-\d{2}-\d{2}$/.test(body.openingDate)) {
       return NextResponse.json({ error: "Enter an opening date." }, { status: 400 });
     }
-    const { count } = await ctx.admin
-      .from("cash_transactions")
-      .select("id", { count: "exact", head: true })
-      .eq("account_id", id)
-      .lt("occurred_on", body.openingDate);
-    if (count) {
-      return NextResponse.json({ error: "Some transactions are dated before that opening date." }, { status: 400 });
+    if (await countEntries(ctx.admin, id, body.openingDate)) {
+      return NextResponse.json({ error: "Some entries are dated before that opening date." }, { status: 400 });
     }
     updates.opening_date = body.openingDate;
   }

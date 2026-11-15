@@ -87,7 +87,22 @@ The product previews (`app/_landing/previews.tsx`) are pictures of the real scre
 
 Statements (`lib/cashbook/statement.ts`, shared by the page and its English/French printout) show money in as the debit side and money out as the credit side, with the balance brought forward to the period's first day. Account balances come from the `cash_account_balances` view, so they stay correct past the API's 1,000-row read limit.
 
-Unlike the rest of the app, **viewing** is restricted too: only owner, admin and finance (`CAN_USE_CASHBOOK`), on every `/api/cashbook` route. Phase 2 will add invoice payments, office/agent/card-paid trip costs, trip allocations and truck costs to these statements automatically.
+Unlike the rest of the app, **viewing** is restricted too: only owner, admin and finance (`CAN_USE_CASHBOOK`), on every `/api/cashbook` route. The cash tables and views are revoked from `anon` and `authenticated` as well, so organization isolation alone can't expose them through the public API.
+
+**TMS records in the cashbook** (phase 2). Money that already passes through the app lands in the cashbook without being typed twice:
+
+| Record | Cashbook | Field on the form |
+|---|---|---|
+| Invoice payment (Billing) | money in | Received into |
+| Trip cost paid by Office, Agent or Card (Docket) | money out | Paid from |
+| Trip allocation (Docket → Balance) | money out | Paid from |
+| Truck cost other than depreciation (Reports) | money out | Paid from |
+
+A driver-float cost never goes in an account (that money left when it was allocated), and depreciation isn't money leaving anywhere. Each of the four tables has `cash_account_id` and, only when the account is in another currency, `cash_amount` (what actually went through the account). The records stay where they are; the `cash_entries` view unions them with manual entries, and `cash_account_balances` and every statement read it, so correcting a cost in the Docket also corrects the cashbook.
+
+The `cash_link_guard` trigger keeps links valid whichever route writes them: same company, open account, dated on or after the account's opening date, an account-currency amount when currencies differ. Setting a link that doesn't fit is refused with a message the user sees; an edit elsewhere that stops a link fitting (paid by changed to the driver float, currency changed, the amount changed on a cross-currency link) sends the record back to **To place** instead of failing.
+
+The account field (`lib/components/CashAccountField.tsx`) only shows for cashbook roles and remembers each person's last account per currency; records from anyone else, "decide later", the bulk cost import, and everything dated since the first account opened but entered before these links existed wait in the Cashbook's **To place** list (`/api/cashbook/links`), where finance ticks them and picks the account (several at once in the account's currency, or one at a time with the amount when it's in another). A placed record can be taken back out of a statement onto To place; it's only deleted where it was entered. Statement lines and their English/French printout are described by `lib/cashbook/describe.ts`.
 
 ## Notes for whoever (or whatever) works on this next
 

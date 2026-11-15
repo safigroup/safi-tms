@@ -13,6 +13,10 @@ import type { PrintLang } from "@/lib/print/translations";
 import type { AuditLogEntry, BootstrapPayload, BoardTrip, FxRate, TripAllocation, TripCost, TripDocument } from "@/lib/types";
 import { buildTripStatement } from "@/lib/tripStatement";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
+import { CashAccountField, useCashAccountChoice } from "@/lib/components/CashAccountField";
+
+// Who paid, for the costs that go in a cashbook account.
+const CASHBOOK_PAYERS = ["office", "agent", "card"];
 
 const CATS = [
   "fuel", "driver_advance", "driver_allowance", "border_fees", "customs_duty",
@@ -53,6 +57,10 @@ export default function DocketPage() {
   const [selectedCostIds, setSelectedCostIds] = useState<Set<string>>(new Set());
   const [printJob, setPrintJob] = useState<{ trip: BoardTrip; costs: TripCost[]; allocations: TripAllocation[]; lang: PrintLang } | null>(null);
   const [printLang, setPrintLang] = useState<PrintLang>("en");
+  // Only money the company paid goes in a cashbook account; a driver-float
+  // cost was already counted when the trip's funds were allocated.
+  const costAccount = useCashAccountChoice("out", draft.cur);
+  const costInCashbook = CASHBOOK_PAYERS.includes(draft.paid);
 
   useEffect(() => {
     if (printJob) window.print();
@@ -204,6 +212,7 @@ export default function DocketPage() {
           description: draft.desc.trim() || null,
           location: draft.loc.trim() || null,
           paidBy: draft.paid,
+          cashAccountId: costInCashbook ? costAccount.submitted : null,
           receiptRef: draft.ref.trim() || null,
           receiptPath,
           liters: draft.cat === "fuel" ? draft.liters || null : null,
@@ -494,6 +503,7 @@ export default function DocketPage() {
               <input id="ref" type="text" value={draft.ref} onChange={(e) => updateDraft({ ref: e.target.value })} />
             </div>
           </div>
+          {costInCashbook && draft.cur ? <CashAccountField id="costAccount" direction="out" currency={draft.cur} choice={costAccount} /> : null}
           <label style={{ display: "block", fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--ink-soft)", marginBottom: 5 }}>
             Receipt photo
           </label>
@@ -842,6 +852,7 @@ function BalanceTab({
 
   const amtNum = parseFloat(amount);
   const rateToUsd = currency === "USD" ? 1 : fx.find((r) => r.currency === currency)?.rate_to_usd;
+  const cashAccount = useCashAccountChoice("out", currency);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -851,7 +862,7 @@ function BalanceTab({
     const res = await fetch("/api/trip-allocations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tripId, amount: amtNum, currency, allocatedOn, description, reference }),
+      body: JSON.stringify({ tripId, amount: amtNum, currency, allocatedOn, description, reference, cashAccountId: cashAccount.submitted }),
     });
     setSaving(false);
     if (!res.ok) {
@@ -917,6 +928,7 @@ function BalanceTab({
               <input id="alRef" type="text" placeholder="e.g. M-Pesa code" value={reference} onChange={(e) => setReference(e.target.value)} />
             </div>
           </div>
+          <CashAccountField id="alAccount" direction="out" currency={currency} choice={cashAccount} />
           {currency !== "USD" && Number.isFinite(amtNum) && amtNum > 0 ? (
             <div className="d-hint" style={{ marginBottom: 10 }}>
               {rateToUsd !== undefined ? `≈ ${m2(amtNum * rateToUsd)} at the rate on file` : `No exchange rate on file for ${currency}.`}

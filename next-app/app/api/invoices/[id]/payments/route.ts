@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
 import { CAN_MANAGE_BILLING } from "@/lib/auth/permissions";
+import { requestedCashAccount } from "@/lib/cashbook/server";
 
 // Ports pay() (index.html). Currency is the invoice's own currency, not a
 // client-supplied value -- looked up server-side from the org-scoped
@@ -42,6 +43,7 @@ export async function POST(
     received_on: body.receivedOn,
     method: body.method,
     reference: body.reference?.trim() || null,
+    cash_account_id: requestedCashAccount(ctx.role, body.cashAccountId),
   });
 
   if (error) {

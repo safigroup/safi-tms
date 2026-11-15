@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
 import { CAN_EDIT_COMMERCIAL } from "@/lib/auth/permissions";
+import { requestedCashAccount } from "@/lib/cashbook/server";
 
 // Standing (non-trip) truck costs -- maintenance, insurance, licensing,
 // etc. Mirrors trip-costs/route.ts's FX-freeze-at-entry-time pattern
@@ -65,6 +66,7 @@ export async function POST(request: Request) {
       currency,
       fx_rate_to_usd: rateToUsd,
       incurred_on: incurredOn,
+      cash_account_id: requestedCashAccount(ctx.role, body.cashAccountId),
       recorded_by: ctx.userId,
     })
     .select("id, amount_usd")

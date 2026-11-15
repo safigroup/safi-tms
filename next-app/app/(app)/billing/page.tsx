@@ -10,6 +10,7 @@ import { Spinner } from "@/lib/components/Spinner";
 import { t, invoiceTypeLabel, type PrintLang } from "@/lib/print/translations";
 import type { ArInvoice, BillableTrip, BootstrapPayload } from "@/lib/types";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
+import { CashAccountField, useCashAccountChoice } from "@/lib/components/CashAccountField";
 
 // Mirrors lib/auth/permissions.ts's CAN_MANAGE_BILLING -- UI convenience
 // only (hides actions a role can't use), the route handlers are the real check.
@@ -326,6 +327,7 @@ function InvoiceDetailPanel({
   const [paying, setPaying] = useState(false);
   const [payments, setPayments] = useState<InvoiceDetail["payments"] | null>(null);
   const [printLang, setPrintLang] = useState<PrintLang>("en");
+  const cashAccount = useCashAccountChoice("in", i?.currency ?? "USD");
 
   async function loadPayments() {
     const res = await fetch(`/api/invoices/${invoiceId}`);
@@ -376,7 +378,7 @@ function InvoiceDetailPanel({
     const res = await fetch(`/api/invoices/${invoiceId}/payments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: amt, receivedOn: payDate, method: payMethod, reference: payRef.trim() || null }),
+      body: JSON.stringify({ amount: amt, receivedOn: payDate, method: payMethod, reference: payRef.trim() || null, cashAccountId: cashAccount.submitted }),
     });
     setPaying(false);
     if (!res.ok) {
@@ -478,6 +480,7 @@ function InvoiceDetailPanel({
             </div>
             <div className="field"><label htmlFor="pRef">Reference</label><input id="pRef" type="text" value={payRef} onChange={(e) => setPayRef(e.target.value)} /></div>
           </div>
+          <CashAccountField id="pAccount" direction="in" currency={i.currency} choice={cashAccount} />
           <button className="primary settle" type="submit" disabled={paying}>{paying ? "Recording…" : "Record payment"}</button>
         </form>
       ) : null}

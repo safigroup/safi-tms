@@ -9,11 +9,16 @@ import { Spinner } from "@/lib/components/Spinner";
 import { t, type PrintLang } from "@/lib/print/translations";
 import { buildCashStatement, type CashStatement } from "@/lib/cashbook/statement";
 import { ACCOUNT_KIND_LABEL, DEFAULT_CATEGORIES } from "@/lib/cashbook/categories";
-import type { CashAccount, CashAccountKind, CashAccountSummary, CashTransaction } from "@/lib/types";
+import { entryLabel, entryText } from "@/lib/cashbook/describe";
+import type { CashAccount, CashAccountKind, CashAccountSummary, CashEntry, CashToPlace } from "@/lib/types";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 
 type Overview = { accounts: CashAccountSummary[]; currencies: string[]; usedCategories: { in: string[]; out: string[] } };
+type ToPlaceList = { since: string | null; items: CashToPlace[]; more: boolean };
 type Mode = "in" | "out" | "transfer" | "new-account" | "edit-account";
+
+const pillTone = (e: { source: string; direction: string; transfer_id?: string | null }) =>
+  e.transfer_id ? "grey" : e.direction === "in" ? "good" : "violet";
 
 // The cashbook starts here: accounts open with their balance on this date.
 const START_DATE = "2026-11-01";
@@ -22,7 +27,8 @@ export default function CashbookPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<{ account: CashAccount; transactions: CashTransaction[] } | null>(null);
+  const [detail, setDetail] = useState<{ account: CashAccount; entries: CashEntry[] } | null>(null);
+  const [toPlace, setToPlace] = useState<ToPlaceList | null>(null);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [mode, setMode] = useState<Mode>("out");
@@ -45,14 +51,19 @@ export default function CashbookPage() {
     if (res.ok) setDetail(await res.json());
   }
 
+  async function loadToPlace() {
+    const res = await fetch("/api/cashbook/links");
+    if (res.ok) setToPlace(await res.json());
+  }
+
   async function refresh() {
-    await loadOverview();
-    if (selectedId) await loadDetail(selectedId);
+    await Promise.all([loadOverview(), loadToPlace(), selectedId ? loadDetail(selectedId) : null]);
   }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount
     loadOverview();
+    loadToPlace();
   }, []);
 
   useEffect(() => {
@@ -71,15 +82,33 @@ export default function CashbookPage() {
   const { accounts } = overview;
   const active = accounts.filter((a) => a.is_active);
   const account = detail && detail.account.id === selectedId ? detail.account : null;
-  const statement = account ? buildCashStatement(account, detail!.transactions, from || null, to || null) : null;
+  const statement = account ? buildCashStatement(account, detail!.entries, from || null, to || null) : null;
   const formMode: Mode = accounts.length ? mode : "new-account";
 
-  async function handleDelete(tx: CashTransaction) {
+  async function handleDelete(tx: CashEntry) {
     if (!confirm(tx.transfer_id ? "Remove this transfer from both accounts?" : "Remove this entry?")) return;
     const res = await fetch(`/api/cashbook/transactions/${tx.id}`, { method: "DELETE" });
     if (res.ok) {
       toast.success(tx.transfer_id ? "Transfer removed" : "Entry removed");
       await refresh();
+    }
+  }
+
+  // A TMS record isn't deleted here -- that's done where it was entered.
+  // It just leaves this account and goes back to To place.
+  async function handleUnplace(tx: CashEntry) {
+    if (!confirm("Take this out of the account? It goes back to To place, and stays recorded where it was entered.")) return;
+    const res = await fetch("/api/cashbook/links", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source: tx.source, id: tx.id }),
+    });
+    if (res.ok) {
+      toast.success("Moved back to To place");
+      await refresh();
+    } else {
+      const body = await res.json().catch(() => ({}));
+      toast.error(body.error || res.statusText);
     }
   }
 
@@ -111,6 +140,10 @@ export default function CashbookPage() {
           </div>
         )}
       </div>
+
+      {toPlace && toPlace.items.length && active.length ? (
+        <ToPlacePanel list={toPlace} accounts={active} onPlaced={refresh} />
+      ) : null}
 
       <div className="grid">
         <div className="panel">
@@ -172,18 +205,30 @@ export default function CashbookPage() {
                       <td />
                     </tr>
                     {statement.rows.map((r) => (
-                      <tr key={r.tx.id}>
+                      <tr key={r.tx.source + r.tx.id}>
                         <td className="mono">{r.tx.occurred_on}</td>
                         <td>
-                          <span className={"pill " + (r.tx.transfer_id ? "grey" : r.tx.direction === "in" ? "good" : "violet")}>{r.tx.category}</span>{" "}
-                          {r.tx.counterparty ? <b style={{ fontWeight: 600 }}>{r.tx.counterparty}</b> : null}
-                          {r.tx.description ? (r.tx.counterparty ? " — " : "") + r.tx.description : null}
+                          <span className={"pill " + pillTone(r.tx)}>{entryLabel(r.tx, "en")}</span>{" "}
+                          {r.tx.source === "manual" ? (
+                            <>
+                              {r.tx.counterparty ? <b style={{ fontWeight: 600 }}>{r.tx.counterparty}</b> : null}
+                              {r.tx.description ? (r.tx.counterparty ? " — " : "") + r.tx.description : null}
+                            </>
+                          ) : (
+                            entryText(r.tx, "en", account.currency)
+                          )}
                           {r.tx.reference ? <div className="r-mono">{r.tx.reference}</div> : null}
                         </td>
                         <td className="num">{r.moneyIn ? m2(r.moneyIn, account.currency) : ""}</td>
                         <td className="num">{r.moneyOut ? m2(r.moneyOut, account.currency) : ""}</td>
                         <td className={"num" + (r.balance < 0 ? " neg" : "")}>{m2(r.balance, account.currency)}</td>
-                        <td><button className="x" type="button" onClick={() => handleDelete(r.tx)}>✕</button></td>
+                        <td>
+                          {r.tx.source === "manual" ? (
+                            <button className="x" type="button" title="Remove this entry" onClick={() => handleDelete(r.tx)}>✕</button>
+                          ) : (
+                            <button className="x" type="button" title="Take out of this account (back to To place)" onClick={() => handleUnplace(r.tx)}>↩</button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -213,7 +258,7 @@ export default function CashbookPage() {
               key={formMode === "edit-account" ? account!.id : "new"}
               account={formMode === "edit-account" ? account! : null}
               currencies={overview.currencies}
-              hasEntries={formMode === "edit-account" && !!detail?.transactions.length}
+              hasEntries={formMode === "edit-account" && !!detail?.entries.length}
               onSaved={async (id) => {
                 setMode("out");
                 if (id) setSelectedId(id);
@@ -555,6 +600,175 @@ function AccountForm({
   );
 }
 
+// TMS records the cashbook takes that aren't in an account yet: anything
+// entered by someone who can't see the cashbook, anything left as "decide
+// later", everything from before these links existed, and anything taken
+// back out of a statement. Tick them and pick the account they went
+// through. Several at once must be in the account's currency; one in
+// another currency also needs the amount as it went through the account.
+function ToPlacePanel({ list, accounts, onPlaced }: {
+  list: ToPlaceList;
+  accounts: CashAccountSummary[];
+  onPlaced: () => Promise<void>;
+}) {
+  const key = (i: CashToPlace) => i.source + ":" + i.id;
+  const currencies = Array.from(new Set(list.items.map((i) => i.record_currency))).sort();
+  const [cur, setCur] = useState("all");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [accountId, setAccountId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const shown = list.items.filter((i) => cur === "all" || i.record_currency === cur);
+  const picked = list.items.filter((i) => selected.has(key(i)));
+  const pickedCurrencies = new Set(picked.map((i) => i.record_currency));
+  // all ticked in one currency with a single open account in it: that one
+  const onlyMatch = pickedCurrencies.size === 1 ? accounts.filter((a) => pickedCurrencies.has(a.currency)) : [];
+  const effectiveId = accountId || (onlyMatch.length === 1 ? onlyMatch[0].id : "");
+  const account = accounts.find((a) => a.id === effectiveId);
+  const otherCurrency = account ? picked.filter((i) => i.record_currency !== account.currency) : [];
+  const needsAmount = picked.length === 1 && otherCurrency.length === 1;
+  const blocked = picked.length > 1 && otherCurrency.length > 0;
+  const allShownPicked = shown.length > 0 && shown.every((i) => selected.has(key(i)));
+
+  function toggle(i: CashToPlace) {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(key(i))) next.delete(key(i));
+      else next.add(key(i));
+      return next;
+    });
+  }
+
+  function toggleAllShown() {
+    setSelected((s) => {
+      const next = new Set(s);
+      for (const i of shown) {
+        if (allShownPicked) next.delete(key(i));
+        else next.add(key(i));
+      }
+      return next;
+    });
+  }
+
+  async function place(e: FormEvent) {
+    e.preventDefault();
+    if (!account) return;
+    setBusy(true);
+    setError(null);
+    const res = await fetch("/api/cashbook/links", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        accountId: account.id,
+        items: picked.map((i) => ({ source: i.source, id: i.id })),
+        amount: needsAmount ? Number(amount) : undefined,
+      }),
+    });
+    setBusy(false);
+    const body = await res.json().catch(() => ({}));
+    if (body.placed) toast.success(`${body.placed} placed in ${account.name}`);
+    if (body.errors?.length) {
+      setError(`${body.errors.length === 1 ? "One" : body.errors.length} couldn't be placed: ${body.errors[0].error}`);
+    } else if (!res.ok) {
+      setError(body.error || res.statusText);
+    }
+    setSelected(new Set());
+    setAmount("");
+    await onPlaced();
+  }
+
+  return (
+    <div className="panel" style={{ marginBottom: 18 }}>
+      <div className="panel-head">
+        <h2>To place</h2>
+        <span className="r-min">
+          {list.items.length}{list.more ? "+" : ""} from Billing, the Docket and truck costs{list.since ? `, since ${list.since}` : ""}
+        </span>
+      </div>
+      <div className="panel-body" style={{ paddingBottom: 6 }}>
+        <div className="d-hint" style={{ marginBottom: currencies.length > 1 ? 10 : 0 }}>
+          Payments, office/agent/card costs, allocations and truck costs that aren&apos;t in an account yet. Tick them and pick the account they went through.
+        </div>
+        {currencies.length > 1 ? (
+          <div className="chips">
+            {["all", ...currencies].map((c) => (
+              <button key={c} type="button" className={"chip" + (cur === c ? " on" : "")} onClick={() => setCur(c)}>
+                {c === "all" ? "All" : c}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <div className="stmt-wrap" style={{ maxHeight: 380, overflowY: "auto" }}>
+        <table className="stmt">
+          <thead>
+            <tr>
+              <th style={{ width: 34 }}>
+                <input type="checkbox" checked={allShownPicked} onChange={toggleAllShown} aria-label="Tick everything shown" />
+              </th>
+              <th>Date</th>
+              <th>Description</th>
+              <th className="num">Money in</th>
+              <th className="num">Money out</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((i) => (
+              <tr key={key(i)}>
+                <td>
+                  <input type="checkbox" checked={selected.has(key(i))} onChange={() => toggle(i)} aria-label={`Tick ${entryLabel(i, "en")} on ${i.occurred_on}`} />
+                </td>
+                <td className="mono">{i.occurred_on}</td>
+                <td>
+                  <span className={"pill " + pillTone(i)}>{entryLabel(i, "en")}</span> {entryText(i, "en")}
+                  {i.reference ? <div className="r-mono">{i.reference}</div> : null}
+                </td>
+                <td className="num">{i.direction === "in" ? m2(i.record_amount, i.record_currency) : ""}</td>
+                <td className="num">{i.direction === "out" ? m2(i.record_amount, i.record_currency) : ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <form className="panel-body" onSubmit={place}>
+        {error ? <div className="note bad">{error}</div> : null}
+        <div className="row">
+          <div className="field">
+            <label htmlFor="tpAccount">{picked.length ? `Place ${picked.length} ticked in` : "Place ticked in"}</label>
+            <select id="tpAccount" value={effectiveId} onChange={(e) => setAccountId(e.target.value)}>
+              <option value="">Pick an account…</option>
+              {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} · {a.currency}</option>)}
+            </select>
+          </div>
+          {needsAmount && account ? (
+            <div className="field">
+              <label htmlFor="tpAmount">Amount in {account.currency}</label>
+              <input id="tpAmount" type="number" inputMode="decimal" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+              <div className="hint">
+                {m2(picked[0].record_amount, picked[0].record_currency)} as it went through {account.name}
+              </div>
+            </div>
+          ) : null}
+        </div>
+        {blocked && account ? (
+          <div className="note warn">
+            {otherCurrency.length} ticked {otherCurrency.length === 1 ? "is" : "are"} not in {account.currency}. Place {otherCurrency.length === 1 ? "it" : "those"} one at a time, with the amount that went through the account.
+          </div>
+        ) : null}
+        <button
+          className="primary"
+          type="submit"
+          disabled={busy || !picked.length || !account || blocked || (needsAmount && !(Number(amount) > 0))}
+        >
+          {busy ? "Placing…" : picked.length && account ? `Place ${picked.length} in ${account.name}` : "Place"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function StatementPrintSheet({
   account,
   statement,
@@ -616,10 +830,10 @@ function StatementPrintSheet({
             <td className="num">{m2(statement.openingBalance, cur)}</td>
           </tr>
           {statement.rows.map((r) => (
-            <tr key={r.tx.id}>
+            <tr key={r.tx.source + r.tx.id}>
               <td>{r.tx.occurred_on}</td>
               <td>
-                {[r.tx.category, r.tx.counterparty, r.tx.description].filter(Boolean).join(" — ")}
+                {[entryLabel(r.tx, lang), entryText(r.tx, lang, cur)].filter(Boolean).join(" — ")}
                 {r.tx.reference ? " · " + r.tx.reference : ""}
               </td>
               <td className="num">{r.moneyIn ? m2(r.moneyIn, cur) : ""}</td>

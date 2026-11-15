@@ -1,6 +1,6 @@
-import type { CashAccount, CashTransaction } from "@/lib/types";
+import type { CashAccount, CashEntry } from "@/lib/types";
 
-export type CashStatementRow = { tx: CashTransaction; moneyIn: number; moneyOut: number; balance: number };
+export type CashStatementRow = { tx: CashEntry; moneyIn: number; moneyOut: number; balance: number };
 
 export type CashStatement = {
   from: string;
@@ -18,19 +18,20 @@ const cents = (n: number) => Math.round(n * 100) / 100;
 // the balance brought forward to the period's first day (the opening
 // balance plus everything before it), then each movement with a running
 // balance. Money in is the debit side, money out the credit side -- the
-// same convention as a trip's balance statement. Shared by the Cashbook
+// same convention as a trip's balance statement. Entries are manual ones
+// and TMS records placed in the account alike. Shared by the Cashbook
 // page and its printout so the two can't disagree.
 export function buildCashStatement(
   account: CashAccount,
-  transactions: CashTransaction[],
+  entries: CashEntry[],
   from: string | null,
   to: string | null,
 ): CashStatement {
   const start = from && from > account.opening_date ? from : account.opening_date;
-  const sorted = [...transactions].sort(
+  const sorted = [...entries].sort(
     (a, b) => a.occurred_on.localeCompare(b.occurred_on) || a.created_at.localeCompare(b.created_at),
   );
-  const signed = (t: CashTransaction) => (t.direction === "in" ? 1 : -1) * Number(t.amount);
+  const signed = (t: CashEntry) => (t.direction === "in" ? 1 : -1) * Number(t.amount);
 
   let balance = cents(
     Number(account.opening_balance) + sorted.filter((t) => t.occurred_on < start).reduce((s, t) => s + signed(t), 0),

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
 import { CAN_MANAGE_TRIPS } from "@/lib/auth/permissions";
+import { requestedCashAccount } from "@/lib/cashbook/server";
 
 // Records money allocated to a trip -- the debit side of its balance
 // statement. Same permission and same rate-on-file conversion as a trip
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
       fx_rate_to_usd: rateToUsd,
       description: body.description?.trim() || null,
       reference: body.reference?.trim() || null,
+      cash_account_id: requestedCashAccount(ctx.role, body.cashAccountId),
       recorded_by: ctx.userId,
     })
     .select("id, amount_usd")

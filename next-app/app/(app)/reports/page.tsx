@@ -11,6 +11,7 @@ import { TripLedgerBody } from "@/lib/components/TripLedgerBody";
 import { t, catLabel, type PrintLang } from "@/lib/print/translations";
 import type { BootstrapPayload, Breakeven, TruckReport } from "@/lib/types";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
+import { CashAccountField, useCashAccountChoice } from "@/lib/components/CashAccountField";
 
 // Mirrors lib/auth/permissions.ts's CAN_EDIT_COMMERCIAL -- UI convenience
 // only (hides actions a role can't use), the route handlers are the real check.
@@ -406,6 +407,9 @@ function AddTruckCostForm({
   const amtNum = parseFloat(amount);
   const fxRate = fx.find((r) => r.currency === currency);
   const rateToUsd = currency === "USD" ? 1 : fxRate?.rate_to_usd;
+  // Depreciation is a book entry, not money leaving an account.
+  const cashAccount = useCashAccountChoice("out", currency);
+  const inCashbook = category !== "depreciation";
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -427,6 +431,7 @@ function AddTruckCostForm({
         currency,
         incurredOn,
         description: description.trim() || null,
+        cashAccountId: inCashbook ? cashAccount.submitted : null,
       }),
     });
     setSaving(false);
@@ -483,6 +488,7 @@ function AddTruckCostForm({
         <label htmlFor="tcDesc">Description</label>
         <input id="tcDesc" type="text" placeholder="e.g. Annual comprehensive cover" value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
+      {inCashbook ? <CashAccountField id="tcAccount" direction="out" currency={currency} choice={cashAccount} /> : null}
       <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save cost"}</button>
     </form>
   );

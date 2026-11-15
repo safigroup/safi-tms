@@ -231,20 +231,55 @@ export type CashAccount = {
 // Returned by GET /api/cashbook -- the account plus its balance today.
 export type CashAccountSummary = CashAccount & { balance: number };
 
-export type CashTransaction = {
+// Where a cashbook line came from: typed into the cashbook, or a TMS
+// record placed in an account (see the cash_entries view).
+export type CashSource = "manual" | "payment" | "trip_cost" | "allocation" | "truck_cost";
+export type CashLinkSource = Exclude<CashSource, "manual">;
+
+// One line of an account's statement (a row of the cash_entries view).
+// amount is in the account's currency; record_amount/record_currency keep
+// a TMS record's own figure when it was in another currency. detail is the
+// invoice number for a payment and the cost category for a trip or truck
+// cost; counterparty is the customer for a payment and the truck for a
+// truck cost.
+export type CashEntry = {
   id: string;
   account_id: string;
   occurred_on: string;
   direction: "in" | "out";
   amount: number;
-  fx_rate_to_usd: number;
-  amount_usd: number;
   category: string;
   counterparty: string | null;
   description: string | null;
   reference: string | null;
   transfer_id: string | null;
+  source: CashSource;
+  detail: string | null;
+  paid_by: string | null;
+  trip_id: string | null;
+  trip_no: string | null;
+  record_amount: number | null;
+  record_currency: string | null;
   created_at: string;
+};
+
+// A TMS record the cashbook can take that isn't in an account yet (a row
+// of the cash_link_sources view): the Cashbook's "To place" list.
+export type CashToPlace = {
+  source: CashLinkSource;
+  id: string;
+  occurred_on: string;
+  direction: "in" | "out";
+  record_amount: number;
+  record_currency: string;
+  category: string;
+  counterparty: string | null;
+  description: string | null;
+  reference: string | null;
+  detail: string | null;
+  paid_by: string | null;
+  trip_id: string | null;
+  trip_no: string | null;
 };
 
 export type DocStatus = "pending" | "issued" | "lodged" | "cleared" | "received" | "rejected";

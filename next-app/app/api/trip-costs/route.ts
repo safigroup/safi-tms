@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
 import { CAN_MANAGE_TRIPS } from "@/lib/auth/permissions";
+import { requestedCashAccount } from "@/lib/cashbook/server";
 
 // Ports saveCost() (index.html). The receipt photo itself is uploaded
 // separately first via POST /api/storage/upload (see that route for why),
@@ -84,6 +85,7 @@ export async function POST(request: Request) {
       liters: hasFuelBreakdown ? liters : null,
       price_per_liter: hasFuelBreakdown ? pricePerLiter : null,
       is_empty_return: !!body.emptyReturn,
+      cash_account_id: requestedCashAccount(ctx.role, body.cashAccountId),
       recorded_by: ctx.userId,
     })
     .select("id, amount_usd")

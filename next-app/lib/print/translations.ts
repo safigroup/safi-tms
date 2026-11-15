@@ -92,6 +92,14 @@ const STRINGS: Record<string, { en: string; fr: string }> = {
   kind_bank: { en: "Bank", fr: "Banque" },
   kind_mobile_money: { en: "Mobile money", fr: "Mobile money" },
   kind_cash: { en: "Cash", fr: "Caisse" },
+  // what a cashbook line came from, when TMS put it there
+  src_payment: { en: "Customer payment", fr: "Paiement client" },
+  src_trip_cost: { en: "Trip cost", fr: "Coût de voyage" },
+  src_allocation: { en: "Trip allocation", fr: "Fonds alloués" },
+  src_truck_cost: { en: "Truck cost", fr: "Coût camion" },
+  paid_office: { en: "paid by office", fr: "payé par le bureau" },
+  paid_agent: { en: "paid by agent", fr: "payé par l'agent" },
+  paid_card: { en: "paid by card", fr: "payé par carte" },
 
   // basis suffixes (estimate table)
   flat: { en: "flat", fr: "forfait" },

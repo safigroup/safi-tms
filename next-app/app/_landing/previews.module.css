@@ -1,0 +1,982 @@
+/* Product previews on the landing page. They sit on the app's own
+   component classes (globals.css) and only add layout, the window frame,
+   and the hero trip's animation. Every color is an app token. */
+
+.frame {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  background: var(--ground);
+  border: 1px solid var(--rule);
+  border-radius: calc(var(--radius) + 6px);
+  box-shadow: 0 24px 48px -20px rgba(16, 24, 40, .28), var(--shadow-pop);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 4px 10px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.brand {
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.tab {
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--stamp);
+  color: #fff;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 11.5px;
+}
+
+.body {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* the frame is a picture: nothing in it reacts to the pointer */
+.frame :global(.stage),
+.frame :global(.link-row) {
+  pointer-events: none;
+}
+
+.h {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--ink);
+}
+
+.headRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 0 2px;
+}
+
+.rowTitle {
+  font-family: var(--sans);
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.frame :global(.list li) {
+  padding: 11px 16px;
+}
+
+.frame :global(.panel-head) {
+  padding: 11px 16px;
+}
+
+.frame :global(.d-sec) {
+  padding: 13px 16px;
+}
+
+.frame :global(.bar-row) {
+  padding: 11px 16px;
+  grid-template-columns: minmax(0, 1.3fr) minmax(40px, 1fr) auto;
+}
+
+.frame :global(.bar-v) {
+  min-width: 70px;
+}
+
+.link {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--stamp);
+}
+
+.up {
+  color: var(--settled);
+  font-weight: 600;
+}
+
+/* ---------- overview ---------- */
+
+.frame .kpis {
+  margin: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.frame .kpis :global(.cell) {
+  padding: 11px 14px;
+}
+
+.frame .kpis :global(.v) {
+  font-size: 17px;
+}
+
+.frame .stages {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 12px 16px;
+}
+
+.frame .stages :global(.stage) {
+  padding: 9px 12px;
+}
+
+.frame .stages :global(.stage-n) {
+  font-size: 19px;
+}
+
+/* ---------- new trip form ---------- */
+
+.form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  padding: 14px 16px;
+}
+
+.field {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* the Board's route line at preview width: break names between words only */
+.frame :global(.route-name) {
+  overflow-wrap: normal;
+  font-size: 11.5px;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.fieldK {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.input {
+  display: block;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+  font-size: 13.5px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cur {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  margin-left: 4px;
+}
+
+.hint {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.good {
+  color: var(--settled);
+}
+
+.warn {
+  color: var(--waiting);
+}
+
+.formPart {
+  padding: 12px 16px 0;
+  border-top: 1px solid var(--rule-soft);
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.menu {
+  list-style: none;
+  border: 1px solid var(--stamp);
+  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+  box-shadow: 0 0 0 3px var(--stamp-wash);
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.menu li {
+  padding: 7px 10px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu li + li {
+  border-top: 1px solid var(--rule-soft);
+}
+
+.menu .menuOn {
+  background: var(--stamp);
+  color: #fff;
+  font-weight: 500;
+}
+
+.menu .menuBusy {
+  color: var(--ink-soft);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
+.btnPrimary,
+.btnGhost {
+  display: inline-block;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.btnPrimary {
+  background: var(--stamp);
+  color: #fff;
+}
+
+.btnGhost {
+  border: 1px solid var(--rule);
+  color: var(--ink);
+}
+
+/* ---------- cost docket ---------- */
+
+.receipt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px dashed var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--capture-has-bg);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.receipt > span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* a folded paper slip */
+.receiptThumb {
+  flex: none;
+  width: 22px;
+  height: 28px;
+  border-radius: 2px;
+  background:
+    repeating-linear-gradient(180deg, transparent 0 5px, var(--rule) 5px 6px) 4px 6px / 14px 16px no-repeat,
+    var(--card);
+  border: 1px solid var(--rule);
+}
+
+.receiptOk {
+  margin-left: auto;
+  color: var(--settled);
+  font-weight: 600;
+}
+
+.stampWrap {
+  padding: 0 16px;
+}
+
+.budget {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+  padding: 13px 16px 15px;
+  border-top: 1px solid var(--rule-soft);
+}
+
+.budgetHead,
+.budgetFoot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.budgetHead {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.budgetHead span:last-child {
+  color: var(--waiting);
+  font-weight: 600;
+}
+
+.budgetFoot {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.budgetTrack {
+  display: block;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--rule-soft);
+  overflow: hidden;
+}
+
+.budgetBar {
+  display: block;
+  height: 100%;
+  background: var(--waiting);
+  border-radius: 0 4px 4px 0;
+}
+
+/* ---------- border history ---------- */
+
+.history {
+  display: grid;
+  gap: 2px;
+  padding: 10px 16px 12px;
+}
+
+.historyRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.historyRow span:last-child {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+/* ---------- receivables ---------- */
+
+.aging {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px 16px;
+}
+
+.aging :global(.aging-row) {
+  grid-template-columns: minmax(96px, 128px) minmax(0, 1fr) auto;
+}
+
+.aging :global(.aging-v) {
+  min-width: 78px;
+}
+
+/* ---------- monthly chart ---------- */
+
+.legend {
+  display: flex;
+  gap: 12px;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.keyRev,
+.keyCost {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.keyRev {
+  background: var(--stamp);
+}
+
+.keyCost {
+  background: repeating-linear-gradient(135deg, var(--ink-soft) 0 1.5px, transparent 1.5px 4px);
+  box-shadow: inset 0 0 0 1.5px var(--ink-soft);
+}
+
+.chart {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  padding: 16px 16px 4px;
+  background: repeating-linear-gradient(180deg, transparent 0 calc(25% - 1px), var(--rule-soft) calc(25% - 1px) 25%) 0 16px / 100% 120px no-repeat;
+}
+
+.col {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 120px;
+}
+
+.rev,
+.cost {
+  display: block;
+  width: min(16px, 38%);
+  border-radius: 4px 4px 0 0;
+}
+
+.rev {
+  background: var(--stamp);
+}
+
+.cost {
+  background: repeating-linear-gradient(135deg, var(--ink-soft) 0 1.5px, transparent 1.5px 4px);
+  box-shadow: inset 0 0 0 1.5px var(--ink-soft);
+}
+
+.colM {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--ink);
+}
+
+.colPct {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--settled);
+}
+
+.chartNote {
+  padding: 4px 16px 12px;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+/* ---------- hero: the live trip ---------- */
+
+.live {
+  margin: 0;
+  min-width: 0;
+}
+
+.stage {
+  position: relative;
+}
+
+.liveFrame {
+  position: relative;
+  z-index: 1;
+}
+
+.tripHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 2px 4px 0;
+}
+
+.tripTitle {
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.tripRight {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  flex: none;
+}
+
+.day {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .06em;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The route: a rail with four stops; the filled part and the truck move
+   to --at (0..1). Stops sit at --x along the same rail. */
+.track {
+  --inset: 8px;
+  position: relative;
+  height: 76px;
+  margin: 2px 4px 0;
+}
+
+.rail,
+.fill {
+  position: absolute;
+  top: 25px;
+  left: var(--inset);
+  height: 2px;
+}
+
+.rail {
+  right: var(--inset);
+  background: var(--rule);
+}
+
+.fill {
+  width: calc((100% - 2 * var(--inset)) * var(--at));
+  background: var(--stamp);
+  transition: width 1s cubic-bezier(.45, 0, .25, 1);
+}
+
+.truck {
+  position: absolute;
+  top: 0;
+  left: calc(var(--inset) + (100% - 2 * var(--inset)) * var(--at));
+  transform: translateX(-50%);
+  transition: left 1s cubic-bezier(.45, 0, .25, 1);
+  z-index: 2;
+  line-height: 0;
+}
+
+.truckIcon {
+  fill: var(--stamp);
+}
+
+.truckIcon circle {
+  fill: var(--ink);
+  stroke: var(--ground);
+  stroke-width: 1.2;
+}
+
+/* Centred on its point of the rail; the two ends align their dot to the
+   point and let the label run inwards, so nothing spills off the card. */
+.stop {
+  position: absolute;
+  top: 19px;
+  left: calc(var(--inset) + (100% - 2 * var(--inset)) * var(--x));
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 8px 0;
+}
+
+.stop > .stopNote {
+  margin-top: -6px;
+}
+
+.stop > * {
+  white-space: nowrap;
+}
+
+.stop.first {
+  transform: translateX(-7px);
+  justify-items: start;
+}
+
+.stop.last {
+  transform: translateX(calc(-100% + 7px));
+  justify-items: end;
+}
+
+.dot {
+  position: relative;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--rule);
+  background: var(--card);
+  transition: background-color .3s ease, border-color .3s ease, box-shadow .3s ease;
+}
+
+.border .dot {
+  width: 12px;
+  height: 12px;
+  margin: 1px 0;
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+
+.done .dot {
+  background: var(--stamp);
+  border-color: var(--stamp);
+}
+
+.next .dot {
+  border-color: var(--stamp);
+}
+
+.here .dot {
+  background: var(--stamp);
+  border-color: var(--stamp);
+  box-shadow: 0 0 0 5px var(--stamp-wash);
+}
+
+.border.here .dot {
+  background: var(--waiting);
+  border-color: var(--waiting);
+  box-shadow: 0 0 0 5px var(--pill-warn-bg);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.stopName {
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.ahead .stopName {
+  color: var(--ink-soft);
+}
+
+.here .stopName {
+  font-weight: 600;
+}
+
+.stopNote {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-soft);
+}
+
+.border.here .stopNote {
+  color: var(--waiting);
+  font-weight: 600;
+}
+
+.feedHead {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 4px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.feed {
+  list-style: none;
+  display: grid;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.feed li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  transition: opacity .45s ease, transform .45s ease, background-color 1.2s ease;
+}
+
+.feed li + li {
+  border-top: 1px solid var(--rule-soft);
+}
+
+.feed li > span:first-child {
+  display: grid;
+  min-width: 0;
+}
+
+.feedWhat {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feedNative {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+
+.feedUsd {
+  flex: none;
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--settled);
+  font-variant-numeric: tabular-nums;
+}
+
+.waiting {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.landed {
+  opacity: 1;
+  animation: landed 1.4s ease;
+}
+
+.sum {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.sum > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--card);
+}
+
+.sumK {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.sumV {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sumV small {
+  font-size: 11.5px;
+}
+
+.pos {
+  color: var(--settled);
+}
+
+.flash {
+  animation: flash .9s ease;
+}
+
+.pop {
+  animation: pop .35s ease;
+}
+
+/* notifications that float beside the trip */
+.toast {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 14px;
+  width: max-content;
+  max-width: 290px;
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 36px -14px rgba(16, 24, 40, .35), var(--shadow-pop);
+  opacity: 0;
+  transform: translateY(10px) scale(.98);
+  transition: opacity .5s ease, transform .5s ease;
+}
+
+.toastIn {
+  opacity: 1;
+  transform: none;
+}
+
+/* Each note sits on a corner of the card where it hides nothing: the
+   empty right end of the top bar, and just below the bottom edge. */
+.toastA {
+  top: -24px;
+  right: -30px;
+  border-left: 3px solid var(--settled);
+}
+
+.toastB {
+  bottom: -42px;
+  left: -36px;
+  border-left: 3px solid var(--alert);
+}
+
+.toastK {
+  grid-column: 1 / -1;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.toastT {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.toastV {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--settled);
+}
+
+.caption {
+  margin-top: 56px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .04em;
+  text-align: right;
+  color: inherit;
+  opacity: .72;
+}
+
+/* On narrower screens the notifications tuck under the trip instead of
+   hanging off its edges. */
+@media (max-width: 1180px) {
+  .toastA {
+    right: -12px;
+  }
+
+  .toastB {
+    left: -12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .stage {
+    display: grid;
+    gap: 10px;
+  }
+
+  .caption {
+    margin-top: 12px;
+  }
+
+  .toast {
+    position: static;
+    width: auto;
+    max-width: none;
+  }
+
+  .toastB {
+    display: none;
+  }
+
+  .track {
+    --inset: 6px;
+  }
+
+  .stopName {
+    font-size: 11px;
+  }
+
+  .sum {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sum > div:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .frame .stages {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .frame .kpis :global(.v) {
+    font-size: 15px;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--pill-warn-bg); }
+  50% { box-shadow: 0 0 0 6px var(--pill-warn-bg); }
+}
+
+@keyframes landed {
+  0% { background-color: var(--capture-has-bg); }
+  100% { background-color: transparent; }
+}
+
+@keyframes flash {
+  0% { opacity: .35; }
+  100% { opacity: 1; }
+}
+
+@keyframes pop {
+  0% { transform: scale(.85); }
+  100% { transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill,
+  .truck,
+  .feed li,
+  .toast,
+  .dot {
+    transition: none;
+  }
+
+  .landed,
+  .flash,
+  .pop,
+  .border.here .dot {
+    animation: none;
+  }
+}

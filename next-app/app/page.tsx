@@ -15,7 +15,23 @@ async function resolveLang(): Promise<Lang> {
 }
 
 export async function generateMetadata(): Promise<Metadata> {
-  return COPY[await resolveLang()].meta;
+  const lang = await resolveLang();
+  const { title, description } = COPY[lang].meta;
+  return {
+    title,
+    description,
+    alternates: { canonical: "/" },
+    openGraph: {
+      title,
+      description,
+      url: "/",
+      siteName: "Safi TMS",
+      type: "website",
+      locale: lang === "fr" ? "fr_FR" : "en_GB",
+      alternateLocale: lang === "fr" ? "en_GB" : "fr_FR",
+    },
+    twitter: { card: "summary_large_image", title, description },
+  };
 }
 
 // Public landing page for signed-out visitors. Signed-in users never see

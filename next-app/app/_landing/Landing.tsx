@@ -1,20 +1,93 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState, type ComponentType, type RefObject } from "react";
 import Link from "next/link";
 import { ThemeToggle } from "@/lib/components/ThemeToggle";
 import { COPY, LANG_COOKIE, type Lang } from "./copy";
 import { DemoRequestForm } from "./DemoRequestForm";
+import { BillingPreview, BorderPreview, DispatchPreview, LiveTrip, OverviewPreview, ReviewPreview, RoadPreview } from "./previews";
 import s from "./landing.module.css";
+
+const STEP_PREVIEWS: Record<string, ComponentType> = {
+  dispatch: DispatchPreview,
+  road: RoadPreview,
+  border: BorderPreview,
+  billing: BillingPreview,
+  review: ReviewPreview,
+};
 
 function rememberLang(lang: Lang) {
   document.cookie = `${LANG_COOKIE}=${lang}; path=/; max-age=31536000; samesite=lax`;
   document.title = COPY[lang].meta.title;
 }
 
+const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Blocks marked data-reveal fade in as they scroll into view. Anything
+// already on screen when the page loads is shown at once, and with reduced
+// motion nothing is hidden at all. Only wrappers whose React keys never
+// change carry data-reveal, so switching language can't re-create (and
+// re-hide) one that has already been revealed.
+function useReveal(root: RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    const page = root.current;
+    if (!page || reducedMotion()) return;
+    const items = [...page.querySelectorAll<HTMLElement>("[data-reveal]")];
+    for (const el of items) {
+      if (el.getBoundingClientRect().top < window.innerHeight) el.dataset.in = "";
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          (e.target as HTMLElement).dataset.in = "";
+          io.unobserve(e.target);
+        }
+      },
+      { rootMargin: "0px 0px -6% 0px" },
+    );
+    for (const el of items) if (!("in" in el.dataset)) io.observe(el);
+    page.setAttribute("data-armed", "");
+    return () => io.disconnect();
+  }, [root]);
+}
+
+// The phone-width "Request a demo" bar: shown once the hero's buttons have
+// scrolled away, hidden again while the form itself is on screen.
+function useStickyCta(heroCta: RefObject<HTMLDivElement | null>) {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const hero = heroCta.current;
+    const demo = document.getElementById("demo");
+    if (!hero || !demo) return;
+    let pastHero = false;
+    let atDemo = false;
+    const update = () => setOn(pastHero && !atDemo);
+    const heroIo = new IntersectionObserver(([e]) => {
+      pastHero = !e.isIntersecting && e.boundingClientRect.top < 0;
+      update();
+    });
+    const demoIo = new IntersectionObserver(([e]) => {
+      atDemo = e.isIntersecting;
+      update();
+    }, { threshold: 0.1 });
+    heroIo.observe(hero);
+    demoIo.observe(demo);
+    return () => {
+      heroIo.disconnect();
+      demoIo.disconnect();
+    };
+  }, [heroCta]);
+  return on;
+}
+
 export function Landing({ initialLang, year }: { initialLang: Lang; year: number }) {
   const [lang, setLang] = useState<Lang>(initialLang);
   const c = COPY[lang];
+  const pageRef = useRef<HTMLDivElement>(null);
+  const heroCtaRef = useRef<HTMLDivElement>(null);
+  useReveal(pageRef);
+  const stickyOn = useStickyCta(heroCtaRef);
 
   function chooseLang(next: Lang) {
     setLang(next);
@@ -22,13 +95,17 @@ export function Landing({ initialLang, year }: { initialLang: Lang; year: number
   }
 
   return (
-    <div className={s.page} lang={lang}>
+    <div className={s.page} lang={lang} ref={pageRef}>
       <header className={s.top}>
         <div className={`${s.container} ${s.topRow}`}>
           <Link href="/" className={s.brand}>
             <span className={s.brandName}>Safi TMS</span>
             <span className={s.brandSub}>{c.header.tagline}</span>
           </Link>
+          <nav className={s.nav}>
+            <a href="#how">{c.header.navHow}</a>
+            <a href="#faq">{c.header.navFaq}</a>
+          </nav>
           <div className={s.tools}>
             <div className={s.langGroup} role="group" aria-label={c.header.language}>
               {(["en", "fr"] as const).map((l) => (
@@ -51,65 +128,146 @@ export function Landing({ initialLang, year }: { initialLang: Lang; year: number
       </header>
 
       <main>
-        <section className={`${s.container} ${s.hero}`}>
-          <div className={s.heroGrid}>
-            <div>
-              <p className={s.kicker}>{c.hero.eyebrow}</p>
+        <section className={s.hero}>
+          <svg className={s.heroRoad} viewBox="0 0 1440 640" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M-40 560 C 260 520, 380 380, 640 360 S 1060 300, 1180 150 S 1400 40, 1500 20" />
+          </svg>
+          <div className={`${s.container} ${s.heroGrid}`}>
+            <div className={s.heroText}>
+              <p className={s.eyebrow}>{c.hero.eyebrow}</p>
               <h1 className={s.h1}>
                 {c.hero.titleLead}<span className={s.accent}>{c.hero.titleAccent}</span>{c.hero.titleTail}
               </h1>
               <p className={s.lede}>{c.hero.lede}</p>
-              <div className={s.ctaRow}>
-                <a href="#demo" className={`${s.btn} ${s.btnPrimary}`}>{c.hero.primary}</a>
-                <Link href="/login" className={`${s.btn} ${s.btnSecondary}`}>{c.hero.secondary}</Link>
+              <div className={s.ctaRow} ref={heroCtaRef}>
+                <a href="#demo" className={`${s.btn} ${s.btnHero}`}>
+                  {c.hero.primary} <span aria-hidden="true">→</span>
+                </a>
+                <a href="#how" className={`${s.btn} ${s.btnHeroGhost}`}>{c.hero.secondary}</a>
               </div>
+              <p className={s.reassure}>{c.hero.reassurance}</p>
               <p className={s.credibility}>{c.hero.credibility}</p>
             </div>
-            <BoardPreview caption={c.hero.mockCaption} />
+            <LiveTrip caption={c.hero.liveCaption} />
           </div>
-        </section>
-
-        <section className={s.section}>
           <div className={s.container}>
-            <p className={s.kicker}>{c.points.kicker}</p>
-            <h2 className={s.h2}>{c.points.title}</h2>
-            <ul className={s.points}>
-              {c.points.items.map((p, i) => (
-                <li key={p.title} className={s.point}>
-                  <span className={s.pointNo}>{String(i + 1).padStart(2, "0")}</span>
-                  <h3 className={s.h3}>{p.title}</h3>
-                  <p className={s.body}>{p.body}</p>
+            <ul className={s.facts}>
+              {c.facts.map((f, i) => (
+                <li key={i} className={s.fact}>
+                  <span className={s.factV}>{f.v}</span>
+                  <span className={s.factK}>{f.k}</span>
                 </li>
               ))}
             </ul>
           </div>
         </section>
 
-        <section className={`${s.section} ${s.sectionAlt}`}>
+        <section className={s.section}>
           <div className={s.container}>
-            <p className={s.kicker}>{c.flow.kicker}</p>
-            <h2 className={s.h2}>{c.flow.title}</h2>
-            <p className={s.sectionLede}>{c.flow.lede}</p>
-            <ol className={s.flow}>
-              {c.flow.steps.map((st, i) => (
-                <li key={st.module} className={s.step}>
-                  <span className={s.stepNo}>{String(i + 1).padStart(2, "0")}</span>
-                  <h3 className={`${s.h3} ${s.stepTitle}`}>{st.label}</h3>
-                  <div className={s.stepModule}><span className="pill violet">{st.module}</span></div>
-                  <p className={`${s.body} ${s.stepBody}`}>{st.body}</p>
-                </li>
-              ))}
-            </ol>
+            <div data-reveal>
+              <p className={s.kicker}>{c.pains.kicker}</p>
+              <h2 className={s.h2}>{c.pains.title}</h2>
+            </div>
+            <div className={s.pains} data-reveal>
+              <div className={s.painHead} aria-hidden="true">
+                <span>{c.pains.before}</span>
+                <span>{c.pains.after}</span>
+              </div>
+              <ul className={s.painList}>
+                {c.pains.rows.map((r, i) => (
+                  <li key={i} className={s.painRow}>
+                    <p className={s.painBefore}><span className={s.srOnly}>{c.pains.before}: </span>{r.before}</p>
+                    <p className={s.painAfter}><span className={s.srOnly}>{c.pains.after}: </span>{r.after}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </section>
 
-        <section className={s.section}>
+        <section className={`${s.section} ${s.sectionAlt}`}>
+          <div className={`${s.container} ${s.show} ${s.showWide}`}>
+            <div className={s.showText} data-reveal>
+              <p className={s.stepTag}>
+                <span className={s.kicker}>{c.overview.kicker}</span>
+                <span className="pill violet">{c.overview.module}</span>
+              </p>
+              <h2 className={s.h2}>{c.overview.title}</h2>
+              <p className={s.showBody}>{c.overview.body}</p>
+              <ul className={s.ticks}>
+                {c.overview.bullets.map((b, i) => <li key={i}>{b}</li>)}
+              </ul>
+            </div>
+            <figure className={s.showFig} data-reveal>
+              <OverviewPreview />
+              <figcaption className={s.figcap}>{c.overview.caption}</figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <section id="how" className={`${s.section} ${s.anchor}`}>
           <div className={s.container}>
-            <p className={s.kicker}>{c.trust.kicker}</p>
-            <h2 className={s.h2}>{c.trust.title}</h2>
-            <ul className={s.trust}>
-              {c.trust.items.map((t) => (
-                <li key={t.title} className={s.trustItem}>
+            <div className={s.flowHead} data-reveal>
+              <p className={s.kicker}>{c.flow.kicker}</p>
+              <h2 className={s.h2}>{c.flow.title}</h2>
+              <p className={s.sectionLede}>{c.flow.lede}</p>
+            </div>
+            <ol className={s.stops} data-reveal>
+              {c.flow.steps.map((st, i) => (
+                <li key={st.id} className={s.stopItem}>
+                  <a href={`#step-${st.id}`} className={s.stopLink}>
+                    <span className={s.stopNo}>{String(i + 1).padStart(2, "0")}</span>
+                    <span className={s.stopLabel}>{st.label}</span>
+                  </a>
+                </li>
+              ))}
+            </ol>
+            <div className={s.steps}>
+              {c.flow.steps.map((st, i) => {
+                const Preview = STEP_PREVIEWS[st.id];
+                return (
+                  <article key={st.id} id={`step-${st.id}`} className={`${s.show} ${s.anchor} ${i % 2 ? s.flip : ""}`}>
+                    <div className={s.showText} data-reveal>
+                      <p className={s.stepTag}>
+                        <span className={s.stepNo}>{String(i + 1).padStart(2, "0")}</span>
+                        <span className={s.stepLabel}>{st.label}</span>
+                        <span className="pill violet">{st.module}</span>
+                      </p>
+                      <h3 className={s.h3big}>{st.title}</h3>
+                      <p className={s.showBody}>{st.body}</p>
+                      <ul className={s.ticks}>
+                        {st.bullets.map((b, j) => <li key={j}>{b}</li>)}
+                      </ul>
+                    </div>
+                    <figure className={s.showFig} data-reveal>
+                      <Preview />
+                      <figcaption className={s.figcap}>{c.flow.caption}</figcaption>
+                    </figure>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section className={s.band}>
+          <div className={`${s.container} ${s.bandRow}`} data-reveal>
+            <p className={s.bandTitle}>{c.band.title}</p>
+            <a href="#demo" className={`${s.btn} ${s.btnHero}`}>
+              {c.band.cta} <span aria-hidden="true">→</span>
+            </a>
+          </div>
+        </section>
+
+        <section className={`${s.section} ${s.sectionAlt}`}>
+          <div className={s.container}>
+            <div data-reveal>
+              <p className={s.kicker}>{c.trust.kicker}</p>
+              <h2 className={s.h2}>{c.trust.title}</h2>
+            </div>
+            <ul className={s.trust} data-reveal>
+              {c.trust.items.map((t, i) => (
+                <li key={i} className={s.trustItem}>
                   <h3 className={s.h3}>{t.title}</h3>
                   <p className={s.body}>{t.body}</p>
                 </li>
@@ -118,14 +276,31 @@ export function Landing({ initialLang, year }: { initialLang: Lang; year: number
           </div>
         </section>
 
-        <section id="demo" className={`${s.section} ${s.sectionAlt} ${s.demoSection}`}>
+        <section id="faq" className={`${s.section} ${s.anchor}`}>
+          <div className={`${s.container} ${s.faqGrid}`}>
+            <div data-reveal>
+              <p className={s.kicker}>{c.faq.kicker}</p>
+              <h2 className={s.h2}>{c.faq.title}</h2>
+            </div>
+            <div className={s.faq} data-reveal>
+              {c.faq.items.map((f, i) => (
+                <details key={i} className={s.qa} open={i === 0}>
+                  <summary className={s.q}>{f.q}</summary>
+                  <p className={s.a}>{f.a}</p>
+                </details>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="demo" className={`${s.section} ${s.demoSection} ${s.anchor}`}>
           <div className={`${s.container} ${s.demoGrid}`}>
             <div>
               <p className={s.kicker}>{c.demo.kicker}</p>
               <h2 className={s.h2}>{c.demo.title}</h2>
               <p className={s.sectionLede}>{c.demo.lede}</p>
               <ol className={s.next}>
-                {c.demo.next.map((n) => <li key={n}>{n}</li>)}
+                {c.demo.next.map((n, i) => <li key={i}>{n}</li>)}
               </ol>
             </div>
             <DemoRequestForm lang={lang} c={c.demo.form} />
@@ -145,99 +320,13 @@ export function Landing({ initialLang, year }: { initialLang: Lang; year: number
           </span>
         </div>
       </footer>
-    </div>
-  );
-}
 
-// A static picture of the real Board, built from the app's own component
-// classes so it can't drift from what users actually see. Deliberately
-// English in both languages -- the signed-in screens are English-only, so
-// a French preview would promise an interface that doesn't exist.
-function BoardPreview({ caption }: { caption: string }) {
-  return (
-    <figure className={s.mock}>
-      <div className={s.mockFrame} aria-hidden="true">
-        <div className={s.mockBar}>
-          <span className={s.mockBrand}>Safi TMS</span>
-          <span className={s.mockTabs}>
-            <span className={`${s.mockTab} ${s.mockTabOn}`}>Board</span>
-            <span className={s.mockTab}>Cost docket</span>
-            <span className={s.mockTab}>Billing</span>
-            <span className={s.mockTab}>Reports</span>
-            <span className={s.mockTab}>Estimator</span>
-          </span>
-        </div>
-        <div className={`strip ${s.mockStrip}`}>
-          <div className="cell">
-            <div className="k">On the road</div>
-            <div className="v">7</div>
-            <div className="n">11 open trips</div>
-          </div>
-          <div className="cell">
-            <div className="k">Over corridor target</div>
-            <div className="v warn">1</div>
-            <div className="n">T-1039</div>
-          </div>
-          <div className="cell">
-            <div className="k">Awaiting POD</div>
-            <div className="v warn">1</div>
-            <div className="n">USD 5,104 not yet billable</div>
-          </div>
-          <div className="cell">
-            <div className="k">Avg margin, delivered</div>
-            <div className="v pos">18.6%</div>
-            <div className="n">24 trips</div>
-          </div>
-        </div>
-        <div className="panel">
-          <div className="panel-head">
-            <span className={s.panelTitle}>Trips</span>
-          </div>
-          <ul className="list">
-            <li className="sel">
-              <div>
-                <div className="r-no">T-1042</div>
-                <div className="r-title">Dar es Salaam → Kasumbalesa</div>
-                <div className="r-sub">Truck 14 · 34 t</div>
-                <div className="r-tags">
-                  <span className="pill warn">at border</span>
-                  <span className="pill grey">day 6</span>
-                  <span className="pill violet">Tunduma / Nakonde</span>
-                </div>
-              </div>
-              <div className="r-right">
-                <div className="r-amt pos">USD 2,140</div>
-                <div className="r-min">21.4%</div>
-                <div className="r-min">9 costs</div>
-              </div>
-            </li>
-            <li>
-              <div>
-                <div className="r-no">T-1039</div>
-                <div className="r-title">Dar es Salaam → Goma</div>
-                <div className="r-sub">Truck 08 · 30 t</div>
-                <div className="r-tags">
-                  <span className="pill violet">in transit</span>
-                  <span className="pill bad">day 5 of 4</span>
-                  <span className="pill violet">Rusumo</span>
-                </div>
-              </div>
-              <div className="r-right">
-                <div className="r-amt pos">USD 1,385</div>
-                <div className="r-min">17.9%</div>
-                <div className="r-min">6 costs</div>
-              </div>
-            </li>
-          </ul>
-        </div>
-        <div className={`stamp live ${s.mockStamp}`}>
-          <span className="native">TZS 1,250,000.00</span>
-          <span className="arrow">→</span>
-          <span className="usd">USD 473.79</span>
-          <span className="rate">Rate on file <b>1 TZS = 0.00037903 USD</b> · frozen onto this entry</span>
-        </div>
+      <div className={`${s.sticky} ${stickyOn ? s.stickyOn : ""}`} aria-hidden={!stickyOn}>
+        <span className={s.stickyNote}>{c.sticky.note}</span>
+        <a href="#demo" className={`${s.btn} ${s.btnPrimary} ${s.btnSm}`} tabIndex={stickyOn ? 0 : -1}>
+          {c.sticky.cta}
+        </a>
       </div>
-      <figcaption className={s.mockCaption}>{caption}</figcaption>
-    </figure>
+    </div>
   );
 }

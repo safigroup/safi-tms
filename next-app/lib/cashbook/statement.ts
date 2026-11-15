@@ -52,3 +52,15 @@ export function buildCashStatement(
 
   return { from: start, to, openingBalance, rows, totalIn: cents(totalIn), totalOut: cents(totalOut), closingBalance: balance };
 }
+
+// What the account's own statement (bank, wallet, cash count) should show
+// on a day, counting only the lines ticked off as reconciled so far. The
+// opening balance is taken as agreed with it.
+export function reconciledBalance(account: CashAccount, entries: CashEntry[], asOf: string): number {
+  return cents(
+    Number(account.opening_balance) +
+      entries
+        .filter((e) => e.reconciled_at && e.occurred_on <= asOf)
+        .reduce((s, e) => s + (e.direction === "in" ? 1 : -1) * Number(e.amount), 0),
+  );
+}

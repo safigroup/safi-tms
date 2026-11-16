@@ -14,9 +14,19 @@ import type { AuditLogEntry, BootstrapPayload, BoardTrip, FxRate, TripAllocation
 import { buildTripStatement } from "@/lib/tripStatement";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 import { CashAccountField, useCashAccountChoice } from "@/lib/components/CashAccountField";
+import { RouteTrack } from "@/lib/components/RouteTrack";
+import { MoneyStrip } from "@/lib/components/MoneyStrip";
+import { STATUS_PILL } from "@/lib/trips/status";
 
 // Who paid, for the costs that go in a cashbook account.
 const CASHBOOK_PAYERS = ["office", "agent", "card"];
+
+const PAID_BY_LABEL: Record<string, string> = {
+  driver_float: "driver float",
+  office: "paid by office",
+  agent: "paid by agent",
+  card: "paid by card",
+};
 
 const CATS = [
   "fuel", "driver_advance", "driver_allowance", "border_fees", "customs_duty",
@@ -59,7 +69,11 @@ export default function DocketPage() {
   const [printLang, setPrintLang] = useState<PrintLang>("en");
   // Only money the company paid goes in a cashbook account; a driver-float
   // cost was already counted when the trip's funds were allocated.
-  const costAccount = useCashAccountChoice("out", draft.cur);
+  // The cost's currency: the one picked, else the one this trip's latest
+  // cost was in, else USD. The dropdown always shows a real option, so it
+  // and what gets saved can't disagree.
+  const cur = draft.cur || costs[0]?.currency || "USD";
+  const costAccount = useCashAccountChoice("out", cur);
   const costInCashbook = CASHBOOK_PAYERS.includes(draft.paid);
 
   useEffect(() => {
@@ -167,8 +181,8 @@ export default function DocketPage() {
     const ia = order.indexOf(a), ib = order.indexOf(b);
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
   });
-  const fxRate = data.fx.find((r) => r.currency === draft.cur);
-  const rateToUsd = draft.cur === "USD" ? 1 : fxRate?.rate_to_usd;
+  const fxRate = data.fx.find((r) => r.currency === cur);
+  const rateToUsd = cur === "USD" ? 1 : fxRate?.rate_to_usd;
   const amtNum = parseFloat(draft.amt);
   const canWrite = CAN_MANAGE_TRIPS.includes(data.role);
   const canOverride = CAN_OVERRIDE_RECORDS.includes(data.role);
@@ -181,7 +195,7 @@ export default function DocketPage() {
       return setFormNote("Enter an amount greater than zero.");
     }
     if (rateToUsd === undefined) {
-      return setFormNote(`No exchange rate on file for ${draft.cur}.`);
+      return setFormNote(`No exchange rate on file for ${cur}.`);
     }
 
     setSaving(true);
@@ -207,7 +221,7 @@ export default function DocketPage() {
           tripId,
           category: draft.cat,
           amount: amtNum,
-          currency: draft.cur,
+          currency: cur,
           incurredOn: draft.when,
           description: draft.desc.trim() || null,
           location: draft.loc.trim() || null,
@@ -225,9 +239,9 @@ export default function DocketPage() {
         throw new Error(body.error || res.statusText);
       }
 
-      toast.success(`${m2(amtNum, draft.cur)} → ${m2(amtNum * rateToUsd)}`);
+      toast.success(`${m2(amtNum, cur)} → ${m2(amtNum * rateToUsd)}`);
       clearCostDraft(tripId);
-      setDraft({ ...emptyDraft(timeZone), cat: draft.cat, cur: draft.cur, when: draft.when, paid: draft.paid, emptyReturn: draft.emptyReturn });
+      setDraft({ ...emptyDraft(timeZone), cat: draft.cat, cur: cur, when: draft.when, paid: draft.paid, emptyReturn: draft.emptyReturn });
       setCostFile(null);
       await loadDetail(tripId);
       await loadBootstrap();
@@ -291,39 +305,51 @@ export default function DocketPage() {
   return (
     <>
       {loadError ? <div className="note bad">{loadError}</div> : null}
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <div className="panel-body" style={{ display: "flex", gap: 11, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <div className="field" style={{ marginBottom: 0, minWidth: 260 }}>
-            <label htmlFor="trip">Trip</label>
-            <select id="trip" value={tripId ?? ""} onChange={(e) => { setTripId(e.target.value); router.replace(`/docket?trip=${e.target.value}`, { scroll: false }); }}>
+      <section className="ops-band" aria-label="Cost docket">
+        <div className="ops-band-top">
+          <div className="band-select-wrap">
+            <label htmlFor="trip">Cost docket · trip</label>
+            <select
+              id="trip"
+              className="band-select"
+              value={tripId ?? ""}
+              onChange={(e) => { setTripId(e.target.value); router.replace(`/docket?trip=${e.target.value}`, { scroll: false }); }}
+            >
               {open.map((t) => (
                 <option key={t.trip_id} value={t.trip_id}>{t.trip_no} — {t.customer} — {t.route}</option>
               ))}
             </select>
           </div>
+          {trip ? (
+            <div className="ops-actions">
+              <button type="button" className={"chip" + (printLang === "en" ? " on" : "")} aria-pressed={printLang === "en"} onClick={() => setPrintLang("en")}>EN</button>
+              <button type="button" className={"chip" + (printLang === "fr" ? " on" : "")} aria-pressed={printLang === "fr"} onClick={() => setPrintLang("fr")}>FR</button>
+              <button type="button" className="act" onClick={() => setPrintJob({ trip, costs, allocations, lang: printLang })}>Print ledger</button>
+            </div>
+          ) : null}
         </div>
-      </div>
-      <div className="grid">
-      <div className="panel">
         {trip ? (
-          <div className="d-head">
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-              <div className="r-no">{trip.trip_no} · <span className="pill grey">{lab(trip.status)}</span></div>
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <button type="button" className={"chip" + (printLang === "en" ? " on" : "")} onClick={() => setPrintLang("en")}>EN</button>
-                <button type="button" className={"chip" + (printLang === "fr" ? " on" : "")} onClick={() => setPrintLang("fr")}>FR</button>
-                <button type="button" className="act" onClick={() => setPrintJob({ trip, costs, allocations, lang: printLang })}>Print ledger</button>
+          <div className="band-trip">
+            <div style={{ minWidth: 0 }}>
+              <div className="tc-top">
+                <span className="tc-no">{trip.trip_no}</span>
+                <span className={"pill " + (STATUS_PILL[trip.status] || "grey")}>{lab(trip.status)}</span>
+                {trip.days_running ? (
+                  <span className={"pill " + (trip.over_target ? "bad" : "grey")}>day {trip.days_running}{trip.target_days ? ` of ${trip.target_days}` : ""}</span>
+                ) : null}
               </div>
+              <h2 className="ops-title">{trip.customer}</h2>
+              <div className="ops-sub">
+                {trip.route}{trip.fleet_no ? " · " + trip.fleet_no : ""}{trip.driver ? " · " + trip.driver : ""}
+              </div>
+              <RouteTrack trip={trip} route={data.routes.find((r) => r.id === trip.route_id)} />
             </div>
-            <div className="r-title" style={{ fontSize: 18 }}>{trip.customer}</div>
-            <div className="r-sub">{trip.route}{trip.fleet_no ? " · " + trip.fleet_no : ""}</div>
-            <div className="d-figs">
-              <div><div className="k">Revenue</div><div className="v">{m2(trip.revenue_usd)}</div></div>
-              <div><div className="k">Costs</div><div className="v">{m2(trip.cost_usd)}</div></div>
-              <div><div className="k">Margin</div><div className={"v " + (Number(trip.margin_usd) >= 0 ? "pos" : "neg")}>{m2(trip.margin_usd)}</div></div>
-            </div>
+            <MoneyStrip trip={trip} />
           </div>
         ) : null}
+      </section>
+      <div className="grid">
+      <div className="panel">
         <div className="tabs">
           <button className={tab === "ledger" ? "on" : ""} onClick={() => setTab("ledger")}>
             Ledger {costs.length ? <span className="c">({costs.length})</span> : null}
@@ -359,41 +385,48 @@ export default function DocketPage() {
               ) : null}
             </div>
           ) : null}
+          {/* Each cost as it was paid -- what, where, in the currency paid --
+              and what it came to in dollars, like the landing page's trip. */}
           <ul className="list">
             {costs.length ? costs.map((c) => (
-              <li key={c.id} style={{ alignItems: "center" }}>
-                <div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
-                  {canWrite ? (
-                    <input
-                      type="checkbox"
-                      checked={selectedCostIds.has(c.id)}
-                      onChange={() => toggleCostSelected(c.id)}
-                    />
-                  ) : null}
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                  <div className="r-no" style={{ color: "var(--stamp)" }}>
-                    {lab(c.category)}
-                    {c.is_empty_return ? <span className="pill violet" style={{ marginLeft: 7 }}>empty return</span> : null}
+              <li key={c.id} className="feed-row">
+                {canWrite ? (
+                  <input
+                    type="checkbox"
+                    checked={selectedCostIds.has(c.id)}
+                    onChange={() => toggleCostSelected(c.id)}
+                    aria-label={`Select ${lab(c.category)} on ${c.incurred_on}`}
+                  />
+                ) : <span />}
+                <div style={{ minWidth: 0 }}>
+                  <div className="feed-what">
+                    {lab(c.category).replace(/^./, (x) => x.toUpperCase())}{c.location ? " · " + c.location : ""}
+                    {c.is_empty_return ? <span className="pill violet">empty return</span> : null}
                   </div>
-                  <div style={{ fontSize: 13, marginTop: 1 }}>{c.description || "—"}</div>
+                  {c.description ? <div className="feed-desc">{c.description}</div> : null}
                   <div className="r-mono">
-                    {c.incurred_on}{c.location ? " · " + c.location : ""}{c.receipt_ref ? " · " + c.receipt_ref : ""}
+                    {c.incurred_on}{c.paid_by ? " · " + (PAID_BY_LABEL[c.paid_by] ?? lab(c.paid_by)) : ""}{c.receipt_ref ? " · " + c.receipt_ref : ""}
                     {c.liters ? ` · ${c.liters} L @ ${c.price_per_liter}` : ""}
                     {c.receipt_path ? <> · <a href="#" onClick={(e) => { e.preventDefault(); openFile(c.id); }}>receipt</a></> : null}
                   </div>
-                  </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-                  <div className="r-right">
-                    <div className="r-amt">{m2(c.amount_usd)}</div>
-                    <div className="r-min">{c.currency !== "USD" ? m2(c.amount, c.currency) : " "}</div>
-                  </div>
-                  {canOverride ? <button className="x" style={{ color: "var(--stamp)" }} onClick={() => setEditingCostId(c.id)}>✎</button> : null}
-                  {canWrite ? <button className="x" onClick={() => handleDeleteCost(c.id)}>✕</button> : null}
+                <div className="feed-amt">
+                  {c.currency !== "USD" ? <span className="feed-native">{m2(c.amount, c.currency)} →</span> : null}
+                  <span className="feed-usd">{m2(c.amount_usd)}</span>
+                </div>
+                <div className="feed-acts">
+                  {canOverride ? <button className="x" style={{ color: "var(--stamp)" }} title="Edit this cost" onClick={() => setEditingCostId(c.id)}>✎</button> : null}
+                  {canWrite ? <button className="x" title="Delete this cost" onClick={() => handleDeleteCost(c.id)}>✕</button> : null}
                 </div>
               </li>
             )) : <li className="empty">No costs recorded on this trip yet.</li>}
           </ul>
+          {costs.length ? (
+            <div className="feed-total">
+              <span>{costs.length} cost{costs.length === 1 ? "" : "s"} logged</span>
+              <b>{m2(costs.reduce((s, c) => s + Number(c.amount_usd), 0))}</b>
+            </div>
+          ) : null}
           </>
           )
         ) : tab === "balance" ? (
@@ -453,7 +486,7 @@ export default function DocketPage() {
             </div>
             <div className="field">
               <label htmlFor="cur">Currency</label>
-              <select id="cur" value={draft.cur} onChange={(e) => updateDraft({ cur: e.target.value })}>
+              <select id="cur" value={cur} onChange={(e) => updateDraft({ cur: e.target.value })}>
                 {curOpts.map((c) => <option key={c}>{c}</option>)}
               </select>
             </div>
@@ -463,17 +496,17 @@ export default function DocketPage() {
             <input id="when" type="date" value={draft.when} onChange={(e) => updateDraft({ when: e.target.value })} />
           </div>
           <div className={"stamp" + (Number.isFinite(amtNum) && amtNum > 0 ? " live" : "")}>
-            <span className="native">{Number.isFinite(amtNum) && amtNum > 0 ? m2(amtNum, draft.cur) : "—"}</span>
+            <span className="native">{Number.isFinite(amtNum) && amtNum > 0 ? m2(amtNum, cur) : "—"}</span>
             <span className="arrow">→</span>
             <span className={"usd" + (Number.isFinite(amtNum) && amtNum > 0 ? "" : " idle")}>
               {Number.isFinite(amtNum) && amtNum > 0 && rateToUsd !== undefined ? m2(amtNum * rateToUsd) : "USD 0.00"}
             </span>
             <span className="rate">
-              {draft.cur === "USD"
+              {cur === "USD"
                 ? "Recorded directly in USD — no conversion needed."
                 : fxRate
-                  ? <>Rate on file <b>1 {draft.cur} = {Number(fxRate.rate_to_usd).toFixed(8)} USD</b> · dated {fxRate.effective_on} · frozen onto this entry</>
-                  : `No rate on file for ${draft.cur}.`}
+                  ? <>Rate on file <b>1 {cur} = {Number(fxRate.rate_to_usd).toFixed(8)} USD</b> · dated {fxRate.effective_on} · frozen onto this entry</>
+                  : `No rate on file for ${cur}.`}
             </span>
           </div>
           <div className="field">
@@ -503,7 +536,7 @@ export default function DocketPage() {
               <input id="ref" type="text" value={draft.ref} onChange={(e) => updateDraft({ ref: e.target.value })} />
             </div>
           </div>
-          {costInCashbook && draft.cur ? <CashAccountField id="costAccount" direction="out" currency={draft.cur} choice={costAccount} /> : null}
+          {costInCashbook && cur ? <CashAccountField id="costAccount" direction="out" currency={cur} choice={costAccount} /> : null}
           <label style={{ display: "block", fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--ink-soft)", marginBottom: 5 }}>
             Receipt photo
           </label>
@@ -588,13 +621,18 @@ function BulkImportForm({ onImported }: { onImported: () => Promise<void> }) {
   }
 
   return (
-    <div className="panel" style={{ marginTop: 16 }}>
-      <div className="panel-head">
-        <h2>Bulk import trip costs</h2>
-        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- downloads a file from an API route, not a page transition; next/link doesn't apply */}
-        <a className="act" href="/api/trip-costs/bulk-template">Download template</a>
-      </div>
+    // Folded away: most costs are logged one at a time above, so the
+    // spreadsheet import opens only when it's wanted.
+    <details className="panel bulk-import" style={{ marginTop: 16 }} open={!!result || !!error}>
+      <summary className="panel-head">
+        <h2>Import costs from a spreadsheet</h2>
+        <span className="r-min">CSV or Excel, many trips at once</span>
+      </summary>
       <form className="panel-body" onSubmit={handleUpload}>
+        <div style={{ marginBottom: 12 }}>
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- downloads a file from an API route, not a page transition; next/link doesn't apply */}
+          <a className="act" href="/api/trip-costs/bulk-template">Download template</a>
+        </div>
         {error ? <div className="note bad">{error}</div> : null}
         <div className="field">
           <label htmlFor="bulkFile">CSV or Excel file</label>
@@ -617,7 +655,7 @@ function BulkImportForm({ onImported }: { onImported: () => Promise<void> }) {
           </div>
         ) : null}
       </form>
-    </div>
+    </details>
   );
 }
 
@@ -896,6 +934,20 @@ function BalanceTab({
             <div className={"v " + (statement.balance < 0 ? "neg" : "pos")}>{m2(Math.abs(statement.balance))}</div>
           </div>
         </div>
+        {statement.allocated > 0 ? (
+          <div className="budget" aria-hidden="true">
+            <span className="budget-track">
+              <span
+                className={"budget-bar" + (statement.spent > statement.allocated ? " over" : statement.spent / statement.allocated >= 0.9 ? " near" : "")}
+                style={{ width: `${Math.min(100, (statement.spent / statement.allocated) * 100)}%` }}
+              />
+            </span>
+            <div className="budget-foot">
+              <span>{Math.round((statement.spent / statement.allocated) * 100)}% of the trip&apos;s funds spent</span>
+              <span>{m2(statement.spent)} of {m2(statement.allocated)}</span>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {canWrite ? (

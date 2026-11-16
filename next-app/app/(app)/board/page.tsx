@@ -12,18 +12,11 @@ import { checkTimes, isTimeField, tripMilestones, type Milestone, type TimeEdits
 import type { AuditLogEntry, BoardTrip, BootstrapPayload, RateCard, TripEvent, TripStatus } from "@/lib/types";
 import { pickRateCard, type RatePick } from "@/lib/rates/pickRateCard";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
+import { RouteTrack, TruckIcon } from "@/lib/components/RouteTrack";
+import { MoneyStrip } from "@/lib/components/MoneyStrip";
+import { STATUS_PILL } from "@/lib/trips/status";
 
-const PILL: Record<string, string> = {
-  draft: "grey",
-  allocated: "grey",
-  loading: "violet",
-  in_transit: "violet",
-  at_border: "warn",
-  delivered: "warn",
-  pod_received: "good",
-  invoiced: "good",
-  closed: "grey",
-};
+const PILL = STATUS_PILL;
 
 const FILTERS: [string, string, (t: BoardTrip) => boolean][] = [
   ["active", "Active", (t) => !["closed", "invoiced"].includes(t.status)],
@@ -145,46 +138,63 @@ export default function BoardPage() {
   const detailOpen = showNewTrip || !!selectedTrip;
   const closeDetail = () => { setSelected(null); setShowNewTrip(false); };
   const canWrite = CAN_MANAGE_TRIPS.includes(data.role);
+  const routeById = new Map(data.routes.map((r) => [r.id, r]));
+
+  const activeCount = all.filter((t) => !["closed", "invoiced"].includes(t.status)).length;
 
   return (
     <>
       {error ? <div className="note bad">{error}</div> : null}
-      {/* Each figure is also the filter for the trips behind it. */}
-      <div className="strip">
-        <button type="button" className={"cell" + (filter === "rolling" ? " on" : "")} onClick={() => setFilter("rolling")}>
-          <div className="k">On the road</div>
-          <div className="v">{rolling.length}</div>
-          <div className="n">{all.filter((t) => !["closed", "invoiced"].includes(t.status)).length} active trips</div>
-        </button>
-        <button type="button" className={"cell" + (filter === "border" ? " on" : "")} onClick={() => setFilter("border")}>
-          <div className="k">At border now</div>
-          <div className={"v" + (longestHours >= 24 ? " warn" : "")}>{atBorder.length}</div>
-          <div className="n">
-            {longest
-              ? `Longest: ${longest.trip_no} at ${(longest.last_border || "border").split("/")[0].trim()}, ${waitLabel(longest.last_border_at!, loadedAt)}`
-              : atBorder.length ? "waiting times not logged" : "none waiting"}
+      <section className="ops-band" aria-label="Board">
+        <div className="ops-band-top">
+          <div>
+            <div className="ops-kicker">Board</div>
+            <h2 className="ops-title">{activeCount} active trip{activeCount === 1 ? "" : "s"}</h2>
+            <div className="ops-sub">
+              {rolling.length} on the road{atBorder.length ? `, ${atBorder.length} at a border` : ""}{late.length ? `, ${late.length} late` : ""}
+            </div>
           </div>
-        </button>
-        <button type="button" className={"cell" + (filter === "late" ? " on" : "")} onClick={() => setFilter("late")}>
-          <div className="k">Late</div>
-          <div className={"v" + (late.length ? " bad" : "")}>{late.length}</div>
-          <div className="n">{late.length ? late.map((t) => t.trip_no).join(", ") : "all on schedule"}</div>
-        </button>
-        <button type="button" className={"cell" + (filter === "pod" ? " on" : "")} onClick={() => setFilter("pod")}>
-          <div className="k">Awaiting POD</div>
-          <div className={"v" + (pod.length ? " warn" : "")}>{pod.length}</div>
-          <div className="n">{podHeld > 0 ? `${m0(podHeld)} held until POD` : "nothing held back"}</div>
-        </button>
-      </div>
+          {canWrite ? (
+            <div className="ops-actions">
+              <button type="button" className="ops-cta" onClick={() => { setShowNewTrip(true); setSelected(null); }}>
+                + New trip
+              </button>
+            </div>
+          ) : null}
+        </div>
+        {/* Each figure is also the filter for the trips behind it. */}
+        <div className="ops-figs">
+          <button type="button" className={"ops-fig" + (filter === "rolling" ? " on" : "")} aria-pressed={filter === "rolling"} onClick={() => setFilter("rolling")}>
+            <span className="k">On the road</span>
+            <span className="v">{rolling.length}</span>
+            <span className="n">loading, in transit or at a border</span>
+          </button>
+          <button type="button" className={"ops-fig" + (filter === "border" ? " on" : "")} aria-pressed={filter === "border"} onClick={() => setFilter("border")}>
+            <span className="k">At border now</span>
+            <span className={"v" + (longestHours >= 24 ? " warn" : "")}>{atBorder.length}</span>
+            <span className="n">
+              {longest
+                ? `Longest: ${longest.trip_no} at ${(longest.last_border || "border").split("/")[0].trim()}, ${waitLabel(longest.last_border_at!, loadedAt)}`
+                : atBorder.length ? "waiting times not logged" : "none waiting"}
+            </span>
+          </button>
+          <button type="button" className={"ops-fig" + (filter === "late" ? " on" : "")} aria-pressed={filter === "late"} onClick={() => setFilter("late")}>
+            <span className="k">Late</span>
+            <span className={"v" + (late.length ? " bad" : "")}>{late.length}</span>
+            <span className="n">{late.length ? late.map((t) => t.trip_no).join(", ") : "all on schedule"}</span>
+          </button>
+          <button type="button" className={"ops-fig" + (filter === "pod" ? " on" : "")} aria-pressed={filter === "pod"} onClick={() => setFilter("pod")}>
+            <span className="k">Awaiting POD</span>
+            <span className={"v" + (pod.length ? " warn" : "")}>{pod.length}</span>
+            <span className="n">{podHeld > 0 ? `${m0(podHeld)} held until POD` : "nothing held back"}</span>
+          </button>
+        </div>
+      </section>
       <div className="grid">
         <div className="panel">
           <div className="panel-head">
             <h2>Trips</h2>
-            {canWrite ? (
-              <button className="act" onClick={() => { setShowNewTrip(true); setSelected(null); }}>
-                + New trip
-              </button>
-            ) : null}
+            <span className="r-min">{rows.length} shown</span>
           </div>
           <div className="board-tools">
             <input
@@ -220,15 +230,9 @@ export default function BoardPage() {
                     className={"tap" + (selected === t.trip_id ? " sel" : "")}
                     onClick={() => { setSelected(t.trip_id); setShowNewTrip(false); }}
                   >
-                    <div>
-                      <div className="r-no">{t.trip_no}</div>
-                      <div className="r-title">{t.customer}</div>
-                      <div className="r-sub">
-                        {t.route}
-                        {t.fleet_no ? " · " + t.fleet_no : ""}
-                        {t.driver ? " · " + t.driver : ""}
-                      </div>
-                      <div className="r-tags">
+                    <div style={{ minWidth: 0 }}>
+                      <div className="row-top">
+                        <span className="r-no">{t.trip_no}</span>
                         <span className={"pill " + (PILL[t.status] || "grey")}>{lab(t.status)}</span>
                         {t.over_target ? (
                           <span className="pill bad">day {t.days_running} of {t.target_days}</span>
@@ -236,7 +240,7 @@ export default function BoardPage() {
                           <span className="pill grey">day {t.days_running}{t.target_days ? ` of ${t.target_days}` : ""}</span>
                         ) : null}
                         {t.last_border && ["in_transit", "at_border"].includes(t.status) ? (
-                          <span className="pill violet">{t.last_border}</span>
+                          <span className="pill violet">{t.status === "at_border" ? "at " : "cleared "}{t.last_border.split("/")[0].trim()}</span>
                         ) : null}
                         {t.docs_pending ? (
                           <span className="pill warn">{t.docs_pending} doc{t.docs_pending > 1 ? "s" : ""} pending</span>
@@ -245,6 +249,13 @@ export default function BoardPage() {
                           <span className="pill warn">no POD</span>
                         ) : null}
                       </div>
+                      <div className="r-title">{t.customer}</div>
+                      <div className="r-sub">
+                        {t.route}
+                        {t.fleet_no ? " · " + t.fleet_no : ""}
+                        {t.driver ? " · " + t.driver : ""}
+                      </div>
+                      <RouteTrack trip={t} route={routeById.get(t.route_id)} />
                     </div>
                     <div className="r-right">
                       <div className={"r-amt " + (m >= 0 ? "pos" : "neg")}>{m0(m)}</div>
@@ -308,7 +319,6 @@ function TripDetail({
   // moving the trip on.
   const [historyVersion, setHistoryVersion] = useState(0);
   const canOverride = CAN_OVERRIDE_RECORDS.includes(data.role);
-  const m = Number(trip.margin_usd || 0);
   const nexts = NEXT[trip.status] || [];
   const canBorder = ["in_transit", "at_border"].includes(trip.status);
   const borders = trip.borders || [];
@@ -364,17 +374,21 @@ function TripDetail({
 
   return (
     <>
-      <div className="d-head">
-        <div className="r-no">
-          {trip.trip_no} · <span className={"pill " + (PILL[trip.status] || "grey")}>{lab(trip.status)}</span>
+      <div className="d-head trip-card">
+        <div className="tc-top">
+          <span className="r-no">{trip.trip_no}</span>
+          <span className={"pill " + (PILL[trip.status] || "grey")}>{lab(trip.status)}</span>
+          {trip.days_running ? (
+            <span className={"pill " + (trip.over_target ? "bad" : "grey")}>day {trip.days_running}{trip.target_days ? ` of ${trip.target_days}` : ""}</span>
+          ) : null}
         </div>
-        <div className="r-title" style={{ fontSize: 18 }}>{trip.customer}</div>
-        <div className="r-sub">{trip.route}</div>
-        <div className="d-figs">
-          <div><div className="k">Revenue</div><div className="v">{m2(trip.revenue_usd)}</div></div>
-          <div><div className="k">Costs</div><div className="v">{m2(trip.cost_usd)}</div></div>
-          <div><div className="k">Margin</div><div className={"v " + (m >= 0 ? "pos" : "neg")}>{m2(m)}</div></div>
+        <div className="tc-title">{trip.customer}</div>
+        <div className="r-sub">
+          {trip.route}
+          {trip.fleet_no ? " · " + trip.fleet_no : ""}
+          {trip.driver ? " · " + trip.driver : ""}
         </div>
+        <MoneyStrip trip={trip} />
       </div>
       {editing ? null : <RouteLine trip={trip} stops={stops} />}
       {editing ? (
@@ -529,6 +543,10 @@ function useTripHistory(trip: BoardTrip, version: number): History {
 // and how long it waited at each border.
 function RouteLine({ trip, stops }: { trip: BoardTrip; stops: Stop[] }) {
   const running = trip.days_running != null && ["loading", "in_transit", "at_border"].includes(trip.status);
+  // The truck: above the stop it's standing at, or on the road to the next
+  // one while it's moving.
+  const here = stops.findIndex((s) => s.state === "here");
+  const next = here < 0 && running ? stops.findIndex((s) => s.state === "next") : -1;
   return (
     <div className="d-sec">
       <h3 className="route-head">
@@ -542,6 +560,9 @@ function RouteLine({ trip, stops }: { trip: BoardTrip; stops: Stop[] }) {
       <ol className="route-line" aria-label={`Route: ${stops.map((s) => `${s.label} (${s.state === "done" ? "passed" : s.state === "here" ? "truck is here" : s.state === "next" ? "heading here" : "ahead"})`).join(", ")}`}>
         {stops.map((s, i) => (
           <li key={i} className={"route-stop " + s.state + " " + s.kind}>
+            {i === here || i === next ? (
+              <span className={"route-truck" + (i === next ? " between" : "")}><TruckIcon /></span>
+            ) : null}
             <span className="route-dot" aria-hidden="true" />
             <span className="route-name">{s.label}</span>
             {s.note ? <span className="route-note">{s.note}</span> : null}

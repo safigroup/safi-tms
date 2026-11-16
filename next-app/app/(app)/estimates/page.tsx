@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { m2, lab, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
 import { Spinner } from "@/lib/components/Spinner";
+import { PageBand } from "@/lib/components/PageBand";
 import { estimateTripCost, type CostTemplateLine, type CostEstimate } from "@/lib/estimates/estimateTripCost";
 import type { RouteCostAnalysis } from "@/lib/insights/computeRouteCostDeltas";
 import { t, catLabel, type PrintLang } from "@/lib/print/translations";
@@ -138,17 +139,48 @@ export default function EstimatesPage() {
   return (
     <>
       {loadError ? <div className="note bad">{loadError}</div> : null}
+      <PageBand
+        kicker="Estimator"
+        title={route ? route.name : "Pick a route"}
+        sub={route
+          ? [route.distance_km ? `${route.distance_km.toLocaleString("en-US")} km` : null, borderList?.length ? `via ${borderList.join(" → ")}` : null, customer?.name ?? null]
+              .filter(Boolean).join(" · ") || "No distance or borders on file"
+          : "A trip's likely costs, and the margin at the customer's rate"}
+        actions={route ? (
+          <>
+            <button className={"chip" + (printLang === "en" ? " on" : "")} type="button" aria-pressed={printLang === "en"} onClick={() => setPrintLang("en")}>EN</button>
+            <button className={"chip" + (printLang === "fr" ? " on" : "")} type="button" aria-pressed={printLang === "fr"} onClick={() => setPrintLang("fr")}>FR</button>
+            <button className="ops-cta" type="button" onClick={() => setPrinting(true)}>Print / PDF</button>
+          </>
+        ) : null}
+        figs={route ? [
+          {
+            key: "cost",
+            k: "Estimated cost",
+            v: templateLines.length ? m2(estimate.total) : "—",
+            tone: estimate.incomplete ? "warn" : undefined,
+            n: !templateLines.length ? "no cost template yet" : estimate.incomplete ? "missing quantities" : `${estimate.lines.length} cost line${estimate.lines.length === 1 ? "" : "s"}`,
+          },
+          {
+            key: "revenue",
+            k: "Estimated revenue",
+            v: revenueAmount !== null ? m2(revenueAmount) : "—",
+            n: revenueAmount !== null ? `at ${customer?.name}'s rate` : customerId ? "no single rate" : "pick a customer",
+          },
+          {
+            key: "margin",
+            k: "Estimated margin",
+            v: margin !== null ? m2(margin) : "—",
+            tone: margin === null ? undefined : margin >= 0 ? "pos" : "bad",
+            n: margin !== null && revenueAmount ? `${((margin / revenueAmount) * 100).toFixed(1)}% of revenue` : "needs a revenue figure",
+          },
+        ] : undefined}
+      />
       <div className="grid">
         <div className="panel">
           <div className="panel-head">
-            <h2>Estimate</h2>
-            {route ? (
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <button className={"chip" + (printLang === "en" ? " on" : "")} type="button" onClick={() => setPrintLang("en")}>EN</button>
-                <button className={"chip" + (printLang === "fr" ? " on" : "")} type="button" onClick={() => setPrintLang("fr")}>FR</button>
-                <button className="act" type="button" onClick={() => setPrinting(true)}>Print / PDF</button>
-              </div>
-            ) : null}
+            <h2>Cost breakdown</h2>
+            {route && pathsForRoute.length ? <span className="r-min">{borderLabel} border route</span> : null}
           </div>
           {!route ? (
             <div className="empty">Pick a route to see an estimate.</div>

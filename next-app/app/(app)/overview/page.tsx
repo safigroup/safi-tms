@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { durationLabel, m0, m2, today } from "@/lib/format";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 import { Spinner } from "@/lib/components/Spinner";
+import { PageBand, type BandFig } from "@/lib/components/PageBand";
 import {
   AGING,
   STAGES,
@@ -58,15 +59,20 @@ function ptsDelta(cur: number | null, prev: number | null): Delta | null {
   return { text: `${d > 0 ? "▲" : "▼"} ${Math.abs(d).toFixed(1)} pts`, tone: d > 0 ? "good" : "bad" };
 }
 
-function Kpi({ label, value, delta, vs, note }: { label: string; value: string; delta?: Delta | null; vs?: string; note?: string }) {
-  return (
-    <div className="cell">
-      <div className="k">{label}</div>
-      <div className="v">{value}</div>
-      {delta ? <div className="n"><span className={"delta " + delta.tone}>{delta.text}</span> vs {vs}</div> : null}
-      {note ? <div className="n">{note}</div> : null}
-    </div>
-  );
+// A figure for the band: the value, its change against last month, and a
+// note under it.
+function kpi(key: string, k: string, v: string, delta?: Delta | null, vs?: string, note?: string): BandFig {
+  return {
+    key,
+    k,
+    v,
+    n: delta || note ? (
+      <>
+        {delta ? <span className="nl"><span className={"delta " + delta.tone}>{delta.text}</span> vs {vs}</span> : null}
+        {note ? <span className="nl">{note}</span> : null}
+      </>
+    ) : undefined,
+  };
 }
 
 export default function OverviewPage() {
@@ -137,12 +143,12 @@ export default function OverviewPage() {
   return (
     <>
       {error ? <div className="note bad">{error}</div> : null}
-      <div className="dash-head">
-        <h2>Overview</h2>
-        <span className="r-mono">This month so far: {current.label} · compared with {previous.label}</span>
-      </div>
-
-      {finance ? <FinanceRow data={data} current={current} previous={previous} collections={collections} /> : <OpsRow data={data} current={current} previous={previous} />}
+      <PageBand
+        kicker="Overview"
+        title={`${monthName(current.from)} so far`}
+        sub={`${current.label}, compared with ${previous.label}`}
+        figs={finance ? financeFigs(data, current, previous, collections) : opsFigs(data, current, previous, timeZone)}
+      />
 
       <div className="dash-grid">
         <section className="panel dash-wide">
@@ -205,51 +211,59 @@ export default function OverviewPage() {
   );
 }
 
-function FinanceRow({ data, current, previous, collections }: { data: BootstrapPayload; current: Period; previous: Period; collections: Collections | null }) {
+// "November" for 2026-11-01.
+function monthName(iso: string) {
+  return new Date(iso + "T00:00:00Z").toLocaleString("en-US", { month: "long", timeZone: "UTC" });
+}
+
+function financeFigs(data: BootstrapPayload, current: Period, previous: Period, collections: Collections | null): BandFig[] {
   const now = tripMoney(data.board, current);
   const before = tripMoney(data.board, previous);
   const recv = receivables(data.ar, data.fx);
-  return (
-    <div className="strip kpi-5">
-      <Kpi label="Revenue" value={m0(now.revenue)} delta={pctDelta(now.revenue, before.revenue, true)} vs={previous.label} note={`${now.trips} trip${now.trips === 1 ? "" : "s"} loaded`} />
-      <Kpi label="Trip costs" value={m0(now.costs)} delta={pctDelta(now.costs, before.costs, false)} vs={previous.label} />
-      <Kpi
-        label="Margin"
-        value={now.marginPct === null ? "—" : `${now.marginPct.toFixed(1)}%`}
-        delta={ptsDelta(now.marginPct, before.marginPct)}
-        vs={previous.label}
-        note={m0(now.margin)}
-      />
-      <Kpi
-        label="Cash collected"
-        value={collections ? m0(collections.current) : "…"}
-        delta={collections ? pctDelta(collections.current, collections.previous, true) : null}
-        vs={previous.label}
-        note={collections?.missingRates.length ? `excludes ${collections.missingRates.join(", ")} (no rate on file)` : undefined}
-      />
-      <Kpi
-        label="Overdue receivables"
-        value={m0(recv.overdueTotal)}
-        note={recv.overdueCount ? `${recv.overdueCount} invoice${recv.overdueCount === 1 ? "" : "s"} · oldest ${recv.oldestDays} days` : "nothing overdue"}
-      />
-    </div>
-  );
+  return [
+    kpi("revenue", "Revenue", m0(now.revenue), pctDelta(now.revenue, before.revenue, true), previous.label, `${now.trips} trip${now.trips === 1 ? "" : "s"} loaded`),
+    kpi("costs", "Trip costs", m0(now.costs), pctDelta(now.costs, before.costs, false), previous.label),
+    kpi(
+      "margin",
+      "Margin",
+      now.marginPct === null ? "—" : `${now.marginPct.toFixed(1)}%`,
+      ptsDelta(now.marginPct, before.marginPct),
+      previous.label,
+      m0(now.margin),
+    ),
+    kpi(
+      "cash",
+      "Cash collected",
+      collections ? m0(collections.current) : "…",
+      collections ? pctDelta(collections.current, collections.previous, true) : null,
+      previous.label,
+      collections?.missingRates.length ? `excludes ${collections.missingRates.join(", ")} (no rate on file)` : undefined,
+    ),
+    {
+      ...kpi(
+        "overdue",
+        "Overdue receivables",
+        m0(recv.overdueTotal),
+        null,
+        undefined,
+        recv.overdueCount ? `${recv.overdueCount} invoice${recv.overdueCount === 1 ? "" : "s"} · oldest ${recv.oldestDays} days` : "nothing overdue",
+      ),
+      tone: recv.overdueTotal > 0 ? "bad" : undefined,
+    },
+  ];
 }
 
-function OpsRow({ data, current, previous }: { data: BootstrapPayload; current: Period; previous: Period }) {
-  const timeZone = useCompanyTimeZone();
+function opsFigs(data: BootstrapPayload, current: Period, previous: Period, timeZone: string): BandFig[] {
   const now = tripCounts(data.board, current, timeZone);
   const before = tripCounts(data.board, previous, timeZone);
   const rolling = data.board.filter((t) => ["loading", "in_transit", "at_border"].includes(t.status));
   const late = rolling.filter((t) => t.over_target);
-  return (
-    <div className="strip">
-      <Kpi label="Trips loaded" value={String(now.loaded)} delta={pctDelta(now.loaded, before.loaded, true)} vs={previous.label} />
-      <Kpi label="Trips delivered" value={String(now.delivered)} delta={pctDelta(now.delivered, before.delivered, true)} vs={previous.label} />
-      <Kpi label="On the road now" value={String(rolling.length)} />
-      <Kpi label="Late now" value={String(late.length)} note={late.length ? late.map((t) => t.trip_no).join(", ") : "all on schedule"} />
-    </div>
-  );
+  return [
+    kpi("loaded", "Trips loaded", String(now.loaded), pctDelta(now.loaded, before.loaded, true), previous.label),
+    kpi("delivered", "Trips delivered", String(now.delivered), pctDelta(now.delivered, before.delivered, true), previous.label),
+    kpi("rolling", "On the road now", String(rolling.length)),
+    { ...kpi("late", "Late now", String(late.length), null, undefined, late.length ? late.map((t) => t.trip_no).join(", ") : "all on schedule"), tone: late.length ? "bad" : undefined },
+  ];
 }
 
 function ReadyToInvoice({ data }: { data: BootstrapPayload }) {

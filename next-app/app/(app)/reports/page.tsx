@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { m0, m2, num, lab, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
 import { Spinner } from "@/lib/components/Spinner";
+import { PageBand } from "@/lib/components/PageBand";
 import { TripLedgerBody } from "@/lib/components/TripLedgerBody";
 import { t, catLabel, type PrintLang } from "@/lib/print/translations";
 import type { BootstrapPayload, Breakeven, TruckReport } from "@/lib/types";
@@ -180,6 +181,7 @@ export default function ReportsPage() {
   if (!data) return <div className="panel"><Spinner /></div>;
 
   const canEdit = CAN_EDIT_COMMERCIAL.includes(data.role);
+  const truck = data.trucks.find((t) => t.id === truckId) ?? null;
 
   // USD is always a valid entry currency (no conversion needed), whether
   // or not the org has ever bothered to add a redundant "1 USD = 1 USD"
@@ -193,33 +195,56 @@ export default function ReportsPage() {
   return (
     <>
       {loadError ? <div className="note bad">{loadError}</div> : null}
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <div className="panel-body" style={{ display: "flex", gap: 11, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <div className="field" style={{ marginBottom: 0, minWidth: 220 }}>
+      <PageBand
+        kicker="Reports · truck profit and loss"
+        title={truck ? `${truck.fleet_no} · ${truck.horse_reg}` : "No trucks yet"}
+        sub={from && to ? `${from} to ${to}` : from ? `From ${from}` : to ? `Up to ${to}` : "All time"}
+        actions={report ? (
+          <>
+            <button type="button" className={"chip" + (printLang === "en" ? " on" : "")} aria-pressed={printLang === "en"} onClick={() => setPrintLang("en")}>EN</button>
+            <button type="button" className={"chip" + (printLang === "fr" ? " on" : "")} aria-pressed={printLang === "fr"} onClick={() => setPrintLang("fr")}>FR</button>
+            <button type="button" className="ops-cta" onClick={() => setPrinting(true)}>Print / PDF</button>
+          </>
+        ) : null}
+        figs={report && !loadingReport ? [
+          { key: "rev", k: "Revenue", v: m0(report.tripRevenue), tone: report.tripRevenue > 0 ? "pos" : undefined, n: `${report.trips.length} trip${report.trips.length === 1 ? "" : "s"}` },
+          { key: "trip", k: "Trip expenses", v: m0(report.tripExpenses), n: "fuel, border fees, etc." },
+          { key: "standing", k: "Standing expenses", v: m0(report.standingExpenses), n: `${report.standingCosts.length} entr${report.standingCosts.length === 1 ? "y" : "ies"}` },
+          {
+            key: "net",
+            k: "Net profit / (loss)",
+            v: m0(report.margin),
+            tone: report.margin > 0 ? "pos" : report.margin < 0 ? "bad" : undefined,
+            n: report.tripRevenue > 0 ? Math.round((report.margin / report.tripRevenue) * 100) + "% of revenue" : "—",
+          },
+        ] : undefined}
+      >
+        <div className="band-filters">
+          <div className="band-field band-grow">
             <label htmlFor="rTruck">Truck</label>
             <select id="rTruck" value={truckId ?? ""} onChange={(e) => setTruckId(e.target.value)}>
               {data.trucks.map((t) => <option key={t.id} value={t.id}>{t.fleet_no} — {t.horse_reg}</option>)}
             </select>
           </div>
-          <div className="field" style={{ marginBottom: 0 }}>
+          <div className="band-field">
             <label htmlFor="rFrom">From</label>
             <input id="rFrom" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
           </div>
-          <div className="field" style={{ marginBottom: 0 }}>
+          <div className="band-field">
             <label htmlFor="rTo">To</label>
             <input id="rTo" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
           {from || to ? (
-            <button className="ghost" type="button" style={{ marginTop: 0, width: "auto" }} onClick={() => { setFrom(""); setTo(""); }}>
+            <button className="act" type="button" onClick={() => { setFrom(""); setTo(""); }}>
               Clear range
             </button>
           ) : null}
-          <div className="check" style={{ marginBottom: 10 }}>
+          <label className="band-check" htmlFor="rLedgers">
             <input id="rLedgers" type="checkbox" checked={includeLedgers} onChange={(e) => setIncludeLedgers(e.target.checked)} />
-            <label htmlFor="rLedgers">Include trip ledgers when printing</label>
-          </div>
+            Include trip ledgers when printing
+          </label>
         </div>
-      </div>
+      </PageBand>
 
       {loadingReport ? (
         <div className="panel"><Spinner /></div>
@@ -227,13 +252,6 @@ export default function ReportsPage() {
         <div className="note bad">{reportError}</div>
       ) : report ? (
         <>
-          <div className="strip">
-            <div className="cell"><div className="k">Revenue</div><div className="v pos">{m0(report.tripRevenue)}</div><div className="n">{report.trips.length} trip{report.trips.length === 1 ? "" : "s"}</div></div>
-            <div className="cell"><div className="k">Trip expenses</div><div className="v">{m0(report.tripExpenses)}</div><div className="n">fuel, border fees, etc.</div></div>
-            <div className="cell"><div className="k">Standing expenses</div><div className="v">{m0(report.standingExpenses)}</div><div className="n">{report.standingCosts.length} entr{report.standingCosts.length === 1 ? "y" : "ies"}</div></div>
-            <div className="cell"><div className="k">Net profit / (loss)</div><div className={"v" + (report.margin >= 0 ? " pos" : " bad")}>{m0(report.margin)}</div><div className="n">{report.tripRevenue > 0 ? Math.round((report.margin / report.tripRevenue) * 100) + "%" : "—"}</div></div>
-          </div>
-
           <div className="panel" style={{ marginBottom: 16 }}>
             <div className="panel-head"><h2>Profit &amp; loss</h2></div>
             <div className="panel-body">
@@ -315,11 +333,7 @@ export default function ReportsPage() {
             <div className="panel">
               <div className="panel-head">
                 <h2>{report.truck.fleet_no}</h2>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <button className={"chip" + (printLang === "en" ? " on" : "")} onClick={() => setPrintLang("en")}>EN</button>
-                  <button className={"chip" + (printLang === "fr" ? " on" : "")} onClick={() => setPrintLang("fr")}>FR</button>
-                  <button className="act" onClick={() => setPrinting(true)}>Print / PDF</button>
-                </div>
+                <span className="r-min">{report.trips.length} trip{report.trips.length === 1 ? "" : "s"} · {report.standingCosts.length} standing cost{report.standingCosts.length === 1 ? "" : "s"}</span>
               </div>
               <div className="tabs">
                 <button className={tab === "trips" ? "on" : ""} onClick={() => setTab("trips")}>

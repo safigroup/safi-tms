@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { setActiveOrg } from "@/app/(app)/actions";
 import type { Organization } from "@/lib/types";
 import { Spinner } from "@/lib/components/Spinner";
+import { PageBand } from "@/lib/components/PageBand";
 
 // Shared by app/(app)/organizations/page.tsx (switching/editing/creating
 // once already inside some org) and app/(app)/layout.tsx's fallback for a
@@ -52,12 +53,18 @@ export function OrganizationsPicker() {
   if (!orgs) return <div className="panel"><Spinner /></div>;
 
   return (
+    <>
+    <PageBand
+      kicker="Platform"
+      title={`${orgs.length} organization${orgs.length === 1 ? "" : "s"}`}
+      sub="Every company on Safi TMS. Switch to one to work inside it."
+      actions={!creating ? (
+        <button className="ops-cta" type="button" onClick={() => setCreating(true)}>+ New organization</button>
+      ) : null}
+    />
     <div className="panel">
       <div className="panel-head">
-        <h2>Organizations</h2>
-        {!creating ? (
-          <button className="act" type="button" onClick={() => setCreating(true)}>+ New organization</button>
-        ) : null}
+        <h2>{creating ? "New organization" : "Organizations"}</h2>
       </div>
       {creating ? (
         <NewOrgForm
@@ -100,6 +107,7 @@ export function OrganizationsPicker() {
         </ul>
       )}
     </div>
+    </>
   );
 }
 

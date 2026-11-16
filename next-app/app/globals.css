@@ -434,10 +434,6 @@ nav a.on .n {
   font-size: 20px
 }
 
-.strip.kpi-5 {
-  grid-template-columns: repeat(5, 1fr)
-}
-
 .delta {
   font-family: var(--mono);
   font-weight: 600
@@ -885,14 +881,6 @@ table.mtable td:first-child {
 }
 
 @media(max-width:780px) {
-  .strip.kpi-5 {
-    grid-template-columns: 1fr 1fr
-  }
-
-  .strip.kpi-5 .cell:last-child {
-    grid-column: span 2
-  }
-
   .aging-row {
     grid-template-columns: 96px minmax(0, 1fr) auto
   }
@@ -1213,16 +1201,30 @@ ul.list li.off {
   border-bottom: 1px solid var(--rule)
 }
 
+/* a detail's figures, boxed side by side like the Board's money strip */
 .d-figs {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
-  margin-top: 12px
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 12px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden
+}
+
+.d-figs > div {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  padding: 9px 10px;
+  background: var(--card)
 }
 
 .d-figs .k {
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: 9px;
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--ink-soft)
@@ -1230,10 +1232,10 @@ ul.list li.off {
 
 .d-figs .v {
   font-family: var(--mono);
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  margin-top: 2px
+  overflow-wrap: anywhere
 }
 
 .d-figs .v.pos {
@@ -2143,68 +2145,6 @@ table.sum-table tr.sum-total td {
   border-bottom: 1px solid var(--rule)
 }
 
-/* cashbook account cards */
-.acct-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 10px;
-  padding: 16px 18px
-}
-
-.acct {
-  display: grid;
-  gap: 3px;
-  text-align: left;
-  font: inherit;
-  color: var(--ink);
-  background: var(--ground);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  padding: 12px 14px;
-  cursor: pointer;
-  transition: border-color .12s ease, background-color .12s ease
-}
-
-.acct:hover {
-  border-color: var(--stamp)
-}
-
-.acct.on {
-  background: var(--stamp-wash);
-  border-color: var(--stamp);
-  box-shadow: inset 3px 0 0 var(--stamp)
-}
-
-.acct.off {
-  opacity: .55
-}
-
-.acct-name {
-  font-family: var(--cond);
-  font-weight: 600;
-  font-size: 15px
-}
-
-.acct-kind {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--ink-soft)
-}
-
-.acct-bal {
-  font-family: var(--mono);
-  font-size: 16px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  margin-top: 4px
-}
-
-.acct-bal.neg {
-  color: var(--alert)
-}
-
 /* file capture */
 .capture {
   border: 1px dashed var(--rule);
@@ -2695,20 +2635,37 @@ button.ops-cta,
   outline-offset: 2px
 }
 
-/* the band's figures, each also a filter on the Board */
-.ops-figs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-top: 1px solid var(--band-rule)
+/* the band's figures: a row of read-outs (on the Board and Billing each
+   is also the filter for what's behind it). The band is a size container
+   so the figures fit its width, not the window's -- the sidebar takes a
+   different share of the window at each size. */
+.ops-band {
+  container: band / inline-size
 }
 
-button.ops-fig {
+.ops-figs {
+  display: grid;
+  grid-template-columns: repeat(var(--figs, 4), minmax(0, 1fr))
+}
+
+/* as many as fit, in rows (the Cashbook's accounts) */
+.ops-figs.fill {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr))
+}
+
+.ops-fig {
   position: relative;
   display: grid;
   align-content: start;
   gap: 2px;
   min-width: 0;
   padding: 14px 22px 16px;
+  /* the rules between figures, drawn on each one's left and top edge;
+     the outer ones fall on the band's edge and are clipped */
+  box-shadow: -1px 0 0 var(--band-rule), 0 -1px 0 var(--band-rule)
+}
+
+button.ops-fig {
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -2717,10 +2674,6 @@ button.ops-fig {
   text-align: left;
   cursor: pointer;
   transition: background-color .12s ease
-}
-
-button.ops-fig + button.ops-fig {
-  border-left: 1px solid var(--band-rule)
 }
 
 button.ops-fig:hover {
@@ -2752,7 +2705,7 @@ button.ops-fig:focus-visible {
 
 .ops-fig .v {
   font-family: var(--mono);
-  font-size: 24px;
+  font-size: clamp(19px, 2.15cqi, 24px);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1.2
@@ -2766,11 +2719,100 @@ button.ops-fig:focus-visible {
   color: var(--band-bad)
 }
 
+.ops-fig .v.pos {
+  color: var(--band-accent)
+}
+
 .ops-fig .n {
   font-size: 12px;
   line-height: 1.35;
   color: var(--band-soft);
   overflow-wrap: anywhere
+}
+
+.ops-fig .nl {
+  display: block
+}
+
+/* change against last month, in the band's own colours */
+.ops-band .delta.good {
+  color: var(--band-accent)
+}
+
+.ops-band .delta.bad {
+  color: var(--band-bad)
+}
+
+.ops-band .delta.flat {
+  color: var(--band-ink)
+}
+
+/* sections along the band's bottom edge */
+.ops-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  box-shadow: inset 0 1px 0 var(--band-rule)
+}
+
+button.ops-tab {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 10px 13px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--band-soft);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color .12s ease
+}
+
+button.ops-tab:hover {
+  color: var(--band-ink)
+}
+
+button.ops-tab.on {
+  color: var(--band-ink);
+  font-weight: 600
+}
+
+button.ops-tab.on::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--band-accent)
+}
+
+button.ops-tab:focus-visible {
+  outline-offset: -3px
+}
+
+.ops-tab-n {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .1);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  color: var(--band-soft)
+}
+
+button.ops-tab.on .ops-tab-n {
+  color: var(--band-ink)
 }
 
 @media(max-width:780px) {
@@ -2782,25 +2824,30 @@ button.ops-fig:focus-visible {
     font-size: 22px
   }
 
-  .ops-figs {
-    grid-template-columns: repeat(2, minmax(0, 1fr))
-  }
-
-  button.ops-fig {
+  .ops-fig {
     padding: 12px 16px 14px
-  }
-
-  button.ops-fig:nth-child(odd) {
-    border-left: 0
-  }
-
-  button.ops-fig:nth-child(n + 3) {
-    border-top: 1px solid var(--band-rule)
   }
 
   button.ops-fig.on::after {
     left: 16px;
     right: 16px
+  }
+
+  .ops-tabs {
+    padding: 0 6px
+  }
+}
+
+/* narrow bands: two figures a row, an odd last one across both */
+@container band (max-width: 700px) {
+  .ops-figs,
+  .ops-figs.many,
+  .ops-figs.fill {
+    grid-template-columns: repeat(2, minmax(0, 1fr))
+  }
+
+  .ops-fig:last-child:nth-child(odd) {
+    grid-column: 1 / -1
   }
 }
 
@@ -2855,6 +2902,82 @@ button.ops-fig:focus-visible {
 .ops-band select.band-select:focus {
   border-color: var(--band-ink);
   box-shadow: 0 0 0 3px rgba(255, 255, 255, .12)
+}
+
+/* a page's own filters, inside its band (Reports, the Estimator) */
+.band-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 14px;
+  padding: 0 22px 18px
+}
+
+.band-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0
+}
+
+.band-field.band-grow {
+  flex: 1 1 260px;
+  max-width: 420px
+}
+
+.band-field label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--band-soft)
+}
+
+.ops-band .band-field select,
+.ops-band .band-field input:not([type="checkbox"]):not([type="radio"]) {
+  min-width: 0;
+  color-scheme: dark;
+  background-color: rgba(255, 255, 255, .07);
+  border: 1px solid var(--band-line);
+  color: var(--band-ink)
+}
+
+.ops-band .band-field input::placeholder {
+  color: var(--band-soft)
+}
+
+.ops-band .band-field select:focus,
+.ops-band .band-field input:focus {
+  border-color: var(--band-ink);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, .12)
+}
+
+.ops-band .band-field select option {
+  color: var(--ink);
+  background: var(--card)
+}
+
+.band-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  font-size: 13px;
+  color: var(--band-soft);
+  cursor: pointer
+}
+
+.band-check input {
+  accent-color: var(--band-accent)
+}
+
+@media(max-width:780px) {
+  .band-filters {
+    padding: 0 16px 16px
+  }
+
+  .band-field {
+    flex: 1 1 120px
+  }
 }
 
 @media(max-width:900px) {

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { dayIn, m0, m2, lab, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
 import { Spinner } from "@/lib/components/Spinner";
+import { PageBand } from "@/lib/components/PageBand";
 import { t, invoiceTypeLabel, type PrintLang } from "@/lib/print/translations";
 import type { ArInvoice, BillableTrip, BootstrapPayload } from "@/lib/types";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
@@ -112,12 +113,17 @@ export default function BillingPage() {
   return (
     <>
       {loadError ? <div className="note bad">{loadError}</div> : null}
-      <div className="strip">
-        <div className="cell"><div className="k">Ready to raise</div><div className="v pos">{m0(raisable)}</div><div className="n">{data.billable.length} trip{data.billable.length === 1 ? "" : "s"}</div></div>
-        <div className="cell"><div className="k">Blocked on POD</div><div className={"v" + (blocked.length ? " warn" : "")}>{m0(blockedVal)}</div><div className="n">{blocked.length} delivered, no POD</div></div>
-        <div className="cell"><div className="k">Outstanding</div><div className="v">{m0(totalOut)}</div><div className="n">{out.length} unpaid</div></div>
-        <div className="cell"><div className="k">Overdue</div><div className={"v" + (overdue.length ? " bad" : "")}>{m0(totalOver)}</div><div className="n">{overdue.length ? overdue.length + " past due" : "nothing past due"}</div></div>
-      </div>
+      <PageBand
+        kicker="Billing"
+        title={raisable > 0 ? `${m0(raisable)} ready to invoice` : out.length ? `${out.length} unpaid invoice${out.length === 1 ? "" : "s"}` : "All caught up"}
+        sub={`${data.billable.length} trip${data.billable.length === 1 ? "" : "s"} to bill · ${out.length} invoice${out.length === 1 ? "" : "s"} unpaid${overdue.length ? `, ${overdue.length} overdue` : ""}`}
+        figs={[
+          { key: "raise", k: "Ready to raise", v: m0(raisable), tone: raisable > 0 ? "pos" : undefined, n: `${data.billable.length} trip${data.billable.length === 1 ? "" : "s"}` },
+          { key: "pod", k: "Blocked on POD", v: m0(blockedVal), tone: blocked.length ? "warn" : undefined, n: `${blocked.length} delivered, no POD` },
+          { key: "out", k: "Outstanding", v: m0(totalOut), n: `${out.length} unpaid` },
+          { key: "over", k: "Overdue", v: m0(totalOver), tone: overdue.length ? "bad" : undefined, n: overdue.length ? overdue.length + " past due" : "nothing past due" },
+        ]}
+      />
       <div className="grid">
         <div className="panel">
           <div className="tabs">
@@ -259,9 +265,9 @@ function RaiseInvoicePanel({
 
   return (
     <>
-      <div className="d-head">
+      <div className="d-head trip-card">
         <div className="r-no">{trip.trip_no}</div>
-        <div className="r-title" style={{ fontSize: 18 }}>{trip.customer}</div>
+        <div className="tc-title">{trip.customer}</div>
         <div className="r-sub">{trip.route}</div>
         <div className="d-figs">
           <div><div className="k">Freight</div><div className="v">{m2(trip.revenue_usd)}</div></div>
@@ -392,9 +398,12 @@ function InvoiceDetailPanel({
 
   return (
     <>
-      <div className="d-head">
-        <div className="r-no">{i.invoice_no}{cancelled ? <> · <span className="pill bad">cancelled</span></> : null}</div>
-        <div className="r-title" style={{ fontSize: 18 }}>{i.customer}</div>
+      <div className="d-head trip-card">
+        <div className="tc-top">
+          <span className="r-no">{i.invoice_no}</span>
+          {cancelled ? <span className="pill bad">cancelled</span> : settled ? <span className="pill good">settled</span> : i.days_overdue > 0 ? <span className="pill bad">{i.days_overdue}d overdue</span> : null}
+        </div>
+        <div className="tc-title">{i.customer}</div>
         <div className="r-sub">{lab(i.invoice_type)} · {i.trips || ""}</div>
         <div className="d-figs">
           <div><div className="k">Invoiced</div><div className="v">{m2(i.total_due, i.currency)}</div></div>

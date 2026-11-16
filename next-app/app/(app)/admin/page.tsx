@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { num, today, lab } from "@/lib/format";
 import { Spinner } from "@/lib/components/Spinner";
+import { PageBand } from "@/lib/components/PageBand";
 import type { BootstrapPayload, Customer, Route, FxRate, RouteBorderPath, PaymentMilestone, RouteCostTemplateLine } from "@/lib/types";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 
@@ -148,6 +149,19 @@ const VIEW_LABELS: Record<ViewKey, string> = {
   payment_schedule: "Payment schedule", api_keys: "API keys",
 };
 
+// The line under each section's name in the band.
+const VIEW_SUB: Record<ViewKey, string> = {
+  fx: "What each currency is worth in dollars. Every cost converts at the rate in force on its date.",
+  team: "Who can sign in, and what each person can do.",
+  customers: "Who you haul for: tax IDs, contacts and payment terms.",
+  trucks: "Your fleet, truck by truck.",
+  drivers: "Who drives, and how to reach them.",
+  routes: "Where you run, the borders on the way, and each route's cost template.",
+  rate_cards: "What each customer pays on each route.",
+  payment_schedule: "How invoices are split for customers without a schedule of their own.",
+  api_keys: "Keys that let an agent use the Estimator through the read-only API.",
+};
+
 type TeamMember = { userId: string; email: string; role: string; createdAt: string };
 type ApiKey = { id: string; name: string; key_prefix: string; created_at: string; last_used_at: string | null; revoked_at: string | null };
 
@@ -219,29 +233,35 @@ export default function AdminPage() {
   return (
     <>
       {loadError ? <div className="note bad">{loadError}</div> : null}
-      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 16 }}>
-        {VIEWS.filter((v) => (v !== "team" && v !== "api_keys") || canManageKeys).map((v) => (
-          <button
-            key={v}
-            className={"chip" + (view === v ? " on" : "")}
-            onClick={() => { setView(v); setSelected(null); setCreating(false); }}
-          >
-            {VIEW_LABELS[v]}
-            {v === "payment_schedule" ? null : v === "api_keys" ? (
-              apiKeys?.length ? <span className="c">{apiKeys.filter((k) => !k.revoked_at).length}</span> : null
-            ) : (
-              <span className="c">{v === "fx" ? data.fx.length : v === "team" ? team?.length ?? 0 : masters[v].length}</span>
-            )}
-          </button>
-        ))}
-      </div>
+      <PageBand
+        kicker="Admin"
+        title={VIEW_LABELS[view]}
+        sub={VIEW_SUB[view]}
+        actions={
+          view !== "fx" && view !== "team" && view !== "payment_schedule" && view !== "api_keys" && canEdit ? (
+            <button type="button" className="ops-cta" onClick={() => { setSelected(null); setCreating(true); }}>+ New</button>
+          ) : view === "team" ? (
+            <button type="button" className="ops-cta" onClick={() => { setSelected(null); setCreating(true); }}>+ Invite</button>
+          ) : view === "api_keys" && canManageKeys ? (
+            <button type="button" className="ops-cta" onClick={() => setCreating(true)}>+ New key</button>
+          ) : null
+        }
+        tabs={VIEWS.filter((v) => (v !== "team" && v !== "api_keys") || canManageKeys).map((v) => ({
+          key: v,
+          label: VIEW_LABELS[v],
+          count: v === "payment_schedule"
+            ? undefined
+            : v === "api_keys"
+              ? apiKeys?.length ? apiKeys.filter((k) => !k.revoked_at).length : undefined
+              : v === "fx" ? data.fx.length : v === "team" ? team?.length ?? 0 : masters[v].length,
+        }))}
+        tab={view}
+        onTab={(v) => { setView(v as ViewKey); setSelected(null); setCreating(false); }}
+      />
       <div className="grid">
         <div className="panel">
           <div className="panel-head">
             <h2>{VIEW_LABELS[view]}</h2>
-            {view !== "fx" && view !== "team" && view !== "payment_schedule" && view !== "api_keys" && canEdit ? <button className="act" onClick={() => { setSelected(null); setCreating(true); }}>+ New</button> : null}
-            {view === "team" ? <button className="act" onClick={() => { setSelected(null); setCreating(true); }}>+ Invite</button> : null}
-            {view === "api_keys" && canManageKeys ? <button className="act" onClick={() => setCreating(true)}>+ New key</button> : null}
           </div>
           {view === "fx" ? (
             <FxList fx={data.fx} />

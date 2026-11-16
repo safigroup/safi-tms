@@ -26,6 +26,18 @@
   --radius-sm: 8px;
   --shadow-card: 0 1px 2px rgba(16, 24, 40, .04), 0 1px 3px rgba(16, 24, 40, .06);
   --shadow-pop: 0 4px 12px rgba(16, 24, 40, .1), 0 2px 4px rgba(16, 24, 40, .06);
+  /* the navy band at the top of the Board and the Docket -- the landing
+     page's hero, carried into the app */
+  --band-bg: #16304F;
+  --band-bg-2: #0F213A;
+  --band-ink: #F5F2EA;
+  --band-soft: rgba(245, 242, 234, .74);
+  --band-rule: rgba(245, 242, 234, .16);
+  --band-line: rgba(245, 242, 234, .32);
+  --band-accent: #4CD39A;
+  --band-warn: #F2B84B;
+  --band-bad: #FF8E7E;
+  --band-glow: rgba(91, 141, 190, .34);
 }
 
 /* Dark theme -- toggled via ThemeToggle, which sets data-theme on <html>.
@@ -57,6 +69,16 @@
   --pill-bad-bg: #331410;
   --pill-bad-border: #6B2E24;
   --capture-has-bg: #16261C;
+  --band-bg: #12203A;
+  --band-bg-2: #0D1626;
+  --band-ink: #E8EAED;
+  --band-soft: rgba(232, 234, 237, .72);
+  --band-rule: rgba(232, 234, 237, .13);
+  --band-line: rgba(232, 234, 237, .28);
+  --band-accent: #34C784;
+  --band-warn: #E0A83E;
+  --band-bad: #F0665A;
+  --band-glow: rgba(91, 141, 190, .22);
 }
 
 * {
@@ -2647,5 +2669,759 @@ table.sum-table tr.sum-total td {
 @media(prefers-reduced-motion:reduce) {
   .spinner {
     animation: none
+  }
+}
+
+/* ===================================================================
+   Board and Docket, after the landing page: a navy band at the top
+   with the page's figures, route lines with the truck on them, money
+   side by side, and costs as a feed of local amount → dollars.
+   =================================================================== */
+
+.ops-band {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 18px;
+  color: var(--band-ink);
+  background:
+    radial-gradient(760px 340px at 88% -10%, var(--band-glow), transparent 66%),
+    linear-gradient(180deg, var(--band-bg), var(--band-bg-2));
+  border-radius: calc(var(--radius) + 4px);
+  box-shadow: 0 18px 40px -22px rgba(16, 24, 40, .45), var(--shadow-card)
+}
+
+.ops-band-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px 24px;
+  padding: 20px 22px 18px
+}
+
+.ops-kicker {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--band-soft)
+}
+
+.ops-title {
+  margin-top: 4px;
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  overflow-wrap: anywhere
+}
+
+.ops-sub {
+  margin-top: 3px;
+  font-size: 13.5px;
+  color: var(--band-soft)
+}
+
+.ops-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px
+}
+
+/* the band's own buttons: a light primary, a ghost secondary */
+button.ops-cta,
+.ops-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--band-ink);
+  color: var(--band-bg);
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 10px 22px -12px rgba(0, 0, 0, .55);
+  transition: transform .12s ease, background-color .12s ease
+}
+
+.ops-cta:hover {
+  background: #fff;
+  transform: translateY(-1px)
+}
+
+.ops-band .act,
+.ops-band button.ops-ghost {
+  background: transparent;
+  border: 1px solid var(--band-line);
+  color: var(--band-ink)
+}
+
+.ops-band .act:hover,
+.ops-band button.ops-ghost:hover {
+  border-color: var(--band-ink);
+  background: rgba(255, 255, 255, .06)
+}
+
+.ops-band .chip {
+  background: transparent;
+  border-color: var(--band-line);
+  color: var(--band-soft)
+}
+
+.ops-band .chip:hover {
+  border-color: var(--band-ink);
+  color: var(--band-ink)
+}
+
+.ops-band .chip.on {
+  background: var(--band-ink);
+  border-color: var(--band-ink);
+  color: var(--band-bg)
+}
+
+.ops-band :focus-visible {
+  outline: 2px solid var(--band-accent);
+  outline-offset: 2px
+}
+
+/* the band's figures, each also a filter on the Board */
+.ops-figs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--band-rule)
+}
+
+button.ops-fig {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  padding: 14px 22px 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color .12s ease
+}
+
+button.ops-fig + button.ops-fig {
+  border-left: 1px solid var(--band-rule)
+}
+
+button.ops-fig:hover {
+  background: rgba(255, 255, 255, .05)
+}
+
+button.ops-fig.on::after {
+  content: "";
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  bottom: 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--band-accent)
+}
+
+button.ops-fig:focus-visible {
+  outline-offset: -3px
+}
+
+.ops-fig .k {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--band-soft)
+}
+
+.ops-fig .v {
+  font-family: var(--mono);
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2
+}
+
+.ops-fig .v.warn {
+  color: var(--band-warn)
+}
+
+.ops-fig .v.bad {
+  color: var(--band-bad)
+}
+
+.ops-fig .n {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--band-soft);
+  overflow-wrap: anywhere
+}
+
+@media(max-width:780px) {
+  .ops-band-top {
+    padding: 16px 16px 14px
+  }
+
+  .ops-title {
+    font-size: 22px
+  }
+
+  .ops-figs {
+    grid-template-columns: repeat(2, minmax(0, 1fr))
+  }
+
+  button.ops-fig {
+    padding: 12px 16px 14px
+  }
+
+  button.ops-fig:nth-child(odd) {
+    border-left: 0
+  }
+
+  button.ops-fig:nth-child(n + 3) {
+    border-top: 1px solid var(--band-rule)
+  }
+
+  button.ops-fig.on::after {
+    left: 16px;
+    right: 16px
+  }
+}
+
+/* the Docket's trip, inside the band: who and where on the left, the
+   money on the right */
+.band-trip {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 16px 28px;
+  align-items: end;
+  padding: 0 22px 20px
+}
+
+.band-trip .tc-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px
+}
+
+.band-trip .tc-no {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: .04em;
+  color: var(--band-soft)
+}
+
+.band-select-wrap {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  flex: 1 1 320px;
+  max-width: 560px
+}
+
+.band-select-wrap label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--band-soft)
+}
+
+.ops-band select.band-select {
+  width: 100%;
+  color-scheme: dark;
+  background-color: rgba(255, 255, 255, .07);
+  border: 1px solid var(--band-line);
+  color: var(--band-ink)
+}
+
+.ops-band select.band-select:focus {
+  border-color: var(--band-ink);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, .12)
+}
+
+@media(max-width:900px) {
+  .band-trip {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0 16px 16px
+  }
+}
+
+/* revenue, costs and margin side by side */
+.money-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 12px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden
+}
+
+.money-strip > div {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--card)
+}
+
+.money-strip .k {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-soft)
+}
+
+.money-strip .v {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere
+}
+
+.money-strip .v.pos {
+  color: var(--settled)
+}
+
+.money-strip .v.neg {
+  color: var(--alert)
+}
+
+.money-strip .n {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-soft)
+}
+
+.ops-band .money-strip {
+  margin-top: 0;
+  background: var(--band-rule);
+  border-color: var(--band-rule)
+}
+
+.ops-band .money-strip > div {
+  background: rgba(255, 255, 255, .045)
+}
+
+.ops-band .money-strip .k,
+.ops-band .money-strip .n {
+  color: var(--band-soft)
+}
+
+.ops-band .money-strip .v.pos {
+  color: var(--band-accent)
+}
+
+.ops-band .money-strip .v.neg {
+  color: var(--band-bad)
+}
+
+/* a trip's route as one thin line, with the truck on it */
+.track {
+  --at: 0;
+  --inset: 6px;
+  position: relative;
+  height: 24px;
+  margin-top: 6px;
+  max-width: 420px;
+  color: var(--stamp)
+}
+
+.track-rail,
+.track-fill {
+  position: absolute;
+  top: 16px;
+  left: var(--inset);
+  height: 2px;
+  border-radius: 1px
+}
+
+.track-rail {
+  right: var(--inset);
+  background: var(--rule)
+}
+
+.track-fill {
+  width: calc((100% - 2 * var(--inset)) * var(--at));
+  background: currentColor
+}
+
+.track.planned .track-rail {
+  background: repeating-linear-gradient(90deg, var(--rule) 0 5px, transparent 5px 9px)
+}
+
+.track-dot {
+  position: absolute;
+  top: 12px;
+  left: calc(var(--inset) + (100% - 2 * var(--inset)) * var(--x));
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: 50%;
+  border: 2px solid var(--rule);
+  background: var(--card)
+}
+
+.track-dot.border {
+  border-radius: 2px;
+  transform: rotate(45deg) scale(.86)
+}
+
+.track-dot.passed {
+  background: currentColor;
+  border-color: currentColor
+}
+
+.track.waiting .track-dot.here {
+  background: var(--waiting);
+  border-color: var(--waiting);
+  box-shadow: 0 0 0 3px var(--pill-warn-bg)
+}
+
+.track.done {
+  color: var(--settled)
+}
+
+.track.late {
+  color: var(--alert)
+}
+
+.track-truck {
+  position: absolute;
+  top: 0;
+  left: calc(var(--inset) + (100% - 2 * var(--inset)) * var(--at));
+  transform: translateX(-50%);
+  line-height: 0
+}
+
+.truck-icon {
+  fill: currentColor
+}
+
+.truck-icon circle {
+  fill: var(--ink);
+  stroke: var(--card);
+  stroke-width: 1.2
+}
+
+.ops-band .track {
+  color: var(--band-ink);
+  max-width: none;
+  margin-top: 12px
+}
+
+.ops-band .track-rail {
+  background: var(--band-rule)
+}
+
+.ops-band .track.planned .track-rail {
+  background: repeating-linear-gradient(90deg, var(--band-line) 0 5px, transparent 5px 9px)
+}
+
+.ops-band .track-dot {
+  border-color: var(--band-line);
+  background: var(--band-bg)
+}
+
+.ops-band .track.done {
+  color: var(--band-accent)
+}
+
+.ops-band .track.late {
+  color: var(--band-bad)
+}
+
+.ops-band .truck-icon circle {
+  fill: var(--band-ink);
+  stroke: var(--band-bg)
+}
+
+/* Board trip rows: identity, then the route line, money on the right */
+ul.list.board-list li .r-tags {
+  margin-top: 6px
+}
+
+.row-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px
+}
+
+.row-top .r-no {
+  margin: 0
+}
+
+.board-list li.sel .track-dot:not(.passed) {
+  background: var(--stamp-wash)
+}
+
+/* the selected trip's card at the top of its detail */
+.trip-card .tc-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px
+}
+
+.trip-card .tc-title {
+  margin-top: 6px;
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere
+}
+
+/* the Route section: the truck above where it is, a pulse while it waits
+   at a border */
+ol.route-line .route-stop {
+  padding-top: 18px
+}
+
+ol.route-line .route-stop + .route-stop::before {
+  top: 24px
+}
+
+.route-truck {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  line-height: 0;
+  color: var(--stamp);
+  z-index: 2
+}
+
+.route-truck.between {
+  left: 0
+}
+
+.route-stop.here.border .route-dot {
+  background: var(--waiting);
+  border-color: var(--waiting);
+  box-shadow: 0 0 0 4px var(--pill-warn-bg);
+  animation: route-pulse 1.6s ease-in-out infinite
+}
+
+@keyframes route-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--pill-warn-bg) }
+  50% { box-shadow: 0 0 0 7px var(--pill-warn-bg) }
+}
+
+/* the Docket's costs: what and where, local amount → dollars */
+ul.list li.feed-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 4px 12px;
+  align-items: center
+}
+
+.feed-what {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere
+}
+
+.feed-what .pill {
+  margin-left: 6px;
+  vertical-align: 1px
+}
+
+.feed-desc {
+  margin-top: 1px;
+  font-size: 13px;
+  color: var(--ink)
+}
+
+.feed-amt {
+  display: grid;
+  justify-items: end;
+  gap: 1px
+}
+
+.feed-native {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  white-space: nowrap
+}
+
+.feed-usd {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap
+}
+
+.feed-acts {
+  display: flex;
+  align-items: center;
+  gap: 2px
+}
+
+.feed-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 18px;
+  background: var(--ground);
+  border-top: 1px solid var(--rule);
+  font-size: 13px
+}
+
+.feed-total b {
+  font-family: var(--mono);
+  font-size: 14.5px;
+  font-variant-numeric: tabular-nums
+}
+
+@media(max-width:560px) {
+  ul.list li.feed-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  ul.list li.feed-row .feed-acts {
+    grid-column: 2 / -1;
+    justify-content: flex-end
+  }
+}
+
+/* trip budget: money spent against money allocated */
+.budget {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px
+}
+
+.budget-track {
+  display: block;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--rule-soft);
+  overflow: hidden
+}
+
+.budget-bar {
+  display: block;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--stamp)
+}
+
+.budget-bar.near {
+  background: var(--waiting)
+}
+
+.budget-bar.over {
+  background: var(--alert)
+}
+
+.budget-foot {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums
+}
+
+/* the spreadsheet import, out of the way until it's wanted */
+details.bulk-import > summary {
+  list-style: none;
+  cursor: pointer
+}
+
+details.bulk-import > summary::-webkit-details-marker {
+  display: none
+}
+
+details.bulk-import > summary h2::after {
+  content: " +";
+  color: var(--stamp)
+}
+
+details.bulk-import[open] > summary h2::after {
+  content: " −"
+}
+
+@media(prefers-reduced-motion:reduce) {
+  .route-stop.here.border .route-dot {
+    animation: none
+  }
+}
+
+/* in the narrow trip panel the three figures sit closer and stay on one line */
+.trip-card .money-strip > div {
+  padding: 9px 10px
+}
+
+.trip-card .money-strip .v {
+  font-size: 13px;
+  white-space: nowrap
+}
+
+ul.list.board-list li .track {
+  margin-top: 4px
+}
+
+/* pills on the navy band: the grey and navy ones would vanish into it */
+.ops-band .pill.grey {
+  color: var(--band-soft);
+  border-color: var(--band-line)
+}
+
+.ops-band .pill.violet {
+  color: var(--band-ink);
+  border-color: var(--band-line)
+}
+
+/* phones: the band's three figures as label-and-value rows */
+@media(max-width:560px) {
+  .ops-band .money-strip {
+    grid-template-columns: minmax(0, 1fr)
+  }
+
+  .ops-band .money-strip > div {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 2px 10px
+  }
+
+  .ops-band .money-strip .k {
+    flex: 1 1 auto
+  }
+
+  .ops-band .money-strip .v {
+    white-space: nowrap
+  }
+
+  .ops-band .money-strip .n {
+    flex-basis: 100%;
+    text-align: right
   }
 }

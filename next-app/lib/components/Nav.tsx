@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { toast } from "sonner";
 import { ThemeToggle } from "@/lib/components/ThemeToggle";
+import { NavIcon, type IconName } from "@/lib/components/NavIcons";
 import { setActiveOrg } from "@/app/(app)/actions";
 import type { BootstrapPayload, Organization } from "@/lib/types";
 
@@ -12,22 +13,64 @@ import type { BootstrapPayload, Organization } from "@/lib/types";
 // a convenience; every /api/cashbook route enforces it.
 const CASHBOOK_ROLES = ["owner", "admin", "finance"];
 
-const VIEWS = [
-  { href: "/overview", label: "Overview" },
-  { href: "/board", label: "Board" },
-  { href: "/docket", label: "Cost docket" },
-  { href: "/billing", label: "Billing" },
-  { href: "/cashbook", label: "Cashbook" },
-  { href: "/reports", label: "Reports" },
-  { href: "/estimates", label: "Estimator" },
-  { href: "/admin", label: "Admin" },
+type View = { href: string; label: string; icon: IconName };
+type Group = { label: string | null; views: View[] };
+
+// The app's pages, grouped the way the office works: the day's picture,
+// moving the trucks, the money, and settings.
+const GROUPS: Group[] = [
+  { label: null, views: [{ href: "/overview", label: "Overview", icon: "overview" }] },
+  {
+    label: "Operations",
+    views: [
+      { href: "/board", label: "Board", icon: "board" },
+      { href: "/docket", label: "Cost docket", icon: "docket" },
+      { href: "/estimates", label: "Estimator", icon: "estimator" },
+    ],
+  },
+  {
+    label: "Finance",
+    views: [
+      { href: "/billing", label: "Billing", icon: "billing" },
+      { href: "/cashbook", label: "Cashbook", icon: "cashbook" },
+      { href: "/reports", label: "Reports", icon: "reports" },
+    ],
+  },
+  { label: "Settings", views: [{ href: "/admin", label: "Admin", icon: "admin" }] },
 ];
 
-// Renders the masthead (brand/who) together with the nav so the mobile
-// hamburger button can live inside the header row itself -- the standard
-// place users expect a menu trigger -- and its dropdown can anchor directly
-// under the header. AppLayout stays a server component and just forwards
-// the auth context plus the signOut server action as props.
+const PLATFORM: Group = {
+  label: "Platform",
+  views: [
+    { href: "/organizations", label: "Organizations", icon: "organizations" },
+    { href: "/demo-requests", label: "Demo requests", icon: "inbox" },
+  ],
+};
+
+const ROLE_LABEL: Record<string, string> = {
+  owner: "Owner",
+  admin: "Admin",
+  ops: "Operations",
+  finance: "Finance",
+  viewer: "View only",
+};
+
+const NAV_KEY = "safi:nav";
+
+// Two letters for the account's avatar, from the email's name part.
+function initials(email: string) {
+  const name = email.split("@")[0] ?? "";
+  const parts = name.split(/[._-]+/).filter(Boolean);
+  const letters = parts.length > 1 ? parts[0][0] + parts[1][0] : name.slice(0, 2);
+  return (letters || "?").toUpperCase();
+}
+
+// The app's sidebar: the company and its pages on the left, the account at
+// the bottom. On wide screens it can be narrowed to a strip of icons (the
+// choice is remembered, and the root layout's inline script applies it
+// before first paint); between 900 and 1280px wide it's always that strip;
+// on phones it slides in from a slim top bar. AppLayout stays a server
+// component and just forwards the auth context plus the signOut action.
 export function Nav({
   orgTitle,
   orgId,
@@ -47,7 +90,11 @@ export function Nav({
   const [data, setData] = useState<BootstrapPayload | null>(null);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [orgs, setOrgs] = useState<Organization[] | null>(null);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
 
   useEffect(() => {
     fetch("/api/bootstrap")
@@ -65,12 +112,60 @@ export function Nav({
       .then((body: { organizations: Organization[] } | null) => setOrgs(body?.organizations ?? []));
   }, [isPlatformAdmin]);
 
-  // Closes the mobile drawer after a link click navigates (Link doesn't
+  // The root layout's inline script applies the collapsed choice before
+  // first paint; this re-applies it in case a development remount cleared
+  // it (see ThemeToggle) and brings the button's label into line.
+  useLayoutEffect(() => {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(NAV_KEY);
+    } catch {
+      // nothing remembered
+    }
+    if (saved) document.documentElement.setAttribute("data-nav", saved);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing the toggle's label to the choice already applied above, not deriving new state
+    setCollapsed(saved === "collapsed");
+  }, []);
+
+  // Closes the phone menu after a link click navigates (Link doesn't
   // remount Nav, so without this the menu would stay open on the new page).
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- closing the drawer is a reaction to navigation having already happened, not derived render state
     setMenuOpen(false);
   }, [pathname]);
+
+  // While the phone menu is open: Escape closes it, the page behind doesn't
+  // scroll, and focus starts inside it and returns to the menu button.
+  useEffect(() => {
+    if (!menuOpen) {
+      if (wasOpen.current) menuButton.current?.focus();
+      wasOpen.current = false;
+      return;
+    }
+    wasOpen.current = true;
+    closeButton.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = overflow;
+    };
+  }, [menuOpen]);
+
+  function toggleCollapsed() {
+    const next = !collapsed;
+    document.documentElement.setAttribute("data-nav", next ? "collapsed" : "expanded");
+    try {
+      localStorage.setItem(NAV_KEY, next ? "collapsed" : "expanded");
+    } catch {
+      // the choice just isn't remembered next time
+    }
+    setCollapsed(next);
+  }
 
   async function switchOrg(id: string) {
     try {
@@ -86,23 +181,12 @@ export function Nav({
     window.location.assign("/overview");
   }
 
-  const roleViews = VIEWS.filter((v) => v.href !== "/cashbook" || CASHBOOK_ROLES.includes(role));
-  const views = isPlatformAdmin
-    ? [...roleViews, { href: "/organizations", label: "Organizations" }, { href: "/demo-requests", label: "Demo requests" }]
-    : roleViews;
-
-  const rolling = data?.board.filter((t) => ["loading", "in_transit", "at_border"].includes(t.status)).length ?? 0;
-  const pod = data?.board.filter((t) => t.status === "delivered" && !t.pod_in_hand).length ?? 0;
-  const overdue = data?.ar.filter((i) => i.days_overdue > 0).length ?? 0;
-  const billing = (data?.billable.length ?? 0) + overdue;
-
-  const counts: Record<string, [number, boolean]> = {
-    "/board": [rolling, false],
-    "/docket": [pod, pod > 0],
-    "/billing": [billing, overdue > 0],
-    "/admin": [0, false],
-    "/overview": [0, false],
-  };
+  const groups = [
+    ...GROUPS.map((g) => ({ ...g, views: g.views.filter((v) => v.href !== "/cashbook" || CASHBOOK_ROLES.includes(role)) })),
+    ...(isPlatformAdmin ? [PLATFORM] : []),
+  ];
+  const isOn = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  const current = groups.flatMap((g) => g.views).find((v) => isOn(v.href));
 
   // Most recent fx_rates row per non-USD currency, flagged if over 14 days old.
   const latest: Record<string, string> = {};
@@ -112,71 +196,122 @@ export function Nav({
   });
   const staleDays = (d: string) => ((fetchedAt ?? 0) - new Date(d).getTime()) / 86_400_000;
   const stale = fetchedAt ? Object.entries(latest).filter(([, d]) => staleDays(d) > 14) : [];
-  const anyAlert = views.some((v) => (counts[v.href] ?? [0, false])[1]);
+
+  const rolling = data?.board.filter((t) => ["loading", "in_transit", "at_border"].includes(t.status)).length ?? 0;
+  const pod = data?.board.filter((t) => t.status === "delivered" && !t.pod_in_hand).length ?? 0;
+  const overdue = data?.ar.filter((i) => i.days_overdue > 0).length ?? 0;
+  const billing = (data?.billable.length ?? 0) + overdue;
+
+  // [count, needs action]: trips on the road, POD to chase, things to bill,
+  // exchange rates to update.
+  const counts: Record<string, [number, boolean]> = {
+    "/board": [rolling, false],
+    "/docket": [pod, pod > 0],
+    "/billing": [billing, overdue > 0],
+    "/admin": [stale.length, stale.length > 0],
+  };
+  const anyAlert = Object.values(counts).some(([, alert]) => alert);
 
   return (
     <>
-      <header>
-        <div className="brand">
-          <button
-            type="button"
-            className="nav-hamburger"
-            onClick={() => setMenuOpen((o) => !o)}
-            aria-expanded={menuOpen}
-            aria-label="Menu"
-          >
-            ☰
-            {anyAlert ? <span className="nav-hamburger-dot" /> : null}
+      <div className="topbar">
+        <button
+          ref={menuButton}
+          type="button"
+          className="topbar-btn"
+          aria-label="Open menu"
+          aria-expanded={menuOpen}
+          aria-controls="app-sidebar"
+          onClick={() => setMenuOpen(true)}
+        >
+          <NavIcon name="menu" size={22} />
+          {anyAlert ? <span className="topbar-dot" /> : null}
+        </button>
+        <span className="topbar-brand">{orgTitle || "Safi TMS"}</span>
+        {current ? <span className="topbar-page">{current.label}</span> : null}
+      </div>
+
+      {menuOpen ? <div className="sb-backdrop" onClick={() => setMenuOpen(false)} /> : null}
+
+      <aside id="app-sidebar" className={"sidebar" + (menuOpen ? " open" : "")}>
+        <div className="sb-head">
+          <Link href="/overview" className="sb-brand" title="Safi TMS">
+            <span className="sb-mark" aria-hidden="true">S</span>
+            <span className="lbl sb-word">Safi TMS</span>
+          </Link>
+          <button ref={closeButton} type="button" className="sb-close" aria-label="Close menu" onClick={() => setMenuOpen(false)}>
+            <NavIcon name="close" />
           </button>
-          <h1>{orgTitle || "Safi TMS"}</h1>
+        </div>
+
+        <div className="sb-org">
+          <h1 className="lbl sb-org-name">{orgTitle || "Safi TMS"}</h1>
           {isPlatformAdmin ? (
             <select
-              className="org-switch"
+              className="lbl sb-org-switch"
               value={orgId}
               onChange={(e) => switchOrg(e.target.value)}
               aria-label="Viewing organization"
             >
-              {(orgs ?? []).map((o) => <option key={o.id} value={o.id}>🏢 {o.name.replace(/ Limited$/, "")}</option>)}
+              {(orgs ?? []).map((o) => <option key={o.id} value={o.id}>{o.name.replace(/ Limited$/, "")}</option>)}
             </select>
           ) : null}
         </div>
-        <div className="who">
-          {email} · {role}
-          {" "}·{" "}
-          <form action={signOutAction} style={{ display: "inline" }}>
-            <button type="submit">sign out</button>
-          </form>
-          {" "}
-          <ThemeToggle />
+
+        <nav className="sb-nav" aria-label="Main">
+          {groups.map((g, gi) => (
+            <div key={gi} className="sb-group">
+              {g.label ? <div className="sb-group-label">{g.label}</div> : null}
+              {g.views.map((v) => {
+                const on = isOn(v.href);
+                const [count, alert] = counts[v.href] ?? [0, false];
+                return (
+                  <Link
+                    key={v.href}
+                    href={v.href}
+                    className={"sb-link" + (on ? " on" : "")}
+                    aria-current={on ? "page" : undefined}
+                    title={v.label}
+                  >
+                    <NavIcon name={v.icon} />
+                    <span className="lbl">{v.label}</span>
+                    {count > 0 ? <span className={"sb-count" + (alert ? " alert" : "")}>{count}</span> : null}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
+
+        <div className="sb-foot">
+          <div className="sb-user" title={`${email} · ${ROLE_LABEL[role] ?? role}`}>
+            <span className="sb-avatar" aria-hidden="true">{initials(email)}</span>
+            <span className="lbl sb-user-text">
+              <span className="sb-email">{email}</span>
+              <span className="sb-role">{ROLE_LABEL[role] ?? role}</span>
+            </span>
+          </div>
+          <div className="sb-actions">
+            <ThemeToggle />
+            <form action={signOutAction}>
+              <button type="submit" className="sb-btn" title="Sign out">
+                <NavIcon name="signout" size={18} />
+                <span className="lbl">Sign out</span>
+              </button>
+            </form>
+            <button
+              type="button"
+              className="sb-btn sb-collapse"
+              onClick={toggleCollapsed}
+              aria-label={collapsed ? "Expand the sidebar" : "Collapse the sidebar"}
+              title={collapsed ? "Expand the sidebar" : "Collapse the sidebar"}
+            >
+              <NavIcon name={collapsed ? "expand" : "collapse"} size={18} />
+            </button>
+          </div>
         </div>
-        {menuOpen ? (
-          <nav className="nav-drawer">
-            {views.map((v) => {
-              const on = pathname === v.href || pathname.startsWith(v.href + "/");
-              const [count, alert] = counts[v.href] ?? [0, false];
-              return (
-                <Link key={v.href} href={v.href} className={on ? "on" : undefined}>
-                  {v.label}
-                  {count > 0 ? <span className={"n" + (alert ? " alert" : "")}>{count}</span> : null}
-                </Link>
-              );
-            })}
-          </nav>
-        ) : null}
-      </header>
-      {menuOpen ? <div className="nav-drawer-backdrop" onClick={() => setMenuOpen(false)} /> : null}
-      <nav className="nav-top">
-        {views.map((v) => {
-          const on = pathname === v.href || pathname.startsWith(v.href + "/");
-          const [count, alert] = counts[v.href] ?? [0, false];
-          return (
-            <Link key={v.href} href={v.href} className={on ? "on" : undefined}>
-              {v.label}
-              {count > 0 ? <span className={"n" + (alert ? " alert" : "")}>{count}</span> : null}
-            </Link>
-          );
-        })}
-      </nav>
+      </aside>
+
       {stale.length ? (
         <div className="note warn">
           Exchange rates for {stale.map(([c]) => c).join(", ")} are more than two weeks old. Every cost entered

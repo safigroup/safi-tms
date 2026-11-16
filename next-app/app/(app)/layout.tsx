@@ -28,10 +28,15 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
 
   const orgTitle = ctx.orgName.replace(/ Limited$/, "");
 
+  // The sidebar is fixed to the left; .app-body leaves room for it (see
+  // --sidebar-w in globals.css) and the page column stays centred in what's
+  // left. Everything sits inside .wrap so printing still hides all of it.
   return (
-    <div className="wrap">
-      <Nav orgTitle={orgTitle} orgId={ctx.orgId} email={ctx.email} role={ctx.role} isPlatformAdmin={ctx.isPlatformAdmin} signOutAction={signOut} />
-      <CompanyTimeZoneProvider timeZone={ctx.timeZone}>{children}</CompanyTimeZoneProvider>
+    <div className="app-body">
+      <div className="wrap">
+        <Nav orgTitle={orgTitle} orgId={ctx.orgId} email={ctx.email} role={ctx.role} isPlatformAdmin={ctx.isPlatformAdmin} signOutAction={signOut} />
+        <CompanyTimeZoneProvider timeZone={ctx.timeZone}>{children}</CompanyTimeZoneProvider>
+      </div>
     </div>
   );
 }

@@ -42,12 +42,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${manrope.variable} ${ibmPlexMono.variable} ${inter.variable}`}
     >
       <head>
-        {/* Sets the stored theme before first paint, avoiding a light-mode
-            flash for users with dark saved -- see ThemeToggle for why this
-            alone isn't quite enough in dev (React Strict Mode remount). */}
+        {/* Sets the stored theme and the sidebar's collapsed choice before
+            first paint, avoiding a light-mode flash for users with dark
+            saved and a jump for users who keep the sidebar narrow -- see
+            ThemeToggle for why this alone isn't quite enough in dev (React
+            Strict Mode remount). */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("safi:theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})()`,
+            __html: `(function(){try{var d=document.documentElement,t=localStorage.getItem("safi:theme"),n=localStorage.getItem("safi:nav");if(t)d.setAttribute("data-theme",t);if(n)d.setAttribute("data-nav",n)}catch(e){}})()`,
           }}
         />
       </head>

@@ -12,6 +12,7 @@ import { checkTimes, isTimeField, tripMilestones, type Milestone, type TimeEdits
 import type { AuditLogEntry, BoardTrip, BootstrapPayload, RateCard, TripEvent, TripStatus } from "@/lib/types";
 import { pickRateCard, type RatePick } from "@/lib/rates/pickRateCard";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
+import { PageBand } from "@/lib/components/PageBand";
 import { RouteTrack, TruckIcon } from "@/lib/components/RouteTrack";
 import { MoneyStrip } from "@/lib/components/MoneyStrip";
 import { STATUS_PILL } from "@/lib/trips/status";
@@ -145,51 +146,33 @@ export default function BoardPage() {
   return (
     <>
       {error ? <div className="note bad">{error}</div> : null}
-      <section className="ops-band" aria-label="Board">
-        <div className="ops-band-top">
-          <div>
-            <div className="ops-kicker">Board</div>
-            <h2 className="ops-title">{activeCount} active trip{activeCount === 1 ? "" : "s"}</h2>
-            <div className="ops-sub">
-              {rolling.length} on the road{atBorder.length ? `, ${atBorder.length} at a border` : ""}{late.length ? `, ${late.length} late` : ""}
-            </div>
-          </div>
-          {canWrite ? (
-            <div className="ops-actions">
-              <button type="button" className="ops-cta" onClick={() => { setShowNewTrip(true); setSelected(null); }}>
-                + New trip
-              </button>
-            </div>
-          ) : null}
-        </div>
-        {/* Each figure is also the filter for the trips behind it. */}
-        <div className="ops-figs">
-          <button type="button" className={"ops-fig" + (filter === "rolling" ? " on" : "")} aria-pressed={filter === "rolling"} onClick={() => setFilter("rolling")}>
-            <span className="k">On the road</span>
-            <span className="v">{rolling.length}</span>
-            <span className="n">loading, in transit or at a border</span>
+      {/* Each figure is also the filter for the trips behind it. */}
+      <PageBand
+        kicker="Board"
+        title={`${activeCount} active trip${activeCount === 1 ? "" : "s"}`}
+        sub={`${rolling.length} on the road${atBorder.length ? `, ${atBorder.length} at a border` : ""}${late.length ? `, ${late.length} late` : ""}`}
+        actions={canWrite ? (
+          <button type="button" className="ops-cta" onClick={() => { setShowNewTrip(true); setSelected(null); }}>
+            + New trip
           </button>
-          <button type="button" className={"ops-fig" + (filter === "border" ? " on" : "")} aria-pressed={filter === "border"} onClick={() => setFilter("border")}>
-            <span className="k">At border now</span>
-            <span className={"v" + (longestHours >= 24 ? " warn" : "")}>{atBorder.length}</span>
-            <span className="n">
-              {longest
-                ? `Longest: ${longest.trip_no} at ${(longest.last_border || "border").split("/")[0].trim()}, ${waitLabel(longest.last_border_at!, loadedAt)}`
-                : atBorder.length ? "waiting times not logged" : "none waiting"}
-            </span>
-          </button>
-          <button type="button" className={"ops-fig" + (filter === "late" ? " on" : "")} aria-pressed={filter === "late"} onClick={() => setFilter("late")}>
-            <span className="k">Late</span>
-            <span className={"v" + (late.length ? " bad" : "")}>{late.length}</span>
-            <span className="n">{late.length ? late.map((t) => t.trip_no).join(", ") : "all on schedule"}</span>
-          </button>
-          <button type="button" className={"ops-fig" + (filter === "pod" ? " on" : "")} aria-pressed={filter === "pod"} onClick={() => setFilter("pod")}>
-            <span className="k">Awaiting POD</span>
-            <span className={"v" + (pod.length ? " warn" : "")}>{pod.length}</span>
-            <span className="n">{podHeld > 0 ? `${m0(podHeld)} held until POD` : "nothing held back"}</span>
-          </button>
-        </div>
-      </section>
+        ) : null}
+        figs={[
+          { key: "rolling", k: "On the road", v: rolling.length, n: "loading, in transit or at a border", on: filter === "rolling", onClick: () => setFilter("rolling") },
+          {
+            key: "border",
+            k: "At border now",
+            v: atBorder.length,
+            tone: longestHours >= 24 ? "warn" : undefined,
+            n: longest
+              ? `Longest: ${longest.trip_no} at ${(longest.last_border || "border").split("/")[0].trim()}, ${waitLabel(longest.last_border_at!, loadedAt)}`
+              : atBorder.length ? "waiting times not logged" : "none waiting",
+            on: filter === "border",
+            onClick: () => setFilter("border"),
+          },
+          { key: "late", k: "Late", v: late.length, tone: late.length ? "bad" : undefined, n: late.length ? late.map((t) => t.trip_no).join(", ") : "all on schedule", on: filter === "late", onClick: () => setFilter("late") },
+          { key: "pod", k: "Awaiting POD", v: pod.length, tone: pod.length ? "warn" : undefined, n: podHeld > 0 ? `${m0(podHeld)} held until POD` : "nothing held back", on: filter === "pod", onClick: () => setFilter("pod") },
+        ]}
+      />
       <div className="grid">
         <div className="panel">
           <div className="panel-head">

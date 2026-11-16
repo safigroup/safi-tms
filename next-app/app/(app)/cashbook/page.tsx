@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { m2, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
 import { Spinner } from "@/lib/components/Spinner";
+import { PageBand } from "@/lib/components/PageBand";
 import { t, type PrintLang } from "@/lib/print/translations";
 import { buildCashStatement, reconciledBalance, type CashStatement } from "@/lib/cashbook/statement";
 import { ACCOUNT_KIND_LABEL, DEFAULT_CATEGORIES } from "@/lib/cashbook/categories";
@@ -147,40 +148,31 @@ export default function CashbookPage() {
 
   return (
     <>
-      <div className="panel" style={{ marginBottom: 18 }}>
-        <div className="panel-head">
-          <h2>Cashbook</h2>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {accounts.length ? (
-              <div className="chips" role="group" aria-label="View" style={{ margin: 0 }}>
-                <button type="button" className={"chip" + (view === "statements" ? " on" : "")} onClick={() => setView("statements")}>Statements</button>
-                <button type="button" className={"chip" + (view === "summary" ? " on" : "")} onClick={() => setView("summary")}>Monthly summary</button>
-              </div>
-            ) : null}
-            <button className="act" type="button" onClick={() => { setView("statements"); setMode("new-account"); }}>+ New account</button>
-          </div>
-        </div>
-        {accounts.length ? (
-          <div className="acct-grid">
-            {accounts.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                className={"acct" + (a.id === selectedId ? " on" : "") + (a.is_active ? "" : " off")}
-                onClick={() => { setSelectedId(a.id); setFrom(""); setTo(""); }}
-              >
-                <span className="acct-name">{a.name}</span>
-                <span className="acct-kind">{ACCOUNT_KIND_LABEL[a.kind]} · {a.currency}{a.is_active ? "" : " · closed"}</span>
-                <span className={"acct-bal" + (a.balance < 0 ? " neg" : "")}>{m2(a.balance, a.currency)}</span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="empty">
-            No accounts yet. Add each bank account, mobile money wallet and cash box with its balance on 1 November 2026.
-          </div>
-        )}
-      </div>
+      {/* Each account is a figure: its balance today, and a click opens its
+          statement below. */}
+      <PageBand
+        kicker="Cashbook"
+        title={accounts.length ? `${active.length} account${active.length === 1 ? "" : "s"}` : "No accounts yet"}
+        sub={accounts.length
+          ? `Bank, mobile money and cash, with today's balances${toPlace?.items.length ? ` · ${toPlace.items.length} payment${toPlace.items.length === 1 ? "" : "s"} to place` : ""}`
+          : "Add each bank account, mobile money wallet and cash box with its balance on 1 November 2026."}
+        actions={
+          <button className="ops-cta" type="button" onClick={() => { setView("statements"); setMode("new-account"); }}>+ New account</button>
+        }
+        figsWrap
+        figs={accounts.map((a) => ({
+          key: a.id,
+          k: a.name,
+          v: m2(a.balance, a.currency),
+          tone: a.balance < 0 ? "bad" : undefined,
+          n: `${ACCOUNT_KIND_LABEL[a.kind]} · ${a.currency}${a.is_active ? "" : " · closed"}`,
+          on: view === "statements" && a.id === selectedId,
+          onClick: () => { setView("statements"); setSelectedId(a.id); setFrom(""); setTo(""); },
+        }))}
+        tabs={accounts.length ? [{ key: "statements", label: "Statements" }, { key: "summary", label: "Monthly summary" }] : undefined}
+        tab={view}
+        onTab={(k) => setView(k as typeof view)}
+      />
 
       {view === "summary" && firstMonth ? (
         <SummaryView firstMonth={firstMonth} thisMonth={today(timeZone).slice(0, 7)} />
@@ -194,7 +186,7 @@ export default function CashbookPage() {
         <div className="panel">
           {account && statement ? (
             <>
-              <div className="d-head">
+              <div className="d-head trip-card">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                   <div className="r-no">{ACCOUNT_KIND_LABEL[account.kind]} · {account.currency}</div>
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -203,7 +195,7 @@ export default function CashbookPage() {
                     <button type="button" className="act" onClick={() => setPrinting(statement)}>Print statement</button>
                   </div>
                 </div>
-                <div className="r-title" style={{ fontSize: 18 }}>
+                <div className="tc-title">
                   {account.name}{" "}
                   <button type="button" className="ghost" style={{ width: "auto", marginTop: 0, padding: "2px 8px", fontSize: 12 }} onClick={() => setMode("edit-account")}>
                     Edit

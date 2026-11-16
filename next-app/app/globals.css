@@ -122,33 +122,6 @@ header {
   gap: 11px
 }
 
-.nav-hamburger {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  width: 32px;
-  height: 32px;
-  background: var(--stamp-wash);
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--stamp);
-  font-size: 16px;
-  cursor: pointer;
-  flex-shrink: 0
-}
-
-.nav-hamburger-dot {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--waiting);
-  border: 1.5px solid var(--card)
-}
-
 .brand h1 {
   font-family: var(--cond);
   font-weight: 700;
@@ -283,77 +256,9 @@ nav a.on .n {
   color: #fff
 }
 
-/* hamburger menu (mobile nav) -- trigger lives in the header itself, next
-   to the brand, since that's where users expect a menu control; its
-   dropdown anchors to the header and spans full width below it. */
+/* the organization picker's masthead (platform admins with no organization
+   chosen) stacks on phones */
 @media(max-width:760px) {
-  nav.nav-top {
-    display: none
-  }
-
-  .nav-hamburger {
-    display: flex;
-    order: 2;
-    margin-left: auto
-  }
-
-  .nav-drawer-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 50;
-    background: rgba(20, 22, 26, .28)
-  }
-
-  .nav-drawer {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    z-index: 51;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 6px;
-    background: var(--card);
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-pop)
-  }
-
-  .nav-drawer a {
-    display: flex;
-    align-items: center;
-    padding: 12px 12px;
-    border-radius: var(--radius-sm);
-    color: var(--ink-soft);
-    text-decoration: none;
-    font-family: var(--sans);
-    font-weight: 600;
-    font-size: 14px
-  }
-
-  .nav-drawer a.on {
-    background: var(--stamp-wash);
-    color: var(--stamp)
-  }
-
-  .nav-drawer .n {
-    margin-left: auto;
-    font-family: var(--mono);
-    font-size: 10.5px;
-    opacity: .7
-  }
-
-  .nav-drawer a.on .n,
-  .nav-drawer .n.alert {
-    opacity: 1;
-    color: var(--waiting)
-  }
-
-  .nav-drawer a.on .n {
-    color: var(--stamp)
-  }
-
   header {
     flex-direction: column;
     align-items: flex-start
@@ -3423,5 +3328,632 @@ ul.list.board-list li .track {
   .ops-band .money-strip .n {
     flex-basis: 100%;
     text-align: right
+  }
+}
+
+/* ===================================================================
+   App shell: the sidebar on the left, in the landing page's navy.
+   --sidebar-w is how much room the page leaves for it: full width on
+   wide screens (or the icon strip if collapsed), the icon strip from
+   900 to 1279px, nothing on phones (it slides in instead).
+   =================================================================== */
+:root {
+  --sidebar-w: 248px
+}
+
+@media(min-width:1280px) {
+  :root[data-nav="collapsed"] {
+    --sidebar-w: 72px
+  }
+}
+
+@media(min-width:900px) and (max-width:1279px) {
+  :root {
+    --sidebar-w: 72px
+  }
+}
+
+@media(max-width:899px) {
+  :root {
+    --sidebar-w: 0px
+  }
+}
+
+.app-body {
+  min-height: 100vh;
+  padding-left: var(--sidebar-w);
+  transition: padding-left .2s ease
+}
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-w);
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  overflow: hidden;
+  color: var(--band-soft);
+  background:
+    radial-gradient(420px 320px at 0% 0%, var(--band-glow), transparent 70%),
+    linear-gradient(180deg, var(--band-bg), var(--band-bg-2));
+  border-right: 1px solid rgba(0, 0, 0, .18);
+  transition: width .2s ease, transform .25s ease
+}
+
+.sidebar :focus-visible {
+  outline: 2px solid var(--band-accent);
+  outline-offset: 2px
+}
+
+.sb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 6px 14px
+}
+
+.sb-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--band-ink);
+  text-decoration: none
+}
+
+.sb-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--band-ink);
+  color: var(--band-bg);
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: 17px
+}
+
+.sb-word {
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  white-space: nowrap
+}
+
+.sb-close {
+  display: none
+}
+
+.sb-org {
+  min-width: 0;
+  margin-bottom: 10px;
+  padding: 0 6px 14px;
+  border-bottom: 1px solid var(--band-rule)
+}
+
+.sb-org-name {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--band-ink);
+  overflow-wrap: anywhere
+}
+
+.sidebar select.sb-org-switch {
+  margin-top: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  color-scheme: dark;
+  color: var(--band-ink);
+  background-color: rgba(255, 255, 255, .07);
+  border: 1px solid var(--band-line);
+  border-radius: var(--radius-sm)
+}
+
+/* the global nav rules are for page tabs; the sidebar's nav is a list */
+.sidebar nav.sb-nav {
+  display: block;
+  flex: 1 1 auto;
+  margin: 0 -4px;
+  padding: 0 4px 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin
+}
+
+.sb-group + .sb-group {
+  margin-top: 14px
+}
+
+.sb-group-label {
+  padding: 0 10px 6px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--band-soft);
+  opacity: .8
+}
+
+.sidebar nav.sb-nav a.sb-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 1px 0;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--band-soft);
+  font-family: var(--sans);
+  font-weight: 500;
+  font-size: 14px;
+  white-space: nowrap;
+  text-decoration: none
+}
+
+.sidebar nav.sb-nav a.sb-link:hover {
+  background: rgba(255, 255, 255, .06);
+  color: var(--band-ink)
+}
+
+.sidebar nav.sb-nav a.sb-link.on {
+  background: rgba(255, 255, 255, .11);
+  color: var(--band-ink);
+  font-weight: 600
+}
+
+/* the current page's marker, the landing page's green */
+.sidebar nav.sb-nav a.sb-link.on::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--band-accent)
+}
+
+.nav-icon {
+  flex: none
+}
+
+.sb-count {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .12);
+  color: var(--band-ink);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 19px;
+  text-align: center
+}
+
+.sb-count.alert {
+  background: var(--band-warn);
+  color: #20190a
+}
+
+.sb-foot {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--band-rule)
+}
+
+.sb-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0 6px
+}
+
+.sb-avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .14);
+  color: var(--band-ink);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600
+}
+
+.sb-user-text {
+  display: grid;
+  min-width: 0;
+  line-height: 1.3
+}
+
+.sb-email {
+  overflow: hidden;
+  font-size: 12.5px;
+  color: var(--band-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap
+}
+
+.sb-role {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .06em;
+  color: var(--band-soft)
+}
+
+.sb-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 2px
+}
+
+.sb-actions form {
+  display: contents
+}
+
+.sidebar .sb-btn,
+.sidebar .theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0 10px !important;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--band-soft);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer
+}
+
+.sidebar .theme-toggle {
+  font-size: 16px
+}
+
+.sidebar .sb-btn:hover,
+.sidebar .theme-toggle:hover {
+  background: rgba(255, 255, 255, .08) !important;
+  color: var(--band-ink)
+}
+
+.sb-collapse {
+  margin-left: auto
+}
+
+/* the phone top bar, with the menu button that slides the sidebar in */
+.topbar {
+  display: none;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  align-items: center;
+  gap: 10px;
+  margin: -22px -22px 16px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
+  color: var(--band-ink);
+  background: linear-gradient(180deg, var(--band-bg), var(--band-bg-2));
+  box-shadow: 0 6px 18px -10px rgba(16, 24, 40, .45)
+}
+
+.topbar-btn {
+  position: relative;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, .08);
+  color: var(--band-ink);
+  cursor: pointer
+}
+
+.topbar-btn:focus-visible {
+  outline: 2px solid var(--band-accent);
+  outline-offset: 2px
+}
+
+.topbar-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--band-warn);
+  border: 1.5px solid var(--band-bg)
+}
+
+.topbar-brand {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap
+}
+
+.topbar-page {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--band-soft)
+}
+
+/* the icon strip: wide screens, by choice */
+@media(min-width:1280px) {
+  :root[data-nav="collapsed"] .sidebar {
+    padding-left: 10px;
+    padding-right: 10px
+  }
+
+  :root[data-nav="collapsed"] .sidebar .lbl {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap
+  }
+
+  :root[data-nav="collapsed"] .sidebar select.sb-org-switch {
+    display: none
+  }
+
+  :root[data-nav="collapsed"] .sb-head {
+    justify-content: center;
+    padding: 0 0 14px
+  }
+
+  :root[data-nav="collapsed"] .sb-org {
+    padding: 0;
+    border-bottom: 0;
+    margin-bottom: 0
+  }
+
+  :root[data-nav="collapsed"] .sb-group-label {
+    height: 1px;
+    margin: 0 12px 10px;
+    padding: 0;
+    overflow: hidden;
+    font-size: 0;
+    background: var(--band-rule);
+    opacity: 1
+  }
+
+  :root[data-nav="collapsed"] .sb-group + .sb-group {
+    margin-top: 10px
+  }
+
+  :root[data-nav="collapsed"] .sidebar nav.sb-nav a.sb-link {
+    justify-content: center;
+    padding: 10px 0
+  }
+
+  :root[data-nav="collapsed"] .sb-count {
+    position: absolute;
+    top: 3px;
+    right: 6px;
+    min-width: 16px;
+    padding: 0 4px;
+    font-size: 9.5px;
+    line-height: 15px
+  }
+
+  :root[data-nav="collapsed"] .sb-user {
+    justify-content: center;
+    padding: 0
+  }
+
+  :root[data-nav="collapsed"] .sb-actions {
+    flex-direction: column;
+    gap: 2px;
+    padding: 0
+  }
+
+  :root[data-nav="collapsed"] .sb-collapse {
+    margin-left: 0
+  }
+
+  :root[data-nav="collapsed"] .sidebar .sb-btn {
+    width: 40px;
+    padding: 0 !important
+  }
+}
+
+/* the icon strip: 900 to 1279px wide, always; the collapse button is hidden (see .sb-collapse) */
+@media(min-width:900px) and (max-width:1279px) {
+  .sidebar {
+    padding-left: 10px;
+    padding-right: 10px
+  }
+
+  .sidebar .lbl {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap
+  }
+
+  .sidebar select.sb-org-switch {
+    display: none
+  }
+
+  .sb-head {
+    justify-content: center;
+    padding: 0 0 14px
+  }
+
+  .sb-org {
+    padding: 0;
+    border-bottom: 0;
+    margin-bottom: 0
+  }
+
+  .sb-group-label {
+    height: 1px;
+    margin: 0 12px 10px;
+    padding: 0;
+    overflow: hidden;
+    font-size: 0;
+    background: var(--band-rule);
+    opacity: 1
+  }
+
+  .sb-group + .sb-group {
+    margin-top: 10px
+  }
+
+  .sidebar nav.sb-nav a.sb-link {
+    justify-content: center;
+    padding: 10px 0
+  }
+
+  .sb-count {
+    position: absolute;
+    top: 3px;
+    right: 6px;
+    min-width: 16px;
+    padding: 0 4px;
+    font-size: 9.5px;
+    line-height: 15px
+  }
+
+  .sb-user {
+    justify-content: center;
+    padding: 0
+  }
+
+  .sb-actions {
+    flex-direction: column;
+    gap: 2px;
+    padding: 0
+  }
+
+  .sb-collapse {
+    margin-left: 0
+  }
+
+  .sidebar .sb-btn {
+    width: 40px;
+    padding: 0 !important
+  }
+
+  .sb-collapse {
+    display: none
+  }
+}
+
+/* phones: the sidebar slides in over the page from the top bar */
+@media(max-width:899px) {
+  .topbar {
+    display: flex
+  }
+
+  .sidebar {
+    width: min(300px, 86vw);
+    z-index: 80;
+    transform: translateX(-102%)
+  }
+
+  .sidebar.open {
+    transform: none;
+    box-shadow: 0 0 48px rgba(0, 0, 0, .45)
+  }
+
+  .sb-close {
+    display: inline-grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, .08);
+    color: var(--band-ink);
+    cursor: pointer
+  }
+
+  .sb-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 75;
+    background: rgba(10, 16, 26, .45)
+  }
+
+  .sb-collapse {
+    display: none
+  }
+}
+
+@media(prefers-reduced-motion:reduce) {
+  .sidebar,
+  .app-body {
+    transition: none
+  }
+}
+
+@media print {
+  .sidebar,
+  .topbar,
+  .sb-backdrop {
+    display: none !important
+  }
+
+  .app-body {
+    padding-left: 0
+  }
+}
+
+/* the collapse button: an icon at the end of the account row on wide
+   screens; nothing to do on the 900-1279px strip or on phones */
+.sidebar .sb-btn.sb-collapse {
+  width: 34px;
+  margin-left: auto;
+  padding: 0 !important
+}
+
+@media(min-width:1280px) {
+  :root[data-nav="collapsed"] .sidebar .sb-btn.sb-collapse {
+    width: 40px;
+    margin-left: 0
+  }
+}
+
+@media(max-width:1279px) {
+  .sidebar .sb-btn.sb-collapse {
+    display: none
   }
 }

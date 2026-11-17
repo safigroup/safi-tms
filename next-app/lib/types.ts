@@ -380,6 +380,11 @@ export type TripFacts = {
   // Fuel logged as a plain amount, with no litres.
   fuel_no_liters_usd: number;
   empty_return_usd: number;
+  // What its invoices came to, what's been paid against them and what's
+  // overdue, in USD (see lib/reports/collections.ts).
+  invoiced_usd: number;
+  collected_usd: number;
+  overdue_usd: number;
 };
 
 export type CategoryAmount = {
@@ -459,6 +464,8 @@ export type TruckReport = {
   // trips or costs in it), what they averaged, and where this one ranks by
   // profit. Null with fewer than two trucks.
   fleet: { trucks: number; rank: number | null; avg: Omit<TruckTotals, "trips"> } | null;
+  // Currencies of invoices left out of the collected figures: no rate on file.
+  paymentRatesMissing: string[];
   // The last 12 months (from the truck's first month), oldest first.
   monthly: TruckReportMonth[];
   // Every trip the truck has loaded, in or out of the period: the day it
@@ -468,6 +475,52 @@ export type TruckReport = {
 };
 
 export type TripSpan = { load: string; days: number | null; running: boolean };
+
+// Every truck, route and customer side by side over one period
+// (GET /api/reports/compare). Money is in USD; trips count in the period
+// they loaded, as everywhere else.
+export type CompareMoney = { trips: number; revenue: number; tripCosts: number; invoiced: number; collected: number; overdue: number };
+
+export type CompareTruck = CompareMoney & {
+  truck: Pick<Truck, "id" | "fleet_no" | "horse_reg" | "is_active">;
+  owningCosts: number;
+  // Revenue less trip costs less owning costs.
+  profit: number;
+  // Km driven (each route one way, twice with an empty return), and
+  // whether every trip's route has a distance set.
+  km: number;
+  kmKnown: boolean;
+  // Days with a load on, out of the period's days since the truck's first
+  // day; null when it has no first day yet.
+  daysOnTrip: number | null;
+  days: number | null;
+};
+
+export type CompareRoute = CompareMoney & {
+  id: string;
+  name: string;
+  km: number | null;
+  targetDays: number | null;
+  trucks: number;
+  // Loading to delivery, over the delivered trips.
+  avgDays: number | null;
+  delivered: number;
+  late: number;
+};
+
+export type CompareCustomer = CompareMoney & { id: string; name: string; late: number };
+
+export type CompareReport = {
+  from: string | null;
+  to: string | null;
+  today: string;
+  trucks: CompareTruck[];
+  routes: CompareRoute[];
+  customers: CompareCustomer[];
+  // Trips with no truck assigned: in routes and customers, not in trucks.
+  tripsWithoutTruck: number;
+  paymentRatesMissing: string[];
+};
 
 export type BootstrapPayload = {
   fetchErrors: string[];

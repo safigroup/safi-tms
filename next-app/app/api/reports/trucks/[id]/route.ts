@@ -3,25 +3,12 @@ import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
 import { CAPITAL_CATEGORIES, NON_CASH_CATEGORIES } from "@/lib/trucks/costs";
 import { lastMonths } from "@/lib/dashboard/trends";
 import { today } from "@/lib/format";
+import { allRows, chunks } from "@/lib/reports/rows";
+import { tripCollections } from "@/lib/reports/collections";
+import { tripDays } from "@/lib/reports/detail";
 import type { Breakeven, TripAllocation, TripCost, TripFacts, TruckTotals } from "@/lib/types";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const PAGE = 1000;
-const ID_CHUNK = 100;
-
-type Paged<T> = PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
-
-// Every row of a query, a page at a time: the API returns at most 1000
-// rows a request, and a long-lived truck or a whole fleet can pass that.
-async function allRows<T>(page: (lo: number, hi: number) => Paged<T>): Promise<{ rows: T[]; error: string | null }> {
-  const rows: T[] = [];
-  for (let offset = 0; ; offset += PAGE) {
-    const { data, error } = await page(offset, offset + PAGE - 1);
-    if (error) return { rows, error: error.message };
-    rows.push(...(data ?? []));
-    if (!data || data.length < PAGE) return { rows, error: null };
-  }
-}
 
 type TripMoney = { truck_id?: string | null; actual_load_date: string | null; revenue_usd: number; cost_usd: number };
 type CostMoney = { truck_id?: string; category: string; amount_usd: number; incurred_on: string };
@@ -139,10 +126,9 @@ export async function GET(
   // the rows coming back outgrow a request; the batches, and each trip's
   // full ledger when the printed report asks for one, are read at once.
   const tripIds = trips.map((t) => t.trip_id);
-  const idChunks: string[][] = [];
-  for (let i = 0; i < tripIds.length; i += ID_CHUNK) idChunks.push(tripIds.slice(i, i + ID_CHUNK));
+  const idChunks = chunks(tripIds);
 
-  const [costBatches, ledgerBatches] = await Promise.all([
+  const [costBatches, ledgerBatches, collections] = await Promise.all([
     Promise.all(idChunks.map((chunk) =>
       allRows<{ trip_id: string; category: string; amount_usd: number; liters: number | null; is_empty_return: boolean }>((lo, hi) =>
         ctx.admin.from("trip_costs").select("id, trip_id, category, amount_usd, liters, is_empty_return").in("trip_id", chunk).order("id").range(lo, hi),
@@ -174,10 +160,15 @@ export async function GET(
           ),
         ])))
       : Promise.resolve(null),
+    // What each trip has been invoiced and paid.
+    tripCollections(ctx.admin, ctx.orgId, tripIds),
   ]);
   const batchError = costBatches.find((b) => b.error)?.error ?? ledgerBatches?.flat().find((b) => b.error)?.error;
   if (batchError) {
     return NextResponse.json({ error: batchError }, { status: 400 });
+  }
+  if (collections.error) {
+    return NextResponse.json({ error: collections.error }, { status: 400 });
   }
   if (routesResult.error) {
     return NextResponse.json({ error: routesResult.error }, { status: 400 });
@@ -187,7 +178,19 @@ export async function GET(
 
   // Each trip's fuel and empty return, from the cost rows already fetched.
   const facts = new Map<string, TripFacts>(
-    trips.map((t) => [t.trip_id, { route_km: routeKm.get(t.route_id) ?? null, fuel_usd: 0, fuel_liters: 0, fuel_no_liters_usd: 0, empty_return_usd: 0 }]),
+    trips.map((t) => {
+      const paid = collections.byTrip.get(t.trip_id);
+      return [t.trip_id, {
+        route_km: routeKm.get(t.route_id) ?? null,
+        fuel_usd: 0,
+        fuel_liters: 0,
+        fuel_no_liters_usd: 0,
+        empty_return_usd: 0,
+        invoiced_usd: paid?.invoiced ?? 0,
+        collected_usd: paid?.collected ?? 0,
+        overdue_usd: paid?.overdue ?? 0,
+      }];
+    }),
   );
   for (const r of tripCostRows) {
     const f = facts.get(r.trip_id);
@@ -296,6 +299,7 @@ export async function GET(
     standingExpensesByCategory: sumByCategory(owningCosts),
     previous,
     fleet,
+    paymentRatesMissing: collections.missingRates,
     monthly,
     // Every trip's time on the road, whenever it loaded: a trip loaded
     // last month can still have kept the truck busy this month.
@@ -360,19 +364,6 @@ async function fleetAverages(ctx: Ctx, truckId: string, from: string | null, to:
       profit: avg((r) => r.profit),
     },
   };
-}
-
-const ROLLING = ["loading", "in_transit", "at_border"];
-
-// How long a trip had the truck, loading to delivery, in whole days on the
-// company's calendar (trip_board's days_running). Still on the road: the
-// days so far. No delivery time recorded otherwise (an older trip, or one
-// cancelled after loading): unknown, since days_running would keep
-// counting to today.
-function tripDays(t: { status: string; actual_delivery_at: string | null; days_running: number | null }) {
-  const running = ROLLING.includes(t.status);
-  const known = t.days_running !== null && (!!t.actual_delivery_at || running);
-  return { days: known ? Number(t.days_running) : null, running };
 }
 
 const monthKey = (d: string) => d.slice(0, 7); // "YYYY-MM"

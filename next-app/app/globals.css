@@ -1416,6 +1416,52 @@ ul.list.x-rows li {
   margin-bottom: 12px
 }
 
+/* has it been paid: collected, invoiced and not due, overdue (hatched),
+   not invoiced yet (an empty track) */
+.paid-bar {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+  margin: 12px 0 4px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--rule-soft)
+}
+
+.paid-seg {
+  flex: 1 1 0;
+  min-width: 3px
+}
+
+.paid-seg.got {
+  background: var(--settled)
+}
+
+.paid-seg.due {
+  background: var(--stamp)
+}
+
+.paid-seg.late {
+  background: repeating-linear-gradient(135deg, var(--alert) 0 1.5px, transparent 1.5px 4.5px);
+  box-shadow: inset 0 0 0 1.5px var(--alert)
+}
+
+.paid-seg.todo {
+  background: var(--rule-soft);
+  box-shadow: inset 0 0 0 1px var(--rule)
+}
+
+.split-key i.paid-seg {
+  width: 12px;
+  height: 12px;
+  min-width: 0;
+  border-radius: 3px
+}
+
+.split-key b.neg {
+  color: var(--alert)
+}
+
 /* every trip in the period, each opening its costs in the Cost docket */
 .panel.rep-trips {
   margin-top: 18px
@@ -1442,7 +1488,7 @@ ul.list.x-rows li {
 
 .tt-row {
   display: grid;
-  grid-template-columns: minmax(110px, .9fr) minmax(0, 1.9fr) minmax(104px, .9fr) minmax(86px, .7fr) minmax(86px, .7fr) minmax(104px, .8fr);
+  grid-template-columns: minmax(104px, .85fr) minmax(0, 1.7fr) minmax(96px, .85fr) minmax(80px, .65fr) minmax(80px, .65fr) minmax(96px, .75fr) minmax(108px, .85fr);
   gap: 4px 14px;
   align-items: start;
   padding: 11px 18px;
@@ -1523,10 +1569,23 @@ a.tt-row:hover {
   color: var(--alert)
 }
 
-.tt-margin small {
+.tt-margin small,
+.tt-paid small {
   font-size: 11px;
   font-weight: 400;
   color: var(--ink-soft)
+}
+
+.tt-paid {
+  display: grid
+}
+
+.tt-paid small.pos {
+  color: var(--settled)
+}
+
+.tt-paid small.neg {
+  color: var(--alert)
 }
 
 .tt-k {
@@ -1589,6 +1648,178 @@ a.tt-row:hover {
   .tt-margin .tt-k {
     display: none
   }
+
+  .tt-paid {
+    text-align: left
+  }
+}
+
+/* the side-by-side views (all trucks, routes, customers) */
+.cmp-bars {
+  padding: 16px 0 8px;
+  border-left: 1px solid var(--rule-soft);
+  min-width: 0
+}
+
+.dash-sub.cmp-bars-head {
+  padding: 0 18px 4px
+}
+
+.cmp-bars .bar-row {
+  padding: 6px 18px
+}
+
+.cmp-bars ul.list {
+  max-height: none
+}
+
+/* on a phone, a wide table says it scrolls sideways */
+.table-hint {
+  display: none;
+  padding: 8px 18px 0;
+  font-size: 12px;
+  color: var(--ink-soft)
+}
+
+@media(max-width:780px) {
+  .table-hint {
+    display: block
+  }
+}
+
+.cmp-bars .bar-label .r-title {
+  font-size: 13.5px !important
+}
+
+.cmp-bars .bar-label .r-sub {
+  font-size: 11.5px
+}
+
+.panel.cmp-table .panel-head {
+  flex-wrap: wrap
+}
+
+table.ctable th {
+  padding: 0
+}
+
+/* ten columns fit a laptop screen: tighter than the plain tables */
+table.ctable td {
+  padding: 9px 11px
+}
+
+table.ctable td:first-child {
+  padding-left: 18px
+}
+
+table.ctable td:last-child,
+table.ctable th:last-child button {
+  padding-right: 18px
+}
+
+table.ctable th button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  justify-content: flex-end;
+  padding: 9px 11px;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer
+}
+
+table.ctable th:first-child button {
+  justify-content: flex-start;
+  padding-left: 18px
+}
+
+table.ctable th button:hover,
+table.ctable th[aria-sort="ascending"] button,
+table.ctable th[aria-sort="descending"] button {
+  color: var(--ink)
+}
+
+.sort-mark {
+  display: inline-block;
+  min-width: 8px
+}
+
+table.ctable td {
+  vertical-align: top
+}
+
+table.ctable .cell-main,
+table.ctable .cell-sub {
+  display: block
+}
+
+table.ctable .cell-sub {
+  margin-top: 2px;
+  font-family: var(--sans);
+  font-size: 11.5px;
+  color: var(--ink-soft)
+}
+
+table.ctable td:first-child .cell-main {
+  font-weight: 600
+}
+
+table.ctable .neg {
+  color: var(--alert)
+}
+
+table.ctable .pos {
+  color: var(--settled)
+}
+
+table.ctable tr.tap {
+  cursor: pointer
+}
+
+table.ctable tr.tap:hover td {
+  background: var(--ground)
+}
+
+.cell-open {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--stamp);
+  font: inherit;
+  text-align: left;
+  cursor: pointer
+}
+
+.cell-open .cell-sub {
+  color: var(--ink-soft)
+}
+
+table.ctable tfoot td {
+  border-top: 1px solid var(--rule);
+  border-bottom: 0;
+  font-weight: 600
+}
+
+/* the first column stays put when a wide table scrolls sideways */
+table.ctable th:first-child,
+table.ctable td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--card)
+}
+
+@media(max-width:1000px) {
+  .cmp-bars {
+    border-left: 0;
+    border-top: 1px solid var(--rule-soft)
+  }
 }
 
 @media(max-width:420px) {
@@ -1623,16 +1854,17 @@ a.tt-row:hover {
     grid-template-columns: minmax(0, 1fr)
   }
 
-  /* one column: the money, the payback, the per-unit figures, then the
-     truck's costs */
+  /* one column: the money and whether it's been paid, the payback, the
+     per-unit figures, then the truck's costs */
   .rep-col {
     display: contents
   }
 
   .rep-col:first-child > :nth-child(1) { order: 1 }
-  .rep-col:last-child > :nth-child(1) { order: 2 }
-  .rep-col:last-child > :nth-child(2) { order: 3 }
-  .rep-col:first-child > :nth-child(2) { order: 4 }
+  .rep-col:first-child > :nth-child(2) { order: 2 }
+  .rep-col:last-child > :nth-child(1) { order: 3 }
+  .rep-col:last-child > :nth-child(2) { order: 4 }
+  .rep-col:first-child > :nth-child(3) { order: 5 }
 
   .split-box {
     border-left: 0;

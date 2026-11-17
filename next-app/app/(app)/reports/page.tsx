@@ -16,8 +16,9 @@ import { t, catLabel, type PrintLang } from "@/lib/print/translations";
 import { CAPITAL_CATEGORIES, NON_CASH_CATEGORIES } from "@/lib/trucks/costs";
 import { RANGES, dayLabel, resolveRange, type RangeKey, type ReportRange } from "@/lib/reports/periods";
 import { headline, isEmpty, plainWords } from "@/lib/reports/summary";
-import { dataChecks, tripRows, unitFigures, type Check, type Flag, type TripRow, type Units } from "@/lib/reports/detail";
-import type { BootstrapPayload, Breakeven, CategoryAmount, TruckReport } from "@/lib/types";
+import { collectionFigures, dataChecks, payState, tripRows, unitFigures, type Check, type Flag, type TripRow, type Units } from "@/lib/reports/detail";
+import { CompareBody, compareFigs, compareTitle, type CompareView } from "./compare-views";
+import type { BootstrapPayload, Breakeven, CategoryAmount, CompareReport, TruckReport } from "@/lib/types";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 import { CashAccountField, useCashAccountChoice } from "@/lib/components/CashAccountField";
 
@@ -41,6 +42,15 @@ function monthLabel(key: string) {
   const [y, m] = key.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
 }
+
+// One truck's report, or every truck, route or customer side by side.
+type View = "truck" | CompareView;
+const VIEWS: { key: View; label: string; kicker: string }[] = [
+  { key: "truck", label: "One truck", kicker: "Reports · truck report" },
+  { key: "trucks", label: "All trucks", kicker: "Reports · all trucks" },
+  { key: "routes", label: "Routes", kicker: "Reports · routes" },
+  { key: "customers", label: "Customers", kicker: "Reports · customers" },
+];
 
 const validDate = (d: string | null) => (d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : "");
 
@@ -68,9 +78,15 @@ export default function ReportsPage() {
   const [printing, setPrinting] = useState(false);
   const [printLang, setPrintLang] = useState<PrintLang>("en");
   const [includeLedgers, setIncludeLedgers] = useState(false);
-  // Counts report requests, so an answer that arrives after a newer one
+  // ?view= opens a side-by-side view (trucks, routes, customers) directly.
+  const [view, setView] = useState<View>(() => VIEWS.find((v) => v.key === searchParams.get("view"))?.key ?? "truck");
+  const [compare, setCompare] = useState<CompareReport | null>(null);
+  const [compareError, setCompareError] = useState<string | null>(null);
+  const [loadingCompare, setLoadingCompare] = useState(false);
+  // Count report requests, so an answer that arrives after a newer one
   // was asked for is dropped.
   const requests = useRef(0);
+  const compareRequests = useRef(0);
 
   async function load() {
     const res = await fetch("/api/bootstrap");
@@ -118,18 +134,47 @@ export default function ReportsPage() {
     setReport(await res.json());
   }
 
+  // The three side-by-side views share one answer: switching between them
+  // doesn't refetch, changing the period does.
+  async function loadCompare(r: ReportRange) {
+    const mine = ++compareRequests.current;
+    setLoadingCompare(true);
+    setCompareError(null);
+    const qs = new URLSearchParams();
+    if (r.from) qs.set("from", r.from);
+    if (r.to) qs.set("to", r.to);
+    const res = await fetch(`/api/reports/compare?${qs.toString()}`);
+    if (mine !== compareRequests.current) return;
+    setLoadingCompare(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setCompareError(body.error || res.statusText);
+      setCompare(null);
+      return;
+    }
+    setCompare(await res.json());
+  }
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-once; load is recreated every render, adding it here would refetch on every render too
   }, []);
 
+  const oneTruck = view === "truck";
   useEffect(() => {
-    if (!truckId || !range) return;
+    if (!oneTruck || !truckId || !range) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- refetching the report when the selected truck, period, or ledger toggle changes
     loadReport(truckId, range);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberate: only the truck, the period's dates (and the dates it's compared with) and the ledger toggle should trigger a refetch
-  }, [truckId, range?.from, range?.to, range?.previous?.from, range?.previous?.to, includeLedgers]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberate: only the view, the truck, the period's dates (and the dates it's compared with) and the ledger toggle should trigger a refetch
+  }, [oneTruck, truckId, range?.from, range?.to, range?.previous?.from, range?.previous?.to, includeLedgers]);
+
+  useEffect(() => {
+    if (oneTruck || !range) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- refetching the side-by-side figures when the period changes
+    loadCompare(range);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberate: only leaving the one-truck view and the period's dates should trigger a refetch
+  }, [oneTruck, range?.from, range?.to]);
 
   useEffect(() => {
     if (printing) window.print();
@@ -142,6 +187,14 @@ export default function ReportsPage() {
   const shown = report && range && !loadingReport ? report : null;
   const verdict = shown ? headline(shown) : null;
   const preset = RANGES.find((r) => r.key === rangeKey);
+  const periodLabel = range ? [preset && !["all", "custom"].includes(preset.key) ? preset.label : null, range.label].filter(Boolean).join(" · ") : undefined;
+  const compared = !oneTruck && compare && range && !loadingCompare ? compare : null;
+
+  function openTruck(id: string) {
+    setTruckId(id);
+    setView("truck");
+    window.scrollTo({ top: 0 });
+  }
 
   // Custom starts from the dates already on screen rather than blank.
   function pickRange(key: RangeKey) {
@@ -165,12 +218,16 @@ export default function ReportsPage() {
     <>
       {loadError ? <div className="note bad">{loadError}</div> : null}
       <PageBand
-        kicker="Reports · truck report"
-        title={!truck ? "No trucks yet" : verdict ? verdict.text : `${truck.fleet_no} · ${truck.horse_reg}`}
-        sub={truck && range
-          ? [truck.horse_reg, preset && !["all", "custom"].includes(preset.key) ? preset.label : null, range.label].filter(Boolean).join(" · ")
-          : undefined}
-        actions={truck ? (
+        kicker={VIEWS.find((v) => v.key === view)!.kicker}
+        title={!oneTruck
+          ? compared ? compareTitle(view as CompareView, compared) : VIEWS.find((v) => v.key === view)!.label
+          : !truck ? "No trucks yet" : verdict ? verdict.text : `${truck.fleet_no} · ${truck.horse_reg}`}
+        sub={!oneTruck ? periodLabel : truck && range ? [truck.horse_reg, periodLabel].filter(Boolean).join(" · ") : undefined}
+        tabs={VIEWS.map((v) => ({ key: v.key, label: v.label }))}
+        tab={view}
+        onTab={(key) => setView(key as View)}
+        label="Reports"
+        actions={oneTruck && truck ? (
           <>
             {canEdit ? (
               <button type="button" className="act" aria-expanded={adding} onClick={() => setAdding(!adding)}>
@@ -186,15 +243,17 @@ export default function ReportsPage() {
             ) : null}
           </>
         ) : null}
-        figs={shown && range ? bandFigs(shown, range) : undefined}
+        figs={!oneTruck ? (compared ? compareFigs(view as CompareView, compared) : undefined) : shown && range ? bandFigs(shown, range) : undefined}
       >
         <div className="band-filters">
-          <div className="band-field band-grow">
-            <label htmlFor="rTruck">Truck</label>
-            <select id="rTruck" value={truckId ?? ""} onChange={(e) => setTruckId(e.target.value)}>
-              {data.trucks.map((t) => <option key={t.id} value={t.id}>{t.fleet_no} — {t.horse_reg}</option>)}
-            </select>
-          </div>
+          {oneTruck ? (
+            <div className="band-field band-grow">
+              <label htmlFor="rTruck">Truck</label>
+              <select id="rTruck" value={truckId ?? ""} onChange={(e) => setTruckId(e.target.value)}>
+                {data.trucks.map((t) => <option key={t.id} value={t.id}>{t.fleet_no} — {t.horse_reg}</option>)}
+              </select>
+            </div>
+          ) : null}
           <div className="band-field band-wide">
             <span className="band-label" id="rPeriod">Period</span>
             <div className="band-chips" role="group" aria-labelledby="rPeriod">
@@ -217,14 +276,20 @@ export default function ReportsPage() {
               </div>
             </div>
           ) : null}
-          <label className="band-check" htmlFor="rLedgers">
-            <input id="rLedgers" type="checkbox" checked={includeLedgers} onChange={(e) => setIncludeLedgers(e.target.checked)} />
-            Include trip ledgers when printing
-          </label>
+          {oneTruck ? (
+            <label className="band-check" htmlFor="rLedgers">
+              <input id="rLedgers" type="checkbox" checked={includeLedgers} onChange={(e) => setIncludeLedgers(e.target.checked)} />
+              Include trip ledgers when printing
+            </label>
+          ) : null}
         </div>
       </PageBand>
 
-      {!truck ? (
+      {!oneTruck ? (
+        compareError ? <div className="note bad">{compareError}</div>
+          : compared ? <div className="dash-grid"><CompareBody view={view as CompareView} c={compared} onTruck={openTruck} /></div>
+            : <div className="panel"><Spinner /></div>
+      ) : !truck ? (
         <div className="empty">Add a truck under Admin → Fleet to see its report.</div>
       ) : loadingReport || !range ? (
         <div className="panel"><Spinner /></div>
@@ -246,7 +311,7 @@ export default function ReportsPage() {
         />
       ) : null}
 
-      {printing && report ? <ReportPrintSheet report={report} lang={printLang} onDone={() => setPrinting(false)} /> : null}
+      {printing && report && oneTruck ? <ReportPrintSheet report={report} lang={printLang} onDone={() => setPrinting(false)} /> : null}
     </>
   );
 }
@@ -264,6 +329,7 @@ function bandFigs(r: TruckReport, range: ReportRange): BandFig[] {
   const fleet = r.fleet?.avg;
   const notes = (...parts: (string | null | undefined | false)[]) => parts.filter(Boolean).join(" · ") || undefined;
   const loss = r.margin <= -0.5;
+  const paid = collectionFigures(r);
   return [
     kpi(
       "rev",
@@ -308,6 +374,17 @@ function bandFigs(r: TruckReport, range: ReportRange): BandFig[] {
         ),
       ),
       tone: loss ? "bad" : r.margin >= 0.5 ? "pos" : undefined,
+    },
+    {
+      ...kpi(
+        "paid",
+        "Collected",
+        m0(paid.collected),
+        null,
+        undefined,
+        notes(paid.revenue > 0 && `${Math.round((paid.collected / paid.revenue) * 100)}% of revenue`, paid.overdue >= 0.5 && `${m0(paid.overdue)} overdue`),
+      ),
+      title: "What customers have paid against these trips' invoices so far.",
     },
   ];
 }
@@ -403,6 +480,7 @@ function ReportBody({
       <div className="rep-cols">
         <div className="rep-col">
           {empty ? null : <MoneyPanel report={report} />}
+          {empty ? null : <PaidPanel report={report} />}
           {adding ? null : costs}
         </div>
         <div className="rep-col">
@@ -413,6 +491,60 @@ function ReportBody({
 
       <TripsPanel rows={rows} />
     </>
+  );
+}
+
+// Has the money these trips earned come in? One bar from collected to not
+// invoiced yet, the amounts beside it, and what to do about the rest.
+function PaidPanel({ report }: { report: TruckReport }) {
+  const c = collectionFigures(report);
+  if (c.revenue <= 0) return null;
+  const all = c.collected >= c.revenue - 0.5;
+  const pct = Math.round((c.collected / c.revenue) * 100);
+  const parts = [
+    { key: "got", label: "Collected", value: c.collected },
+    { key: "due", label: "Invoiced, not due yet", value: c.notDue },
+    { key: "late", label: "Overdue", value: c.overdue },
+    { key: "todo", label: "Not invoiced yet", value: c.notInvoiced },
+  ];
+  const answer = all ? "Yes, all of it." : c.collected < 0.5 ? "Not yet: nothing collected so far." : `${pct}% so far.`;
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Has it been paid?</h2>
+        <span className="r-min">of {m0(c.revenue)} earned</span>
+      </div>
+      <div className="payback">
+        <div className={"payback-answer" + (all ? " pos" : "")}>{answer}</div>
+        <div className="paid-bar" role="img" aria-label={parts.map((p) => `${p.label} ${m0(p.value)}`).join(", ")}>
+          {parts.map((p) => (p.value >= 0.5 ? <span key={p.key} className={"paid-seg " + p.key} style={{ flexGrow: p.value }} title={`${p.label}: ${m2(p.value)}`} /> : null))}
+        </div>
+        <ul className="split-key">
+          {parts.filter((p) => p.value >= 0.5).map((p) => (
+            <li key={p.key}>
+              <i className={"paid-seg " + p.key} />
+              <span>{p.label}</span>
+              <b className={p.key === "late" ? "neg" : undefined}>{m0(p.value)}</b>
+            </li>
+          ))}
+        </ul>
+        {c.overdue >= 0.5 || c.notInvoicedDelivered >= 0.5 ? (
+          <p className="d-hint" style={{ marginTop: 10 }}>
+            {c.overdue >= 0.5 ? `${m0(c.overdue)} is past its due date. ` : ""}
+            {c.notInvoicedDelivered >= 0.5 ? `${m0(c.notInvoicedDelivered)} is from trips already delivered and not invoiced yet. ` : ""}
+            <Link href="/billing">Open Billing</Link> to chase or invoice it.
+          </p>
+        ) : null}
+        <p className="d-hint" style={{ marginTop: 8 }}>
+          Payments count against each trip&apos;s invoices; an invoice for several trips is shared by its lines.
+        </p>
+        {report.paymentRatesMissing.length ? (
+          <div className="note warn" style={{ marginTop: 10, marginBottom: 0 }}>
+            Invoices in {report.paymentRatesMissing.join(", ")} aren&apos;t counted: no exchange rate on file.
+          </div>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
@@ -564,6 +696,28 @@ const FLAG: Record<Flag, { label: string; tone: string }> = {
   running: { label: "on the road", tone: "grey" },
 };
 
+// What a trip's customer has paid, and where the rest stands.
+function PaidCell({ trip }: { trip: TruckReport["trips"][number] }) {
+  const f = trip.facts;
+  const state = payState(trip);
+  const note: Record<typeof state, ReactNode> = {
+    paid: <small className="pos">paid in full</small>,
+    overdue: <small className="neg">{m0(f.overdue_usd)} overdue</small>,
+    part_paid: <small>of {m0(f.invoiced_usd)} invoiced</small>,
+    invoiced: <small>invoiced, not due</small>,
+    part_invoiced: <small>{m0(f.invoiced_usd)} invoiced</small>,
+    not_invoiced: <small>not invoiced</small>,
+    none: null,
+  };
+  return (
+    <span className="tt-num tt-paid">
+      <span className="tt-k">Paid</span>
+      {state === "none" ? "—" : m0(f.collected_usd)}
+      {note[state]}
+    </span>
+  );
+}
+
 function daysLabel(x: TripRow) {
   if (x.days === null) return "—";
   const d = x.days === 0 ? "same day" : plural(x.days, "day");
@@ -596,6 +750,7 @@ function TripsPanel({ rows }: { rows: TripRow[] }) {
             <span className="tt-num">Revenue</span>
             <span className="tt-num">Costs</span>
             <span className="tt-num">Margin</span>
+            <span className="tt-num">Paid</span>
           </div>
           {sorted.map((x) => {
             const t = x.trip;
@@ -623,6 +778,7 @@ function TripsPanel({ rows }: { rows: TripRow[] }) {
                   {signedM0(margin)}
                   {x.marginPct !== null ? <small>{Math.round(x.marginPct) < 0 ? "−" : ""}{Math.abs(Math.round(x.marginPct))}%</small> : null}
                 </span>
+                <PaidCell trip={t} />
                 {pills.length ? (
                   <span className="tt-flags">
                     {pills.map((f) => <span key={f} className={"pill " + FLAG[f].tone}>{FLAG[f].label}</span>)}

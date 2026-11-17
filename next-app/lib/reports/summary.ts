@@ -155,11 +155,38 @@ function purchaseCosts(r: TruckReport): Line | null {
   };
 }
 
+// The trips that cost more than they earned, worst first. Only when some
+// trips made money too: if every trip lost, the result line already says so.
+function lossTrips(r: TruckReport): Line | null {
+  const lost = r.trips
+    .filter((t) => Number(t.margin_usd || 0) <= -0.5)
+    .sort((a, b) => Number(a.margin_usd) - Number(b.margin_usd));
+  const counted = r.trips.length;
+  if (!lost.length || lost.length === counted) return null;
+  const named = lost.slice(0, 3).map((t) => `${t.trip_no} (${m0(-Number(t.margin_usd))})`);
+  const more = lost.length - named.length;
+  const list = more > 0
+    ? `${named.join(", ")} and ${plural(more, "other")}`
+    : named.length > 1 ? `${named.slice(0, -1).join(", ")} and ${named.at(-1)}` : named[0];
+  return {
+    key: "loss-trips",
+    tone: "bad",
+    lead: `${lost.length} of ${counted} trips lost money.`,
+    text: `${cap(list)}. They're marked in the trips list below.`,
+  };
+}
+
 // `previousLabel` names the comparison period ("1–17 Oct"), when there is one.
 export function plainWords(r: TruckReport, previousLabel: string | null): Line[] {
   // With nothing recorded there's nothing to compare: say so, and stop.
   if (isEmpty(r)) return [result(r), purchaseCosts(r)].filter((l): l is Line => !!l);
-  return [result(r), biggestCost(r), againstBefore(r, previousLabel), againstFleet(r), emptyReturns(r), purchaseCosts(r)].filter(
-    (l): l is Line => !!l,
-  );
+  return [
+    result(r),
+    biggestCost(r),
+    lossTrips(r),
+    againstBefore(r, previousLabel),
+    againstFleet(r),
+    emptyReturns(r),
+    purchaseCosts(r),
+  ].filter((l): l is Line => !!l);
 }

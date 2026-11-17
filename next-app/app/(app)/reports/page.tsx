@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { m0, m2, num, lab, today } from "@/lib/format";
@@ -15,6 +16,7 @@ import { t, catLabel, type PrintLang } from "@/lib/print/translations";
 import { CAPITAL_CATEGORIES, NON_CASH_CATEGORIES } from "@/lib/trucks/costs";
 import { RANGES, dayLabel, resolveRange, type RangeKey, type ReportRange } from "@/lib/reports/periods";
 import { headline, isEmpty, plainWords } from "@/lib/reports/summary";
+import { dataChecks, tripRows, unitFigures, type Check, type Flag, type TripRow, type Units } from "@/lib/reports/detail";
 import type { BootstrapPayload, Breakeven, CategoryAmount, TruckReport } from "@/lib/types";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 import { CashAccountField, useCashAccountChoice } from "@/lib/components/CashAccountField";
@@ -238,6 +240,7 @@ export default function ReportsPage() {
           onClose={() => setAdding(false)}
           onChanged={() => loadReport(report.truck.id, range)}
           onAllTime={rangeKey === "all" ? null : () => setRangeKey("all")}
+          todayIso={day}
           curOpts={curOpts}
           fx={data.fx}
         />
@@ -310,7 +313,7 @@ function bandFigs(r: TruckReport, range: ReportRange): BandFig[] {
 }
 
 function ReportBody({
-  report, range, canEdit, adding, onAdd, onClose, onChanged, onAllTime, curOpts, fx,
+  report, range, canEdit, adding, onAdd, onClose, onChanged, onAllTime, todayIso, curOpts, fx,
 }: {
   report: TruckReport;
   range: ReportRange;
@@ -321,9 +324,13 @@ function ReportBody({
   onChanged: () => void;
   // Null when the report already covers all time.
   onAllTime: (() => void) | null;
+  // Today on the company's calendar.
+  todayIso: string;
   curOpts: string[];
   fx: BootstrapPayload["fx"];
 }) {
+  const empty = isEmpty(report);
+  const rows = tripRows(report);
   const costs = (
     <section className="panel">
       <div className="panel-head">
@@ -354,9 +361,10 @@ function ReportBody({
     </section>
   );
 
-  // Top to bottom: the period in words, its trend, then two columns that
-  // each stack on their own -- the money and its trips on the left, the
-  // payback and the truck's own costs on the right.
+  // Top to bottom: the period in words and what to check before relying on
+  // it, its trend, then two columns that each stack on their own -- the
+  // money and the truck's own costs on the left, the payback and the
+  // per-trip, per-km and per-day figures on the right -- and every trip.
   return (
     <>
       <div className="dash-grid">
@@ -376,8 +384,10 @@ function ReportBody({
         <InShort
           report={report}
           previousLabel={comparable(report) ? range.previous?.label ?? null : null}
-          onAllTime={isEmpty(report) ? onAllTime : null}
+          onAllTime={empty ? onAllTime : null}
         />
+
+        <ChecksPanel checks={dataChecks(report)} />
 
         {report.monthly.length ? (
           <MonthlyChart
@@ -392,34 +402,239 @@ function ReportBody({
 
       <div className="rep-cols">
         <div className="rep-col">
-          {isEmpty(report) ? null : <MoneyPanel report={report} />}
-          <section className="panel">
-            <div className="panel-head">
-              <h2>Trips</h2>
-              <span className="r-min">{plural(report.trips.length, "trip")} loaded in this period</span>
-            </div>
-            <ul className="list">
-              {report.trips.length ? report.trips.map((tr) => (
-                <li key={tr.trip_id}>
-                  <div>
-                    <div className="r-no">{tr.trip_no}</div>
-                    <div className="r-mono">{tr.actual_load_date || "—"}</div>
-                  </div>
-                  <div className="r-right">
-                    <div className={"r-amt " + (tr.margin_usd >= 0 ? "pos" : "neg")}>{m2(tr.margin_usd)}</div>
-                    <div className="r-min">rev {m0(tr.revenue_usd)} · cost {m0(tr.cost_usd)}</div>
-                  </div>
-                </li>
-              )) : <li className="empty">No trips loaded in this period.</li>}
-            </ul>
-          </section>
+          {empty ? null : <MoneyPanel report={report} />}
+          {adding ? null : costs}
         </div>
         <div className="rep-col">
           <PaybackPanel breakeven={report.breakeven} canAdd={canEdit && !adding} onAdd={onAdd} />
-          {adding ? null : costs}
+          {empty ? null : <UnitsPanel report={report} units={unitFigures(report, todayIso)} />}
         </div>
       </div>
+
+      <TripsPanel rows={rows} />
     </>
+  );
+}
+
+// What to put right before relying on the figures: trips with no costs or
+// no revenue, fuel without litres, routes with no distance, trips still on
+// the road. Each names its trips, linked to where they can be seen or fixed.
+function ChecksPanel({ checks }: { checks: Check[] }) {
+  if (!checks.length) return null;
+  const shown = 8;
+  const serious = checks.some((c) => c.tone === "warn");
+  return (
+    <section className="panel dash-wide">
+      <div className="panel-head">
+        <h2>{serious ? "Before you rely on these figures" : "Worth knowing"}</h2>
+        <span className="r-min">open a trip to see or fix it</span>
+      </div>
+      <ul className="short-lines check-lines">
+        {checks.map((c) => (
+          <li key={c.key} className={c.tone}>
+            <span className="short-dot" aria-hidden="true" />
+            <div>
+              <p>{c.text}</p>
+              <div className="check-trips">
+                {c.trips.slice(0, shown).map((t) => (
+                  <Link key={t.trip_id} className="trip-chip" href={tripHref(t)}>{t.trip_no}</Link>
+                ))}
+                {c.trips.length > shown ? <span className="r-min">and {c.trips.length - shown} more</span> : null}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+// Where a trip opens: an open trip in the Cost docket, where its costs
+// can still be put right; a closed one on the Board, since the docket
+// lists open trips only and would open a different trip instead.
+const tripHref = (t: TruckReport["trips"][number]) =>
+  t.status === "closed" ? `/board?${new URLSearchParams({ filter: "all", trip: t.trip_id })}` : `/docket?trip=${t.trip_id}`;
+
+const kmLabel = (km: number) => `${Math.round(km).toLocaleString("en-US")} km`;
+const signedM0 = (n: number) => (n <= -0.5 ? `−${m0(-n)}` : m0(Math.max(0, n)));
+const signedM2 = (n: number) => (n <= -0.005 ? `−${m2(-n)}` : m2(Math.max(0, n)));
+
+function UnitFig({ k, v, tone }: { k: string; v: string; tone?: "pos" | "neg" }) {
+  return (
+    <div>
+      <span className="k">{k}</span>
+      <span className={"v" + (tone ? " " + tone : "")}>{v}</span>
+    </div>
+  );
+}
+
+// The period broken down: the average trip, each kilometre, each litre of
+// fuel and each day.
+function UnitsPanel({ report, units }: { report: TruckReport; units: Units }) {
+  const { perTrip, perKm, fuel, days } = units;
+  const sign = (n: number) => (n < -0.005 ? "neg" : n > 0.005 ? "pos" : undefined);
+  // What each km left: after all costs when every trip's distance is
+  // known, otherwise after trip costs only.
+  const kmLeft = perKm ? perKm.profit ?? perKm.revenue - perKm.tripCosts : 0;
+  const trips = perTrip?.trips ?? 0;
+  return (
+    <section className="panel">
+      <div className="panel-head"><h2>Per trip, per km, per day</h2></div>
+
+      {perTrip ? (
+        <div className="unit">
+          <div className="unit-head">The average trip <span>{plural(perTrip.trips, "trip")}</span></div>
+          <div className="unit-figs">
+            <UnitFig k="Revenue" v={m0(perTrip.revenue)} />
+            <UnitFig k="Trip costs" v={m0(perTrip.tripCosts)} />
+            <UnitFig k="Left over" v={signedM0(perTrip.left)} tone={sign(perTrip.left)} />
+          </div>
+          <p className="d-hint">
+            {report.standingExpenses > 0
+              ? `With its share of owning costs taken off too, each trip ${perTrip.profit < 0 ? `lost ${m0(-perTrip.profit)}` : `left ${m0(perTrip.profit)}`}.`
+              : "No owning costs in this period to share out."}
+          </p>
+        </div>
+      ) : null}
+
+      {perKm ? (
+        <div className="unit">
+          <div className="unit-head">Each kilometre <span>{kmLabel(perKm.km)}</span></div>
+          <div className="unit-figs">
+            <UnitFig k="Revenue" v={m2(perKm.revenue)} />
+            <UnitFig k={perKm.allCosts === null ? "Trip costs" : "All costs"} v={m2(perKm.allCosts ?? perKm.tripCosts)} />
+            <UnitFig k={perKm.profit === null ? "Left over" : "Profit"} v={signedM2(kmLeft)} tone={sign(kmLeft)} />
+          </div>
+          <p className="d-hint">
+            Each trip&apos;s route counted one way{perKm.returnKm > 0 ? `, plus ${kmLabel(perKm.returnKm)} driven back empty where a trip logged its empty return` : ""}.
+            {perKm.leftOut ? ` ${plural(perKm.leftOut, "trip")} left out: no distance set for ${perKm.leftOut === 1 ? "its route" : "their routes"}, so owning costs aren't spread per km.` : ""}
+          </p>
+        </div>
+      ) : null}
+
+      {fuel ? (
+        <div className="unit">
+          <div className="unit-head">Fuel <span>{plural(fuel.trips, "trip")}</span></div>
+          <div className="unit-figs">
+            <UnitFig k="km per litre" v={fuel.kmPerLitre.toFixed(2)} />
+            <UnitFig k="Litres per 100 km" v={fuel.litresPer100.toFixed(1)} />
+            <UnitFig k="Fuel per km" v={m2(fuel.costPerKm)} />
+          </div>
+          <p className="d-hint">
+            From trips with litres logged for all their fuel.
+            {fuel.leftOut ? ` ${plural(fuel.leftOut, "other trip")} left out: fuel logged without litres, or none logged.` : ""}
+          </p>
+        </div>
+      ) : null}
+
+      {days ? (
+        <div className="unit">
+          <div className="unit-head">
+            Days <span>{days.total === 1 ? "1 day" : `${days.total.toLocaleString("en-US")} days`}</span>
+          </div>
+          <div className="payback-answer unit-answer">Had a load on {Math.round(days.share * 100)}% of days.</div>
+          <div className="meter" role="img" aria-label={`On a trip ${days.onTrip} of ${days.total} days`}>
+            {days.onTrip > 0 ? <span style={{ width: `${days.share * 100}%` }} /> : null}
+          </div>
+          <div className="meter-ends">
+            <span>{plural(days.onTrip, "day")} on a trip</span>
+            <span>{plural(days.total - days.onTrip, "day")} without a load</span>
+          </div>
+          <div className="unit-figs">
+            <UnitFig k="Average trip" v={days.avgTripDays === null ? "—" : `${days.avgTripDays.toFixed(1)} days`} />
+            <UnitFig k="Late trips" v={trips ? `${days.late} of ${trips}` : "—"} />
+            <UnitFig k="Profit per day" v={signedM0(days.profitPerDay)} tone={sign(days.profitPerDay)} />
+          </div>
+          <p className="d-hint">
+            {!report.from || days.from > report.from ? `Counted from ${dayLabel(days.from)}, the truck's first day. ` : ""}
+            A day counts from loading to delivery. Driving back, waiting for a load and time in the workshop count as days without a load.
+          </p>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+const FLAG: Record<Flag, { label: string; tone: string }> = {
+  loss: { label: "lost money", tone: "bad" },
+  no_costs: { label: "no costs", tone: "warn" },
+  no_revenue: { label: "no revenue", tone: "warn" },
+  late: { label: "late", tone: "warn" },
+  no_litres: { label: "fuel without litres", tone: "grey" },
+  running: { label: "on the road", tone: "grey" },
+};
+
+function daysLabel(x: TripRow) {
+  if (x.days === null) return "—";
+  const d = x.days === 0 ? "same day" : plural(x.days, "day");
+  return x.running ? `${d} so far` : d;
+}
+
+// Every trip loaded in the period, each opening in the Cost docket (or on
+// the Board, once closed): where it went and for whom, how long it took,
+// and what it made.
+function TripsPanel({ rows }: { rows: TripRow[] }) {
+  const [sort, setSort] = useState<"new" | "low">("new");
+  const sorted = sort === "new" ? rows : [...rows].sort((a, b) => Number(a.trip.margin_usd) - Number(b.trip.margin_usd));
+  return (
+    <section className="panel rep-trips">
+      <div className="panel-head">
+        <h2>Trips <span className="r-min">{rows.length} loaded in this period</span></h2>
+        {rows.length > 1 ? (
+          <div className="sort-chips" role="group" aria-label="Order">
+            <button type="button" className={"chip" + (sort === "new" ? " on" : "")} aria-pressed={sort === "new"} onClick={() => setSort("new")}>Newest</button>
+            <button type="button" className={"chip" + (sort === "low" ? " on" : "")} aria-pressed={sort === "low"} onClick={() => setSort("low")}>Least profit</button>
+          </div>
+        ) : null}
+      </div>
+      {rows.length ? (
+        <div className="tt">
+          <div className="tt-row tt-head" aria-hidden="true">
+            <span>Trip</span>
+            <span>Route and customer</span>
+            <span>Took</span>
+            <span className="tt-num">Revenue</span>
+            <span className="tt-num">Costs</span>
+            <span className="tt-num">Margin</span>
+          </div>
+          {sorted.map((x) => {
+            const t = x.trip;
+            const margin = Number(t.margin_usd || 0);
+            const pills = x.flags.filter((f) => f !== "late");
+            return (
+              <Link key={t.trip_id} href={tripHref(t)} className={"tt-row" + (x.flags.includes("loss") ? " loss" : "")}>
+                <span className="tt-trip">
+                  <b>{t.trip_no}</b>
+                  <span className="r-mono">{t.actual_load_date ? dayLabel(t.actual_load_date) : "—"}</span>
+                </span>
+                <span className="tt-route">
+                  <span>{t.route}</span>
+                  <span className="r-sub">{[t.customer, x.km ? kmLabel(x.km) : null].filter(Boolean).join(" · ")}</span>
+                </span>
+                <span className="tt-days">
+                  <span className="tt-k">Took</span>
+                  {daysLabel(x)}
+                  {x.flags.includes("late") && t.target_days ? <span className="pill warn">late · target {t.target_days}</span> : null}
+                </span>
+                <span className="tt-num"><span className="tt-k">Revenue</span>{m0(t.revenue_usd)}</span>
+                <span className="tt-num"><span className="tt-k">Costs</span>{m0(t.cost_usd)}</span>
+                <span className={"tt-num tt-margin" + (margin <= -0.5 ? " neg" : margin >= 0.5 ? " pos" : "")}>
+                  <span className="tt-k">Margin</span>
+                  {signedM0(margin)}
+                  {x.marginPct !== null ? <small>{Math.round(x.marginPct) < 0 ? "−" : ""}{Math.abs(Math.round(x.marginPct))}%</small> : null}
+                </span>
+                {pills.length ? (
+                  <span className="tt-flags">
+                    {pills.map((f) => <span key={f} className={"pill " + FLAG[f].tone}>{FLAG[f].label}</span>)}
+                  </span>
+                ) : null}
+              </Link>
+            );
+          })}
+        </div>
+      ) : <div className="empty">No trips loaded in this period.</div>}
+      {rows.length ? <div className="panel-body bar-note">Open a trip to see its costs: open trips go to the Cost docket, closed ones to the Board.</div> : null}
+    </section>
   );
 }
 
@@ -883,12 +1098,14 @@ function ReportPrintSheet({ report, lang, onDone }: { report: TruckReport; lang:
         </div>
       </div>
       <table>
-        <thead><tr><th>{t(lang, "trip")}</th><th>{t(lang, "loaded")}</th><th className="num">{t(lang, "revenue")}</th><th className="num">{t(lang, "cost")}</th><th className="num">{t(lang, "margin")}</th></tr></thead>
+        <thead><tr><th>{t(lang, "trip")}</th><th>{t(lang, "route")}</th><th>{t(lang, "loaded")}</th><th className="num">{t(lang, "days")}</th><th className="num">{t(lang, "revenue")}</th><th className="num">{t(lang, "cost")}</th><th className="num">{t(lang, "margin")}</th></tr></thead>
         <tbody>
-          {report.trips.map((tr) => (
+          {tripRows(report).map(({ trip: tr, days }) => (
             <tr key={tr.trip_id}>
               <td>{tr.trip_no}</td>
+              <td>{tr.route}</td>
               <td>{tr.actual_load_date || "—"}</td>
+              <td className="num">{days ?? "—"}</td>
               <td className="num">{m2(tr.revenue_usd)}</td>
               <td className="num">{m2(tr.cost_usd)}</td>
               <td className="num">{m2(tr.margin_usd)}</td>

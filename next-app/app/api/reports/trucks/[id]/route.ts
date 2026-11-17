@@ -3,7 +3,7 @@ import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
 import { CAPITAL_CATEGORIES, NON_CASH_CATEGORIES } from "@/lib/trucks/costs";
 import { lastMonths } from "@/lib/dashboard/trends";
 import { today } from "@/lib/format";
-import type { Breakeven, TripAllocation, TripCost, TruckTotals } from "@/lib/types";
+import type { Breakeven, TripAllocation, TripCost, TripFacts, TruckTotals } from "@/lib/types";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const PAGE = 1000;
@@ -68,22 +68,24 @@ export async function GET(
   const prevTo = date("prevTo");
   const includeLedgers = searchParams.get("includeLedgers") === "1";
 
-  const { data: truck } = await ctx.admin
-    .from("trucks")
-    .select("id, fleet_no, horse_reg, is_active, purchase_date, truck_type")
-    .eq("id", id)
-    .eq("org_id", ctx.orgId)
-    .maybeSingle();
-  if (!truck) {
-    return NextResponse.json({ error: "truck not found" }, { status: 404 });
-  }
-
-  // Fetched unfiltered (the truck's whole life) since the payback, the
-  // month-by-month figures and the comparison period all reach outside
-  // whatever period the report itself is scoped to. The period-scoped
-  // figures are derived by filtering these same rows in JS rather than
-  // querying again.
-  const [tripsResult, costsResult] = await Promise.all([
+  // Everything below is read at once rather than one query after another:
+  // each round trip to the database can cost most of a second from a
+  // distant network. That's safe before the truck is confirmed as this
+  // organization's, since every query is scoped to the organization too;
+  // with no such truck, the rest is simply thrown away.
+  //
+  // The truck's trips and costs are fetched unfiltered (its whole life)
+  // since the payback, the month-by-month figures and the comparison
+  // period all reach outside whatever period the report itself is scoped
+  // to. The period-scoped figures are derived by filtering these same rows
+  // in JS rather than querying again.
+  const [{ data: truck }, tripsResult, costsResult, routesResult, fleet] = await Promise.all([
+    ctx.admin
+      .from("trucks")
+      .select("id, fleet_no, horse_reg, is_active, purchase_date, truck_type")
+      .eq("id", id)
+      .eq("org_id", ctx.orgId)
+      .maybeSingle(),
     allRows((lo, hi) =>
       ctx.admin
         // Selected in full (not just the revenue/cost figures the summary
@@ -108,7 +110,13 @@ export async function GET(
         .order("id")
         .range(lo, hi),
     ),
+    // Route distances (one way), for the per-km figures.
+    allRows((lo, hi) => ctx.admin.from("routes").select("id, distance_km").eq("org_id", ctx.orgId).order("id").range(lo, hi)),
+    fleetAverages(ctx, id, from, to),
   ]);
+  if (!truck) {
+    return NextResponse.json({ error: "truck not found" }, { status: 404 });
+  }
   if (tripsResult.error) {
     return NextResponse.json({ error: tripsResult.error }, { status: 400 });
   }
@@ -128,54 +136,75 @@ export async function GET(
   // a trip, so the per-category breakdown needs its own query against
   // trip_costs directly, scoped to just the trips already resolved above.
   // Asked for a hundred trips at a time, so neither the list of ids nor
-  // the rows coming back outgrow a request.
+  // the rows coming back outgrow a request; the batches, and each trip's
+  // full ledger when the printed report asks for one, are read at once.
   const tripIds = trips.map((t) => t.trip_id);
   const idChunks: string[][] = [];
   for (let i = 0; i < tripIds.length; i += ID_CHUNK) idChunks.push(tripIds.slice(i, i + ID_CHUNK));
 
-  const tripCostRows: { category: string; amount_usd: number; liters: number | null; is_empty_return: boolean }[] = [];
-  for (const chunk of idChunks) {
-    const { rows, error } = await allRows((lo, hi) =>
-      ctx.admin.from("trip_costs").select("id, category, amount_usd, liters, is_empty_return").in("trip_id", chunk).order("id").range(lo, hi),
-    );
-    if (error) return NextResponse.json({ error }, { status: 400 });
-    tripCostRows.push(...rows);
+  const [costBatches, ledgerBatches] = await Promise.all([
+    Promise.all(idChunks.map((chunk) =>
+      allRows<{ trip_id: string; category: string; amount_usd: number; liters: number | null; is_empty_return: boolean }>((lo, hi) =>
+        ctx.admin.from("trip_costs").select("id, trip_id, category, amount_usd, liters, is_empty_return").in("trip_id", chunk).order("id").range(lo, hi),
+      ),
+    )),
+    // Full per-line cost detail, only fetched when the printed report is
+    // asked to include each trip's ledger -- the summary never needs more
+    // than the category/liters totals above.
+    includeLedgers
+      ? Promise.all(idChunks.map((chunk) => Promise.all([
+          allRows<TripCost>((lo, hi) =>
+            ctx.admin
+              .from("trip_costs")
+              .select("id, trip_id, category, description, amount, currency, fx_rate_to_usd, amount_usd, incurred_on, location, paid_by, receipt_ref, receipt_path, liters, price_per_liter, is_empty_return")
+              .in("trip_id", chunk)
+              .order("incurred_on", { ascending: true })
+              .order("id")
+              .range(lo, hi),
+          ),
+          allRows<TripAllocation>((lo, hi) =>
+            ctx.admin
+              .from("trip_allocations")
+              .select("*")
+              .eq("org_id", ctx.orgId)
+              .in("trip_id", chunk)
+              .order("allocated_on", { ascending: true })
+              .order("id")
+              .range(lo, hi),
+          ),
+        ])))
+      : Promise.resolve(null),
+  ]);
+  const batchError = costBatches.find((b) => b.error)?.error ?? ledgerBatches?.flat().find((b) => b.error)?.error;
+  if (batchError) {
+    return NextResponse.json({ error: batchError }, { status: 400 });
+  }
+  if (routesResult.error) {
+    return NextResponse.json({ error: routesResult.error }, { status: 400 });
+  }
+  const tripCostRows = costBatches.flatMap((b) => b.rows);
+  const routeKm = new Map(routesResult.rows.map((r) => [r.id, r.distance_km && r.distance_km > 0 ? Number(r.distance_km) : null]));
+
+  // Each trip's fuel and empty return, from the cost rows already fetched.
+  const facts = new Map<string, TripFacts>(
+    trips.map((t) => [t.trip_id, { route_km: routeKm.get(t.route_id) ?? null, fuel_usd: 0, fuel_liters: 0, fuel_no_liters_usd: 0, empty_return_usd: 0 }]),
+  );
+  for (const r of tripCostRows) {
+    const f = facts.get(r.trip_id);
+    if (!f) continue;
+    const usd = Number(r.amount_usd || 0);
+    if (r.is_empty_return) f.empty_return_usd += usd;
+    if (r.category !== "fuel") continue;
+    const liters = Number(r.liters || 0);
+    f.fuel_usd += usd;
+    if (liters > 0) f.fuel_liters += liters;
+    else f.fuel_no_liters_usd += usd;
   }
 
-  // Full per-line cost detail, only fetched when the printed report is
-  // asked to include each trip's ledger -- the summary above never needs
-  // more than the category/liters totals already queried.
   let tripsWithLedgers = trips;
-  if (includeLedgers && tripIds.length) {
-    const ledgerCostRows: TripCost[] = [];
-    const allocationRows: TripAllocation[] = [];
-    for (const chunk of idChunks) {
-      const [costs, allocations] = await Promise.all([
-        allRows((lo, hi) =>
-          ctx.admin
-            .from("trip_costs")
-            .select("id, trip_id, category, description, amount, currency, fx_rate_to_usd, amount_usd, incurred_on, location, paid_by, receipt_ref, receipt_path, liters, price_per_liter, is_empty_return")
-            .in("trip_id", chunk)
-            .order("incurred_on", { ascending: true })
-            .order("id")
-            .range(lo, hi),
-        ),
-        allRows((lo, hi) =>
-          ctx.admin
-            .from("trip_allocations")
-            .select("*")
-            .eq("org_id", ctx.orgId)
-            .in("trip_id", chunk)
-            .order("allocated_on", { ascending: true })
-            .order("id")
-            .range(lo, hi),
-        ),
-      ]);
-      if (costs.error) return NextResponse.json({ error: costs.error }, { status: 400 });
-      if (allocations.error) return NextResponse.json({ error: allocations.error }, { status: 400 });
-      ledgerCostRows.push(...costs.rows);
-      allocationRows.push(...allocations.rows);
-    }
+  if (ledgerBatches) {
+    const ledgerCostRows = ledgerBatches.flatMap(([costs]) => costs.rows);
+    const allocationRows = ledgerBatches.flatMap(([, allocations]) => allocations.rows);
     tripsWithLedgers = trips.map((t) => ({
       ...t,
       costs: ledgerCostRows.filter((c) => c.trip_id === t.trip_id),
@@ -254,7 +283,7 @@ export async function GET(
     truck,
     from,
     to,
-    trips: tripsWithLedgers,
+    trips: tripsWithLedgers.map((t) => ({ ...t, facts: facts.get(t.trip_id)! })),
     standingCosts,
     tripRevenue: period.revenue,
     tripExpenses: period.tripCosts,
@@ -266,8 +295,11 @@ export async function GET(
     tripExpensesByCategory: sumByCategory(tripCostRows),
     standingExpensesByCategory: sumByCategory(owningCosts),
     previous,
-    fleet: await fleetAverages(ctx, id, from, to),
+    fleet,
     monthly,
+    // Every trip's time on the road, whenever it loaded: a trip loaded
+    // last month can still have kept the truck busy this month.
+    spans: allTrips.map((t) => ({ load: t.actual_load_date as string, ...tripDays(t) })),
     breakeven: computeBreakeven(truck.purchase_date, allTrips, allCosts, todayIso),
   });
 }
@@ -328,6 +360,19 @@ async function fleetAverages(ctx: Ctx, truckId: string, from: string | null, to:
       profit: avg((r) => r.profit),
     },
   };
+}
+
+const ROLLING = ["loading", "in_transit", "at_border"];
+
+// How long a trip had the truck, loading to delivery, in whole days on the
+// company's calendar (trip_board's days_running). Still on the road: the
+// days so far. No delivery time recorded otherwise (an older trip, or one
+// cancelled after loading): unknown, since days_running would keep
+// counting to today.
+function tripDays(t: { status: string; actual_delivery_at: string | null; days_running: number | null }) {
+  const running = ROLLING.includes(t.status);
+  const known = t.days_running !== null && (!!t.actual_delivery_at || running);
+  return { days: known ? Number(t.days_running) : null, running };
 }
 
 const monthKey = (d: string) => d.slice(0, 7); // "YYYY-MM"

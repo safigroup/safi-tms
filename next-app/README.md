@@ -94,6 +94,15 @@ The product previews (`app/_landing/previews.tsx`) are pictures of the real scre
 - **Per trip, per km, per day** (`lib/reports/detail.ts`): the average trip; revenue, costs and profit per km; km per litre; and the share of days the truck had a load on. Route distances (`routes.distance_km`) are **one way**, so a trip counts its route once, plus once more when it logged empty-return costs. km per litre only uses trips whose every fuel entry has its litres. A day "on a trip" runs from loading to delivery, both days included, counted once when trips overlap and taken from all the truck's trips (`spans`), not just those loaded in the period; driving back and waiting for a load count as days without one.
 - **Trips** list every trip loaded in the period with its route, customer, distance, days taken (late ones marked against the route's target), revenue, costs and margin, newest first or least profit first. An open trip opens in the Cost docket; a closed one on the Board, because the docket lists open trips only.
 - **Checks** say what to put right before relying on the figures: trips with no costs or no revenue, fuel logged without litres, routes with no distance, trips still on the road. Each names its trips.
+- **Has it been paid?** splits what the period's trips earned into collected, invoiced and not due, overdue, and not invoiced yet; each trip row shows its own. A trip reaches invoices through their lines, and payments are recorded against the whole invoice, so each line takes its invoice's paid and overdue fractions (`lib/reports/collections.ts`): a half-paid invoice for two trips has collected half of each. Cancelled invoices count for nothing; other currencies convert at the rate on file the day the invoice was issued. These figures are visible to every role, like receivables in `/api/bootstrap`.
+
+### Side by side
+
+Tabs in the band switch from one truck to **All trucks**, **Routes** or **Customers**, over the same period (`?view=trucks|routes|customers` links straight to one). `GET /api/reports/compare` returns all three at once, using the truck report's rules, so a truck's row and its own report agree. Each view opens with plain sentences (`lib/reports/compareWords.ts`) and bars for its key figure, then a table sorted by clicking its headings with a total row:
+
+- **All trucks**: trips, revenue, trip and owning costs, profit, profit per km, days with a load, collected and overdue. A row opens that truck's report.
+- **Routes**: trips and trucks, revenue, trip costs, what was left over (in total and per trip), average days against the route's target, late trips, collected. Owning costs belong to trucks, so routes show what's left after trip costs only.
+- **Customers**: revenue and its share of the total, trip costs, left over, not invoiced, invoiced, collected, unpaid and overdue.
 
 ## Company cashbook
 

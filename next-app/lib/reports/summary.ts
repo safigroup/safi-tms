@@ -1,5 +1,6 @@
 import { lab, m0, m2, num } from "@/lib/format";
 import type { TruckReport } from "@/lib/types";
+import { collectionFigures } from "./detail";
 
 // The truck report in plain words: a headline and a few sentences, each
 // worked out by fixed rules from the report's own figures. Nothing here is
@@ -176,6 +177,29 @@ function lossTrips(r: TruckReport): Line | null {
   };
 }
 
+// What the period's trips earned, against what's been collected of it:
+// the overdue money first, then what hasn't been invoiced.
+function paidLine(r: TruckReport): Line | null {
+  const c = collectionFigures(r);
+  if (c.revenue <= 0) return null;
+  if (c.collected >= c.revenue - 0.5) {
+    return { key: "paid", tone: "pos", lead: "All of it has been collected.", text: `Every dollar these trips earned has been paid.` };
+  }
+  const so = `${pct(c.collected, c.revenue)}% of what it earned has been collected so far (${m0(c.collected)} of ${m0(c.revenue)}).`;
+  if (c.overdue >= 0.5) {
+    return {
+      key: "paid",
+      tone: "bad",
+      lead: `${m0(c.overdue)} is overdue.`,
+      text: so + (c.notInvoicedDelivered >= 0.5 ? ` Another ${m0(c.notInvoicedDelivered)} from delivered trips hasn't been invoiced yet.` : ""),
+    };
+  }
+  if (c.notInvoicedDelivered >= 0.5) {
+    return { key: "paid", tone: "info", lead: `${m0(c.notInvoicedDelivered)} from delivered trips hasn't been invoiced yet.`, text: so };
+  }
+  return null;
+}
+
 // `previousLabel` names the comparison period ("1–17 Oct"), when there is one.
 export function plainWords(r: TruckReport, previousLabel: string | null): Line[] {
   // With nothing recorded there's nothing to compare: say so, and stop.
@@ -184,6 +208,7 @@ export function plainWords(r: TruckReport, previousLabel: string | null): Line[]
     result(r),
     biggestCost(r),
     lossTrips(r),
+    paidLine(r),
     againstBefore(r, previousLabel),
     againstFleet(r),
     emptyReturns(r),

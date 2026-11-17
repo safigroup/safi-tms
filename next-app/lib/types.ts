@@ -367,7 +367,20 @@ export type TruckCost = {
 // populated then; it's absent otherwise, not an empty array, so the
 // print sheet can tell "ledgers weren't requested" apart from "requested
 // but this trip has none."
-export type TruckReportTrip = BoardTrip & { costs?: TripCost[]; allocations?: TripAllocation[] };
+// `facts` is what the report needs beyond the board row (see TripFacts).
+export type TruckReportTrip = BoardTrip & { costs?: TripCost[]; allocations?: TripAllocation[]; facts: TripFacts };
+
+// A trip's route distance (one way; null when the route has none set) and
+// what its fuel and empty return cost, for the truck report's per-km
+// figures and its checks.
+export type TripFacts = {
+  route_km: number | null;
+  fuel_usd: number;
+  fuel_liters: number;
+  // Fuel logged as a plain amount, with no litres.
+  fuel_no_liters_usd: number;
+  empty_return_usd: number;
+};
 
 export type CategoryAmount = {
   category: string;
@@ -448,8 +461,13 @@ export type TruckReport = {
   fleet: { trucks: number; rank: number | null; avg: Omit<TruckTotals, "trips"> } | null;
   // The last 12 months (from the truck's first month), oldest first.
   monthly: TruckReportMonth[];
+  // Every trip the truck has loaded, in or out of the period: the day it
+  // loaded and how many days it ran (null when unknown).
+  spans: TripSpan[];
   breakeven: Breakeven;
 };
+
+export type TripSpan = { load: string; days: number | null; running: boolean };
 
 export type BootstrapPayload = {
   fetchErrors: string[];

@@ -91,6 +91,9 @@ The product previews (`app/_landing/previews.tsx`) are pictures of the real scre
 - **Comparisons**: the same truck over the comparison period, and the fleet's average for the same dates (trucks that are active or had trips or costs in them) with this truck's rank by profit.
 - **Month by month**: the last 12 months, sharing `lib/components/MonthlyChart.tsx` with the Overview.
 - **Payback** ("Has this truck paid for itself?"): money actually earned back since purchase against what the truck cost to buy. Depreciation (`NON_CASH_CATEGORIES`) is left out of it, since it restates the purchase price on paper; the projected date is a straight line from the last six full months, never the month in progress; and with no purchase cost logged it asks for one rather than guessing.
+- **Per trip, per km, per day** (`lib/reports/detail.ts`): the average trip; revenue, costs and profit per km; km per litre; and the share of days the truck had a load on. Route distances (`routes.distance_km`) are **one way**, so a trip counts its route once, plus once more when it logged empty-return costs. km per litre only uses trips whose every fuel entry has its litres. A day "on a trip" runs from loading to delivery, both days included, counted once when trips overlap and taken from all the truck's trips (`spans`), not just those loaded in the period; driving back and waiting for a load count as days without one.
+- **Trips** list every trip loaded in the period with its route, customer, distance, days taken (late ones marked against the route's target), revenue, costs and margin, newest first or least profit first. An open trip opens in the Cost docket; a closed one on the Board, because the docket lists open trips only.
+- **Checks** say what to put right before relying on the figures: trips with no costs or no revenue, fuel logged without litres, routes with no distance, trips still on the road. Each names its trips.
 
 ## Company cashbook
 

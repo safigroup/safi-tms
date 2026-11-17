@@ -1295,6 +1295,312 @@ ul.list.x-rows li {
   grid-template-columns: minmax(0, 1fr) auto auto
 }
 
+/* what to check before relying on the report, each naming its trips */
+.short-lines li.warn .short-dot {
+  background: var(--waiting);
+  box-shadow: none
+}
+
+.check-lines li > div {
+  min-width: 0
+}
+
+.short-lines.check-lines p {
+  color: var(--ink)
+}
+
+.check-trips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px
+}
+
+.trip-chip {
+  padding: 3px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--stamp);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  text-decoration: none
+}
+
+.trip-chip:hover {
+  border-color: var(--stamp)
+}
+
+/* per trip, per km, per day: three boxed figures a group, like the
+   docket's money strip */
+.unit {
+  padding: 14px 18px 16px;
+  border-bottom: 1px solid var(--rule-soft)
+}
+
+.unit:last-child {
+  border-bottom: 0
+}
+
+.unit-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-soft)
+}
+
+.unit-head span {
+  font-size: 11px;
+  letter-spacing: .02em;
+  text-transform: none
+}
+
+.unit-figs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  overflow: hidden
+}
+
+.unit-figs > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 9px 11px;
+  background: var(--card)
+}
+
+.unit-figs .k {
+  font-size: 11.5px;
+  color: var(--ink-soft)
+}
+
+.unit-figs .v {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere
+}
+
+.unit-figs .v.pos {
+  color: var(--settled)
+}
+
+.unit-figs .v.neg {
+  color: var(--alert)
+}
+
+.unit .d-hint {
+  margin-top: 8px
+}
+
+.payback-answer.unit-answer {
+  font-size: 16px
+}
+
+.unit .meter {
+  margin-top: 8px
+}
+
+.unit .meter-ends {
+  margin-bottom: 12px
+}
+
+/* every trip in the period, each opening its costs in the Cost docket */
+.panel.rep-trips {
+  margin-top: 18px
+}
+
+.rep-trips .panel-head {
+  flex-wrap: wrap
+}
+
+.rep-trips .panel-head h2 .r-min {
+  margin-left: 8px;
+  font-weight: 400
+}
+
+.sort-chips {
+  display: flex;
+  gap: 6px
+}
+
+.tt {
+  max-height: 680px;
+  overflow-y: auto
+}
+
+.tt-row {
+  display: grid;
+  grid-template-columns: minmax(110px, .9fr) minmax(0, 1.9fr) minmax(104px, .9fr) minmax(86px, .7fr) minmax(86px, .7fr) minmax(104px, .8fr);
+  gap: 4px 14px;
+  align-items: start;
+  padding: 11px 18px;
+  border-bottom: 1px solid var(--rule-soft);
+  color: inherit;
+  text-decoration: none;
+  font-size: 13.5px
+}
+
+a.tt-row:hover {
+  background: var(--ground)
+}
+
+.tt-row.loss {
+  box-shadow: inset 3px 0 0 var(--alert)
+}
+
+.tt-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-top: 9px;
+  padding-bottom: 9px;
+  background: var(--card);
+  border-bottom-color: var(--rule);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-soft)
+}
+
+/* the heading row keeps one size, over the figures' own */
+.tt-head .tt-num {
+  font-size: 9.5px
+}
+
+.tt-trip,
+.tt-route,
+.tt-days {
+  display: grid;
+  gap: 2px;
+  min-width: 0
+}
+
+.tt-trip b {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600
+}
+
+.tt-route > span:first-child {
+  overflow-wrap: anywhere
+}
+
+.tt-days .pill {
+  justify-self: start
+}
+
+.tt-num {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap
+}
+
+.tt-margin {
+  display: grid;
+  font-weight: 600
+}
+
+.tt-margin.pos {
+  color: var(--settled)
+}
+
+.tt-margin.neg {
+  color: var(--alert)
+}
+
+.tt-margin small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-soft)
+}
+
+.tt-k {
+  display: none
+}
+
+.tt-flags {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px
+}
+
+@media(max-width:780px) {
+  /* one scroll on a phone, the page's, like the Board's list */
+  .tt {
+    max-height: none
+  }
+
+  .tt-head {
+    display: none
+  }
+
+  .tt-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px 10px;
+    padding: 12px 16px
+  }
+
+  .tt-trip {
+    grid-column: 1 / 3;
+    grid-row: 1
+  }
+
+  .tt-margin {
+    grid-column: 3;
+    grid-row: 1
+  }
+
+  .tt-route,
+  .tt-flags {
+    grid-column: 1 / -1
+  }
+
+  .tt-days,
+  .tt-num:not(.tt-margin) {
+    font-size: 12.5px;
+    text-align: left
+  }
+
+  .tt-k {
+    display: block;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-soft)
+  }
+
+  .tt-margin .tt-k {
+    display: none
+  }
+}
+
+@media(max-width:420px) {
+  .unit-figs > div {
+    padding: 8px 9px
+  }
+
+  .unit-figs .v {
+    font-size: 13px
+  }
+}
+
 /* two columns under the report's summary, each stacking on its own so a
    short panel doesn't leave a hole beside a long one */
 .rep-cols {
@@ -1317,15 +1623,16 @@ ul.list.x-rows li {
     grid-template-columns: minmax(0, 1fr)
   }
 
-  /* one column: the money, the payback, then the two lists */
+  /* one column: the money, the payback, the per-unit figures, then the
+     truck's costs */
   .rep-col {
     display: contents
   }
 
   .rep-col:first-child > :nth-child(1) { order: 1 }
   .rep-col:last-child > :nth-child(1) { order: 2 }
-  .rep-col:first-child > :nth-child(2) { order: 3 }
-  .rep-col:last-child > :nth-child(2) { order: 4 }
+  .rep-col:last-child > :nth-child(2) { order: 3 }
+  .rep-col:first-child > :nth-child(2) { order: 4 }
 
   .split-box {
     border-left: 0;

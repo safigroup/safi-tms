@@ -33,6 +33,7 @@ const STRINGS: Record<string, { en: string; fr: string }> = {
   loaded: { en: "Loaded", fr: "Chargé le" },
   delivered: { en: "Delivered", fr: "Livré le" },
   via: { en: "Via", fr: "Via" },
+  days: { en: "Days", fr: "Jours" },
 
   // table headers
   date: { en: "Date", fr: "Date" },

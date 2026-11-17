@@ -913,6 +913,443 @@ table.mtable td:first-child {
   }
 }
 
+/* nine months or more on a phone: there's room for the month names only,
+   so the percentages and "so far" are left to the table view */
+@media(max-width:560px) {
+  .mchart.crowded .mx-month {
+    font-size: 10px
+  }
+
+  .mchart.crowded .mx-margin,
+  .mchart.crowded .mx-sofar {
+    display: none
+  }
+
+  .mchart.crowded .mbar {
+    width: clamp(4px, 34%, 24px)
+  }
+
+  .mchart.crowded .mcol {
+    gap: 1px
+  }
+}
+
+/* Truck report (Reports): the period in plain words, one bar for where
+   the money went, the income statement as bars, and the truck's payback.
+   Same marks as the Overview's charts: one hue, trip costs solid and
+   owning costs hatched, with green kept for what was left over. */
+.short {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr)
+}
+
+.short-lines {
+  list-style: none;
+  padding: 6px 18px 8px
+}
+
+.short-lines li {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  font-size: 14px
+}
+
+.short-lines li:last-child {
+  border-bottom: 0
+}
+
+.short-lines p {
+  color: var(--ink-soft)
+}
+
+.short-lines strong {
+  font-weight: 600;
+  color: var(--ink)
+}
+
+.short-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: var(--rule);
+  box-shadow: inset 0 0 0 1.5px var(--ink-soft)
+}
+
+.short-lines li.pos .short-dot {
+  background: var(--settled);
+  box-shadow: none
+}
+
+.short-lines li.bad .short-dot {
+  background: var(--alert);
+  box-shadow: none
+}
+
+.short-lines li.short-more .act {
+  margin-left: 6px
+}
+
+.split-box {
+  padding: 16px 18px 18px;
+  border-left: 1px solid var(--rule-soft)
+}
+
+.dash-sub.split-head {
+  padding: 0 0 8px
+}
+
+.split-wrap {
+  position: relative;
+  padding: 5px 0
+}
+
+.split {
+  display: flex;
+  gap: 2px;
+  height: 26px;
+  border-radius: 6px;
+  overflow: hidden
+}
+
+.split-seg {
+  flex: 1 1 0;
+  min-width: 3px
+}
+
+.split-seg.trip {
+  background: var(--stamp)
+}
+
+.split-seg.own {
+  background: repeating-linear-gradient(135deg, var(--stamp) 0 1.5px, transparent 1.5px 4.5px);
+  box-shadow: inset 0 0 0 1.5px var(--stamp)
+}
+
+.split-seg.kept {
+  background: var(--settled)
+}
+
+/* where the revenue ran out, on a bar of everything spent */
+.split-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--ink);
+  box-shadow: 0 0 0 2px var(--card)
+}
+
+.split-over {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  right: 0;
+  border-radius: 0 6px 6px 0;
+  background: var(--card);
+  opacity: .62
+}
+
+.split-seg.faded {
+  opacity: .38
+}
+
+.split-key {
+  list-style: none;
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+  font-size: 13px
+}
+
+.split-key li {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center
+}
+
+.split-key i.split-seg {
+  width: 12px;
+  height: 12px;
+  min-width: 0;
+  border-radius: 3px
+}
+
+.split-key span {
+  color: var(--ink-soft)
+}
+
+.split-key b {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums
+}
+
+.split-mark-key {
+  justify-self: center;
+  width: 2px;
+  height: 12px;
+  background: var(--ink)
+}
+
+.split-note {
+  margin-top: 10px
+}
+
+/* the income statement: label, bar, amount, share */
+.pl {
+  padding: 4px 0 12px
+}
+
+.pl-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(40px, .9fr) minmax(96px, auto) 44px;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 18px;
+  font-size: 13.5px
+}
+
+.pl-k {
+  min-width: 0;
+  overflow-wrap: anywhere
+}
+
+.pl-a,
+.pl-s {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap
+}
+
+.pl-a {
+  font-size: 13px
+}
+
+.pl-s {
+  font-size: 12px;
+  color: var(--ink-soft)
+}
+
+.pl-top {
+  padding-top: 12px;
+  font-weight: 600
+}
+
+.pl-group {
+  padding: 14px 18px 4px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-soft)
+}
+
+.pl-group span {
+  margin-left: 6px;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none
+}
+
+.pl-total {
+  margin: 4px 18px 0;
+  padding: 7px 0;
+  border-top: 1px solid var(--rule-soft);
+  font-weight: 600
+}
+
+.pl-net {
+  margin: 12px 18px 0;
+  padding: 12px 0 2px;
+  border-top: 2px solid var(--ink);
+  font-size: 15px;
+  font-weight: 700
+}
+
+.pl-net .pl-a {
+  font-size: 14.5px
+}
+
+.pl-net.pos .pl-a {
+  color: var(--settled)
+}
+
+.pl-net.neg .pl-a {
+  color: var(--alert)
+}
+
+.pl-note {
+  padding: 0 18px 4px;
+  font-size: 12px;
+  color: var(--ink-soft)
+}
+
+.pl-note.pl-foot {
+  margin: 12px 18px 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--rule-soft)
+}
+
+/* payback: how much of its purchase cost a truck has earned back */
+.payback {
+  padding: 16px 18px
+}
+
+.payback-answer {
+  font-family: var(--cond);
+  font-weight: 700;
+  font-size: 19px;
+  line-height: 1.25;
+  text-wrap: balance
+}
+
+.payback-answer.pos {
+  color: var(--settled)
+}
+
+.payback-answer + .d-hint {
+  margin-top: 6px
+}
+
+.meter {
+  height: 12px;
+  margin: 14px 0 7px;
+  border-radius: 6px;
+  background: var(--rule-soft);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  overflow: hidden
+}
+
+.meter > span {
+  display: block;
+  height: 100%;
+  min-width: 4px;
+  background: var(--stamp)
+}
+
+.meter.done > span {
+  background: var(--settled)
+}
+
+.meter-ends {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-soft)
+}
+
+.payback-facts {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule-soft)
+}
+
+details.payback-months {
+  border-top: 1px solid var(--rule)
+}
+
+details.payback-months > summary {
+  padding: 12px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--stamp);
+  cursor: pointer;
+  list-style: none
+}
+
+details.payback-months > summary::-webkit-details-marker {
+  display: none
+}
+
+details.payback-months > summary::after {
+  content: " +"
+}
+
+details.payback-months[open] > summary::after {
+  content: " −"
+}
+
+details.payback-months[open] > summary {
+  border-bottom: 1px solid var(--rule-soft)
+}
+
+.pill.rep-tag {
+  margin-left: 8px;
+  vertical-align: 1px
+}
+
+/* a list whose rows end in a button (remove this entry) */
+ul.list.x-rows li {
+  grid-template-columns: minmax(0, 1fr) auto auto
+}
+
+/* two columns under the report's summary, each stacking on its own so a
+   short panel doesn't leave a hole beside a long one */
+.rep-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+  margin-top: 18px
+}
+
+.rep-col {
+  display: grid;
+  gap: 18px;
+  min-width: 0
+}
+
+@media(max-width:1000px) {
+  .short,
+  .rep-cols {
+    grid-template-columns: minmax(0, 1fr)
+  }
+
+  /* one column: the money, the payback, then the two lists */
+  .rep-col {
+    display: contents
+  }
+
+  .rep-col:first-child > :nth-child(1) { order: 1 }
+  .rep-col:last-child > :nth-child(1) { order: 2 }
+  .rep-col:first-child > :nth-child(2) { order: 3 }
+  .rep-col:last-child > :nth-child(2) { order: 4 }
+
+  .split-box {
+    border-left: 0;
+    border-top: 1px solid var(--rule-soft)
+  }
+}
+
+@media(max-width:560px) {
+  .pl-row {
+    grid-template-columns: minmax(0, 1fr) auto 40px;
+    row-gap: 5px
+  }
+
+  .pl-row > span:not([class]) {
+    display: none
+  }
+
+  .pl-row .bar-track {
+    grid-column: 1 / -1;
+    order: 5;
+    height: 6px
+  }
+}
+
 /* layout */
 .grid {
   display: grid;
@@ -2924,7 +3361,8 @@ button.ops-tab.on .ops-tab-n {
   max-width: 420px
 }
 
-.band-field label {
+.band-field label,
+.band-label {
   font-family: var(--mono);
   font-size: 10.5px;
   letter-spacing: .14em;
@@ -2970,6 +3408,22 @@ button.ops-tab.on .ops-tab-n {
   accent-color: var(--band-accent)
 }
 
+/* a from/to pair that wraps as one */
+.band-dates {
+  display: flex;
+  gap: 12px 14px;
+  min-width: 0
+}
+
+/* quick choices inside the band (the truck report's period) */
+.band-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px
+}
+
 @media(max-width:780px) {
   .band-filters {
     padding: 0 16px 16px
@@ -2977,6 +3431,11 @@ button.ops-tab.on .ops-tab-n {
 
   .band-field {
     flex: 1 1 120px
+  }
+
+  .band-field.band-wide,
+  .band-dates {
+    flex-basis: 100%
   }
 }
 

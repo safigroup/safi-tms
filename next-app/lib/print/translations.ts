@@ -130,6 +130,14 @@ const STRINGS: Record<string, { en: string; fr: string }> = {
   broke_even: { en: "Broke even", fr: "Seuil atteint" },
   projected: { en: "Projected", fr: "Projeté" },
   not_on_track: { en: "Not on track at current pace", fr: "Hors trajectoire au rythme actuel" },
+  no_purchase_cost: { en: "No purchase cost recorded", fr: "Aucun coût d'achat enregistré" },
+  too_early: { en: "Too early to project", fr: "Trop tôt pour une projection" },
+  purchase_cost: { en: "Purchase cost", fr: "Coût d'achat" },
+  recovered_to_date: { en: "Recovered to date", fr: "Récupéré à ce jour" },
+  purchase_costs_note: {
+    en: "Purchase costs are the investment, not an expense of the period: they are not in the profit & loss above.",
+    fr: "Les coûts d'achat constituent l'investissement, non une charge de la période : ils ne figurent pas au compte de résultat ci-dessus.",
+  },
 };
 
 export function t(lang: PrintLang, key: keyof typeof STRINGS): string {

@@ -388,32 +388,66 @@ export type BreakevenMonth = {
   cumulative: number;
 };
 
-// Discriminated on `status`: "no_data" means no purchase date and no
-// recorded activity to derive one from; "reached" means cumulative net
-// cashflow (starting at -investment) has crossed zero; "not_on_track"
-// means the trailing average monthly net is zero or negative, so no
-// projection date is offered; "projected" gives a naive linear-extrapolation
-// date based on that trailing average.
+// A truck's payback: its whole-life cashflow against what it cost to buy.
+// `recovered` is what it has earned back so far (revenue less trip and
+// owning costs since purchase; negative if it has cost more than it earned).
+// Discriminated on `status`:
+//   "no_data"       no purchase date and no recorded activity
+//   "no_investment" no purchase cost logged, so there's nothing to pay back
+//   "reached"       it has earned back what it cost
+//   "too_early"     not one full month of history yet to project from
+//   "not_on_track"  the recent monthly average is zero or negative
+//   "projected"     a straight-line date from the recent monthly average
+type BreakevenBase = { investment: number; startDate: string; months: BreakevenMonth[]; recovered: number };
 export type Breakeven =
-  | { investment: number; startDate: null; months: []; status: "no_data" }
-  | { investment: number; startDate: string; months: BreakevenMonth[]; status: "reached"; reachedOn: string }
-  | { investment: number; startDate: string; months: BreakevenMonth[]; status: "not_on_track"; avgMonthlyNet: number }
-  | { investment: number; startDate: string; months: BreakevenMonth[]; status: "projected"; projectedOn: string; avgMonthlyNet: number };
+  | { investment: number; startDate: null; months: []; recovered: number; status: "no_data" }
+  | (BreakevenBase & { status: "no_investment" })
+  | (BreakevenBase & { status: "reached"; reachedOn: string })
+  | (BreakevenBase & { status: "too_early" })
+  | (BreakevenBase & { status: "not_on_track"; avgMonthlyNet: number; basisMonths: number })
+  | (BreakevenBase & { status: "projected"; projectedOn: string; avgMonthlyNet: number; basisMonths: number; monthsToGo: number });
+
+// A truck's money over a period. Owning costs are its truck costs other
+// than buying it (insurance, tyres, repairs...).
+export type TruckTotals = { trips: number; revenue: number; tripCosts: number; owningCosts: number; profit: number };
+
+export type TruckReportMonth = {
+  key: string; // "YYYY-MM"
+  label: string;
+  soFar: boolean;
+  trips: number;
+  revenue: number;
+  tripCosts: number;
+  owningCosts: number;
+};
 
 export type TruckReport = {
   truck: Truck;
   from: string | null;
   to: string | null;
   trips: TruckReportTrip[];
+  // Every truck cost in the period, purchase costs included.
   standingCosts: TruckCost[];
   tripRevenue: number;
   tripExpenses: number;
   emptyReturnExpenses: number;
+  // Owning costs: truck costs in the period other than buying it.
   standingExpenses: number;
+  // Purchase, clearing and registration in the period. Not part of
+  // totalExpenses or margin: they're the investment the payback tracks.
+  capitalExpenses: number;
   totalExpenses: number;
   margin: number;
   tripExpensesByCategory: CategoryAmount[];
   standingExpensesByCategory: CategoryAmount[];
+  // The same truck over the comparison period, when one was asked for.
+  previous: (TruckTotals & { from: string; to: string }) | null;
+  // The fleet over the same period: how many trucks count (active, or with
+  // trips or costs in it), what they averaged, and where this one ranks by
+  // profit. Null with fewer than two trucks.
+  fleet: { trucks: number; rank: number | null; avg: Omit<TruckTotals, "trips"> } | null;
+  // The last 12 months (from the truck's first month), oldest first.
+  monthly: TruckReportMonth[];
   breakeven: Breakeven;
 };
 

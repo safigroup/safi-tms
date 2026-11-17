@@ -1,11 +1,50 @@
 import { NextResponse } from "next/server";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
-import { CAPITAL_CATEGORIES } from "@/lib/trucks/costs";
+import { CAPITAL_CATEGORIES, NON_CASH_CATEGORIES } from "@/lib/trucks/costs";
+import { lastMonths } from "@/lib/dashboard/trends";
+import { today } from "@/lib/format";
+import type { Breakeven, TripAllocation, TripCost, TruckTotals } from "@/lib/types";
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const PAGE = 1000;
+const ID_CHUNK = 100;
+
+type Paged<T> = PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
+
+// Every row of a query, a page at a time: the API returns at most 1000
+// rows a request, and a long-lived truck or a whole fleet can pass that.
+async function allRows<T>(page: (lo: number, hi: number) => Paged<T>): Promise<{ rows: T[]; error: string | null }> {
+  const rows: T[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await page(offset, offset + PAGE - 1);
+    if (error) return { rows, error: error.message };
+    rows.push(...(data ?? []));
+    if (!data || data.length < PAGE) return { rows, error: null };
+  }
+}
+
+type TripMoney = { truck_id?: string | null; actual_load_date: string | null; revenue_usd: number; cost_usd: number };
+type CostMoney = { truck_id?: string; category: string; amount_usd: number; incurred_on: string };
+
+// A truck's money from its trips and its truck costs. Buying the truck
+// (purchase, clearing, registration) is an investment, not a cost of the
+// period, so it's left out here and tracked by the payback instead.
+function totals(trips: TripMoney[], costs: CostMoney[]): TruckTotals {
+  const revenue = trips.reduce((s, t) => s + Number(t.revenue_usd || 0), 0);
+  const tripCosts = trips.reduce((s, t) => s + Number(t.cost_usd || 0), 0);
+  const owningCosts = costs
+    .filter((c) => !CAPITAL_CATEGORIES.has(c.category))
+    .reduce((s, c) => s + Number(c.amount_usd || 0), 0);
+  return { trips: trips.length, revenue, tripCosts, owningCosts, profit: revenue - tripCosts - owningCosts };
+}
 
 // Revenue/expense report for one truck over an optional date range.
 // Trip revenue+costs are anchored on the trip's actual_load_date (a trip's
 // whole P&L lands in whichever period it loaded in, rather than splitting
-// its costs across periods); standing costs use their own incurred_on.
+// its costs across periods); truck costs use their own incurred_on.
+// Alongside the period's figures it returns the same truck over a
+// comparison period (prevFrom/prevTo), the fleet's averages for the period,
+// the last 12 months, and the truck's payback.
 // Read-only -- no role gate beyond normal auth, matching the rest of the
 // app's precedent that financial figures are visible to every role.
 export async function GET(
@@ -19,13 +58,19 @@ export async function GET(
 
   const { id } = await params;
   const { searchParams } = new URL(request.url);
-  const from = searchParams.get("from");
-  const to = searchParams.get("to");
+  const date = (key: string) => {
+    const v = searchParams.get(key);
+    return v && DATE.test(v) ? v : null;
+  };
+  const from = date("from");
+  const to = date("to");
+  const prevFrom = date("prevFrom");
+  const prevTo = date("prevTo");
   const includeLedgers = searchParams.get("includeLedgers") === "1";
 
   const { data: truck } = await ctx.admin
     .from("trucks")
-    .select("id, fleet_no, horse_reg, is_active, purchase_date")
+    .select("id, fleet_no, horse_reg, is_active, purchase_date, truck_type")
     .eq("id", id)
     .eq("org_id", ctx.orgId)
     .maybeSingle();
@@ -33,49 +78,68 @@ export async function GET(
     return NextResponse.json({ error: "truck not found" }, { status: 404 });
   }
 
-  // Fetched unfiltered (the truck's whole life) since the breakeven
-  // projection below is inherently an all-time metric, independent of
+  // Fetched unfiltered (the truck's whole life) since the payback, the
+  // month-by-month figures and the comparison period all reach outside
   // whatever period the report itself is scoped to. The period-scoped
-  // figures used for display are derived by filtering these same rows in
-  // JS rather than querying twice.
-  const [{ data: allTrips, error: tripsError }, { data: allCosts, error: costsError }] = await Promise.all([
-    ctx.admin
-      // Selected in full (not just the revenue/cost figures the summary
-      // report needs) so the same row can also back a trip's printed
-      // ledger -- same shape BoardTrip already uses on the Board page.
-      .from("trip_board")
-      .select("*")
-      .eq("org_id", ctx.orgId)
-      .eq("truck_id", id)
-      .not("actual_load_date", "is", null)
-      .order("actual_load_date", { ascending: false }),
-    ctx.admin
-      .from("truck_costs")
-      .select("id, truck_id, category, description, amount, currency, fx_rate_to_usd, amount_usd, incurred_on")
-      .eq("org_id", ctx.orgId)
-      .eq("truck_id", id)
-      .order("incurred_on", { ascending: false }),
+  // figures are derived by filtering these same rows in JS rather than
+  // querying again.
+  const [tripsResult, costsResult] = await Promise.all([
+    allRows((lo, hi) =>
+      ctx.admin
+        // Selected in full (not just the revenue/cost figures the summary
+        // report needs) so the same row can also back a trip's printed
+        // ledger -- same shape BoardTrip already uses on the Board page.
+        .from("trip_board")
+        .select("*")
+        .eq("org_id", ctx.orgId)
+        .eq("truck_id", id)
+        .not("actual_load_date", "is", null)
+        .order("actual_load_date", { ascending: false })
+        .order("trip_id")
+        .range(lo, hi),
+    ),
+    allRows((lo, hi) =>
+      ctx.admin
+        .from("truck_costs")
+        .select("id, truck_id, category, description, amount, currency, fx_rate_to_usd, amount_usd, incurred_on")
+        .eq("org_id", ctx.orgId)
+        .eq("truck_id", id)
+        .order("incurred_on", { ascending: false })
+        .order("id")
+        .range(lo, hi),
+    ),
   ]);
-  if (tripsError) {
-    return NextResponse.json({ error: tripsError.message }, { status: 400 });
+  if (tripsResult.error) {
+    return NextResponse.json({ error: tripsResult.error }, { status: 400 });
   }
-  if (costsError) {
-    return NextResponse.json({ error: costsError.message }, { status: 400 });
+  if (costsResult.error) {
+    return NextResponse.json({ error: costsResult.error }, { status: 400 });
   }
+  const allTrips = tripsResult.rows;
+  const allCosts = costsResult.rows;
 
-  const inRange = (d: string | null) => !!d && (!from || d >= from) && (!to || d <= to);
-  const trips = (allTrips ?? []).filter((t) => inRange(t.actual_load_date));
-  const standingCosts = (allCosts ?? []).filter((c) => inRange(c.incurred_on));
+  const within = (lo: string | null, hi: string | null) => (d: string | null) => !!d && (!lo || d >= lo) && (!hi || d <= hi);
+  const inRange = within(from, to);
+  const trips = allTrips.filter((t) => inRange(t.actual_load_date));
+  const standingCosts = allCosts.filter((c) => inRange(c.incurred_on));
+  const owningCosts = standingCosts.filter((c) => !CAPITAL_CATEGORIES.has(c.category));
 
   // trip_board's cost_usd is already an aggregate across all trip_costs for
-  // a trip, so the per-category P/L breakdown needs its own query against
+  // a trip, so the per-category breakdown needs its own query against
   // trip_costs directly, scoped to just the trips already resolved above.
+  // Asked for a hundred trips at a time, so neither the list of ids nor
+  // the rows coming back outgrow a request.
   const tripIds = trips.map((t) => t.trip_id);
-  const { data: tripCostRows, error: tripCostRowsError } = tripIds.length
-    ? await ctx.admin.from("trip_costs").select("category, amount_usd, liters, is_empty_return").in("trip_id", tripIds)
-    : { data: [] as { category: string; amount_usd: number; liters: number | null; is_empty_return: boolean }[], error: null };
-  if (tripCostRowsError) {
-    return NextResponse.json({ error: tripCostRowsError.message }, { status: 400 });
+  const idChunks: string[][] = [];
+  for (let i = 0; i < tripIds.length; i += ID_CHUNK) idChunks.push(tripIds.slice(i, i + ID_CHUNK));
+
+  const tripCostRows: { category: string; amount_usd: number; liters: number | null; is_empty_return: boolean }[] = [];
+  for (const chunk of idChunks) {
+    const { rows, error } = await allRows((lo, hi) =>
+      ctx.admin.from("trip_costs").select("id, category, amount_usd, liters, is_empty_return").in("trip_id", chunk).order("id").range(lo, hi),
+    );
+    if (error) return NextResponse.json({ error }, { status: 400 });
+    tripCostRows.push(...rows);
   }
 
   // Full per-line cost detail, only fetched when the printed report is
@@ -83,29 +147,39 @@ export async function GET(
   // more than the category/liters totals already queried.
   let tripsWithLedgers = trips;
   if (includeLedgers && tripIds.length) {
-    const [{ data: ledgerCostRows, error: ledgerCostRowsError }, { data: allocationRows, error: allocationRowsError }] = await Promise.all([
-      ctx.admin
-        .from("trip_costs")
-        .select("id, trip_id, category, description, amount, currency, fx_rate_to_usd, amount_usd, incurred_on, location, paid_by, receipt_ref, receipt_path, liters, price_per_liter, is_empty_return")
-        .in("trip_id", tripIds)
-        .order("incurred_on", { ascending: true }),
-      ctx.admin
-        .from("trip_allocations")
-        .select("*")
-        .eq("org_id", ctx.orgId)
-        .in("trip_id", tripIds)
-        .order("allocated_on", { ascending: true }),
-    ]);
-    if (ledgerCostRowsError) {
-      return NextResponse.json({ error: ledgerCostRowsError.message }, { status: 400 });
-    }
-    if (allocationRowsError) {
-      return NextResponse.json({ error: allocationRowsError.message }, { status: 400 });
+    const ledgerCostRows: TripCost[] = [];
+    const allocationRows: TripAllocation[] = [];
+    for (const chunk of idChunks) {
+      const [costs, allocations] = await Promise.all([
+        allRows((lo, hi) =>
+          ctx.admin
+            .from("trip_costs")
+            .select("id, trip_id, category, description, amount, currency, fx_rate_to_usd, amount_usd, incurred_on, location, paid_by, receipt_ref, receipt_path, liters, price_per_liter, is_empty_return")
+            .in("trip_id", chunk)
+            .order("incurred_on", { ascending: true })
+            .order("id")
+            .range(lo, hi),
+        ),
+        allRows((lo, hi) =>
+          ctx.admin
+            .from("trip_allocations")
+            .select("*")
+            .eq("org_id", ctx.orgId)
+            .in("trip_id", chunk)
+            .order("allocated_on", { ascending: true })
+            .order("id")
+            .range(lo, hi),
+        ),
+      ]);
+      if (costs.error) return NextResponse.json({ error: costs.error }, { status: 400 });
+      if (allocations.error) return NextResponse.json({ error: allocations.error }, { status: 400 });
+      ledgerCostRows.push(...costs.rows);
+      allocationRows.push(...allocations.rows);
     }
     tripsWithLedgers = trips.map((t) => ({
       ...t,
-      costs: (ledgerCostRows ?? []).filter((c) => c.trip_id === t.trip_id),
-      allocations: (allocationRows ?? []).filter((a) => a.trip_id === t.trip_id),
+      costs: ledgerCostRows.filter((c) => c.trip_id === t.trip_id),
+      allocations: allocationRows.filter((a) => a.trip_id === t.trip_id),
     }));
   }
 
@@ -116,9 +190,9 @@ export async function GET(
   // liters, inflating the price per liter. That spend is returned
   // separately so the report can say what the average leaves out.
   const sumByCategory = (rows: { category: string; amount_usd: number; liters?: number | null }[]) => {
-    const totals = new Map<string, { amountUsd: number; liters: number; withLitersUsd: number }>();
+    const byCategory = new Map<string, { amountUsd: number; liters: number; withLitersUsd: number }>();
     for (const r of rows) {
-      const cur = totals.get(r.category) ?? { amountUsd: 0, liters: 0, withLitersUsd: 0 };
+      const cur = byCategory.get(r.category) ?? { amountUsd: 0, liters: 0, withLitersUsd: 0 };
       const usd = Number(r.amount_usd || 0);
       const liters = Number(r.liters || 0);
       cur.amountUsd += usd;
@@ -126,9 +200,9 @@ export async function GET(
         cur.liters += liters;
         cur.withLitersUsd += usd;
       }
-      totals.set(r.category, cur);
+      byCategory.set(r.category, cur);
     }
-    return Array.from(totals, ([category, { amountUsd, liters, withLitersUsd }]) => ({
+    return Array.from(byCategory, ([category, { amountUsd, liters, withLitersUsd }]) => ({
       category,
       amountUsd,
       ...(category === "fuel" && liters > 0
@@ -141,35 +215,119 @@ export async function GET(
     })).sort((a, b) => b.amountUsd - a.amountUsd);
   };
 
-  const tripRevenue = trips.reduce((s, t) => s + Number(t.revenue_usd || 0), 0);
-  const tripExpenses = trips.reduce((s, t) => s + Number(t.cost_usd || 0), 0);
-  const standingExpenses = standingCosts.reduce((s, c) => s + Number(c.amount_usd || 0), 0);
-  const totalExpenses = tripExpenses + standingExpenses;
+  const period = totals(trips, standingCosts);
+  const capitalExpenses = standingCosts
+    .filter((c) => CAPITAL_CATEGORIES.has(c.category))
+    .reduce((s, c) => s + Number(c.amount_usd || 0), 0);
   // A cut across the category breakdown above, not a category of its own
   // -- fuel, tolls, driver allowance etc. can all be incurred on either
   // leg of a trip. Surfaced separately so empty miles' real cost shows
   // up on its own, instead of being folded invisibly into whichever
   // category each entry happened to be.
-  const emptyReturnExpenses = (tripCostRows ?? [])
+  const emptyReturnExpenses = tripCostRows
     .filter((r) => r.is_empty_return)
     .reduce((s, r) => s + Number(r.amount_usd || 0), 0);
 
+  const inPrevious = within(prevFrom, prevTo);
+  const previous = prevFrom && prevTo
+    ? {
+        from: prevFrom,
+        to: prevTo,
+        ...totals(allTrips.filter((t) => inPrevious(t.actual_load_date)), allCosts.filter((c) => inPrevious(c.incurred_on))),
+      }
+    : null;
+
+  // Months are the company's calendar, not UTC's.
+  const todayIso = today(ctx.timeZone);
+  const firstDay = truck.purchase_date || firstActivity(allTrips, allCosts);
+  const monthly = lastMonths(todayIso, 12)
+    .filter((m) => !!firstDay && m.key >= monthKey(firstDay))
+    .map((m) => {
+      const t = totals(
+        allTrips.filter((x) => !!x.actual_load_date && monthKey(x.actual_load_date) === m.key),
+        allCosts.filter((c) => monthKey(c.incurred_on) === m.key),
+      );
+      return { key: m.key, label: m.label, soFar: m.soFar, trips: t.trips, revenue: t.revenue, tripCosts: t.tripCosts, owningCosts: t.owningCosts };
+    });
+
   return NextResponse.json({
     truck,
-    from: from || null,
-    to: to || null,
+    from,
+    to,
     trips: tripsWithLedgers,
     standingCosts,
-    tripRevenue,
-    tripExpenses,
+    tripRevenue: period.revenue,
+    tripExpenses: period.tripCosts,
     emptyReturnExpenses,
-    standingExpenses,
-    totalExpenses,
-    margin: tripRevenue - totalExpenses,
-    tripExpensesByCategory: sumByCategory(tripCostRows ?? []),
-    standingExpensesByCategory: sumByCategory(standingCosts),
-    breakeven: computeBreakeven(truck.purchase_date, allTrips ?? [], allCosts ?? []),
+    standingExpenses: period.owningCosts,
+    capitalExpenses,
+    totalExpenses: period.tripCosts + period.owningCosts,
+    margin: period.profit,
+    tripExpensesByCategory: sumByCategory(tripCostRows),
+    standingExpensesByCategory: sumByCategory(owningCosts),
+    previous,
+    fleet: await fleetAverages(ctx, id, from, to),
+    monthly,
+    breakeven: computeBreakeven(truck.purchase_date, allTrips, allCosts, todayIso),
   });
+}
+
+type Ctx = Extract<Awaited<ReturnType<typeof getAuthedOrgContext>>, { ok: true }>;
+
+// What the fleet's trucks averaged over the same period, and where this
+// truck ranks among them by profit. A truck counts if it's active or had
+// trips or costs in the period; trips with no truck assigned belong to
+// none of them. Null (no comparison shown) with fewer than two trucks, or
+// if the fleet's figures couldn't be read -- the report itself still
+// stands without them.
+async function fleetAverages(ctx: Ctx, truckId: string, from: string | null, to: string | null) {
+  const [trucksResult, tripsResult, costsResult] = await Promise.all([
+    ctx.admin.from("trucks").select("id, is_active").eq("org_id", ctx.orgId),
+    allRows((lo, hi) => {
+      let q = ctx.admin
+        .from("trip_board")
+        .select("trip_id, truck_id, actual_load_date, revenue_usd, cost_usd")
+        .eq("org_id", ctx.orgId)
+        .not("actual_load_date", "is", null)
+        .not("truck_id", "is", null);
+      if (from) q = q.gte("actual_load_date", from);
+      if (to) q = q.lte("actual_load_date", to);
+      return q.order("trip_id").range(lo, hi);
+    }),
+    allRows((lo, hi) => {
+      let q = ctx.admin.from("truck_costs").select("id, truck_id, category, amount_usd, incurred_on").eq("org_id", ctx.orgId);
+      if (from) q = q.gte("incurred_on", from);
+      if (to) q = q.lte("incurred_on", to);
+      return q.order("id").range(lo, hi);
+    }),
+  ]);
+  if (trucksResult.error || tripsResult.error || costsResult.error) return null;
+
+  const rows = (trucksResult.data ?? [])
+    .map((t) => {
+      const own = totals(
+        tripsResult.rows.filter((x) => x.truck_id === t.id),
+        costsResult.rows.filter((c) => c.truck_id === t.id),
+      );
+      const counted = t.is_active || own.trips > 0 || own.tripCosts > 0 || own.owningCosts > 0;
+      return { id: t.id, counted, ...own };
+    })
+    .filter((r) => r.counted)
+    .sort((a, b) => b.profit - a.profit);
+  if (rows.length < 2) return null;
+
+  const avg = (pick: (r: TruckTotals) => number) => rows.reduce((s, r) => s + pick(r), 0) / rows.length;
+  const position = rows.findIndex((r) => r.id === truckId);
+  return {
+    trucks: rows.length,
+    rank: position < 0 ? null : position + 1,
+    avg: {
+      revenue: avg((r) => r.revenue),
+      tripCosts: avg((r) => r.tripCosts),
+      owningCosts: avg((r) => r.owningCosts),
+      profit: avg((r) => r.profit),
+    },
+  };
 }
 
 const monthKey = (d: string) => d.slice(0, 7); // "YYYY-MM"
@@ -178,36 +336,42 @@ function nextMonth(y: number, m: number): [number, number] {
   return m === 12 ? [y + 1, 1] : [y, m + 1];
 }
 
-// Asset breakeven: the truck's whole-life cashflow, starting at
+function firstActivity(allTrips: TripMoney[], allCosts: CostMoney[]) {
+  return [
+    ...allTrips.map((t) => t.actual_load_date).filter((d): d is string => !!d),
+    ...allCosts.map((c) => c.incurred_on),
+  ].sort()[0] ?? null;
+}
+
+// Payback: the truck's whole-life cashflow, starting at
 // -(purchase + clearing + registration costs) on its purchase date, walked
 // forward one calendar month at a time adding that month's trip revenue
-// less trip costs less ongoing standing costs (maintenance, insurance,
-// etc. -- everything except the capital categories, which would otherwise
-// be double-counted). The first month cumulative crosses zero is the
-// breakeven point; if it hasn't happened yet, the trailing 6-month average
-// net is projected forward -- a naive linear extrapolation, not a
-// forecast model, but enough for an "at this rate" estimate.
+// less trip costs less what it cost to own (maintenance, insurance, etc.).
+// Only money that actually moved counts: the purchase costs are the
+// investment itself, and depreciation is a book entry spreading that same
+// purchase, so counting either again would double it. The first month the
+// running total crosses zero is the payback point; if it hasn't happened
+// yet, the average of the last six full months is projected forward -- a
+// straight line, not a forecast model, but enough for an "at this rate"
+// estimate. The month in progress is left out of that average: a part
+// month would drag it down.
 function computeBreakeven(
   purchaseDate: string | null,
-  allTrips: { actual_load_date: string | null; revenue_usd: number; cost_usd: number }[],
-  allCosts: { category: string; amount_usd: number; incurred_on: string }[],
-) {
+  allTrips: TripMoney[],
+  allCosts: CostMoney[],
+  todayIso: string,
+): Breakeven {
   const investment = allCosts
     .filter((c) => CAPITAL_CATEGORIES.has(c.category))
     .reduce((s, c) => s + Number(c.amount_usd || 0), 0);
-  const operatingCosts = allCosts.filter((c) => !CAPITAL_CATEGORIES.has(c.category));
+  const operatingCosts = allCosts.filter((c) => !CAPITAL_CATEGORIES.has(c.category) && !NON_CASH_CATEGORIES.has(c.category));
 
-  const activityDates = [
-    ...allTrips.map((t) => t.actual_load_date).filter((d): d is string => !!d),
-    ...allCosts.map((c) => c.incurred_on),
-  ].sort();
-  const startDate = purchaseDate || activityDates[0] || null;
-
+  const startDate = purchaseDate || firstActivity(allTrips, allCosts);
   if (!startDate) {
-    return { investment, startDate: null, months: [], status: "no_data" as const };
+    return { investment, startDate: null, months: [], recovered: 0, status: "no_data" };
   }
 
-  const nowMonth = monthKey(new Date().toISOString());
+  const nowMonth = monthKey(todayIso);
   const months: string[] = [];
   let [y, m] = monthKey(startDate).split("-").map(Number);
   const [endY, endM] = nowMonth.split("-").map(Number);
@@ -245,22 +409,24 @@ function computeBreakeven(
     return { month: k, revenue, tripCosts, operatingCosts: operating, net, cumulative };
   });
 
-  if (reachedOn) {
-    return { investment, startDate, months: rows, status: "reached" as const, reachedOn };
-  }
+  const base = { investment, startDate, months: rows, recovered: cumulative + investment };
 
-  const trailing = rows.slice(-6);
-  const avgMonthlyNet = trailing.length ? trailing.reduce((s, r) => s + r.net, 0) / trailing.length : 0;
+  // Nothing to pay back until what the truck cost to buy has been logged.
+  if (investment <= 0) return { ...base, status: "no_investment" };
+  if (reachedOn) return { ...base, status: "reached", reachedOn };
+
+  const recent = rows.filter((r) => r.month < nowMonth).slice(-6);
+  if (!recent.length) return { ...base, status: "too_early" };
+  const avgMonthlyNet = recent.reduce((s, r) => s + r.net, 0) / recent.length;
 
   if (avgMonthlyNet <= 0) {
-    return { investment, startDate, months: rows, status: "not_on_track" as const, avgMonthlyNet };
+    return { ...base, status: "not_on_track", avgMonthlyNet, basisMonths: recent.length };
   }
 
-  const remaining = -cumulative;
-  const monthsNeeded = Math.ceil(remaining / avgMonthlyNet);
+  const monthsToGo = Math.ceil(-cumulative / avgMonthlyNet);
   let [py, pm] = nowMonth.split("-").map(Number);
-  for (let i = 0; i < monthsNeeded; i++) [py, pm] = nextMonth(py, pm);
+  for (let i = 0; i < monthsToGo; i++) [py, pm] = nextMonth(py, pm);
   const projectedOn = `${py}-${String(pm).padStart(2, "0")}`;
 
-  return { investment, startDate, months: rows, status: "projected" as const, projectedOn, avgMonthlyNet };
+  return { ...base, status: "projected", projectedOn, avgMonthlyNet, basisMonths: recent.length, monthsToGo };
 }

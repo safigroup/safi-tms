@@ -7,6 +7,8 @@ import { durationLabel, m0, m2, today } from "@/lib/format";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 import { Spinner } from "@/lib/components/Spinner";
 import { PageBand, type BandFig } from "@/lib/components/PageBand";
+import { kpi, pctDelta, ptsDelta } from "@/lib/components/bandFigs";
+import { MonthlyChart } from "@/lib/components/MonthlyChart";
 import {
   AGING,
   STAGES,
@@ -24,9 +26,7 @@ import {
   lastMonths,
   marginByRoute,
   monthlyMoney,
-  niceMax,
   profitByTruck,
-  short,
   spanLabel,
   truckUse,
   type Month,
@@ -41,40 +41,6 @@ const ATTENTION_SHOWN = 8;
 const INVOICE_ITEMS_SHOWN = 6;
 
 type Collections = { current: number; previous: number; missingRates: string[] };
-type Delta = { text: string; tone: "good" | "bad" | "flat" };
-
-// Change against the comparison period, coloured by whether that direction
-// is good news for this figure.
-function pctDelta(cur: number, prev: number, upIsGood: boolean): Delta {
-  if (prev === 0) return cur === 0 ? { text: "no change", tone: "flat" } : { text: "up from 0", tone: upIsGood ? "good" : "bad" };
-  const pct = ((cur - prev) / Math.abs(prev)) * 100;
-  if (Math.abs(pct) < 0.5) return { text: "no change", tone: "flat" };
-  return { text: `${pct > 0 ? "▲" : "▼"} ${Math.abs(pct).toFixed(0)}%`, tone: pct > 0 === upIsGood ? "good" : "bad" };
-}
-
-function ptsDelta(cur: number | null, prev: number | null): Delta | null {
-  if (cur === null || prev === null) return null;
-  const d = cur - prev;
-  if (Math.abs(d) < 0.05) return { text: "no change", tone: "flat" };
-  return { text: `${d > 0 ? "▲" : "▼"} ${Math.abs(d).toFixed(1)} pts`, tone: d > 0 ? "good" : "bad" };
-}
-
-// A figure for the band: the value, its change against last month, and a
-// note under it.
-function kpi(key: string, k: string, v: string, delta?: Delta | null, vs?: string, note?: string): BandFig {
-  return {
-    key,
-    k,
-    v,
-    n: delta || note ? (
-      <>
-        {delta ? <span className="nl"><span className={"delta " + delta.tone}>{delta.text}</span> vs {vs}</span> : null}
-        {note ? <span className="nl">{note}</span> : null}
-      </>
-    ) : undefined,
-  };
-}
-
 export default function OverviewPage() {
   const router = useRouter();
   // Months and "today" are the company's calendar, the same one trip dates
@@ -382,89 +348,13 @@ function Trends({
         </div>
       </div>
       <div className="dash-grid">
-        {finance ? <MonthlyChart data={data} months={months} /> : null}
+        {finance ? <MonthlyChart title="Revenue and costs by month" rows={monthlyMoney(data.board, months)} /> : null}
         {finance ? <RouteMargins data={data} from={from} to={to} /> : null}
         {finance ? <TruckProfit data={data} running={running} from={from} to={to} /> : null}
         <BorderWaits data={data} crossings={crossings} from={from} to={to} now={now} />
         <TruckUse data={data} now={now} />
       </div>
     </>
-  );
-}
-
-function MonthlyChart({ data, months }: { data: BootstrapPayload; months: Month[] }) {
-  const [asTable, setAsTable] = useState(false);
-  const rows = monthlyMoney(data.board, months);
-  const max = niceMax(Math.max(0, ...rows.flatMap((r) => [r.revenue, r.costs])));
-  const ticks = [0, max / 2, max];
-  const pct = (v: number) => `${(v / max) * 100}%`;
-  const total = rows.reduce((s, r) => ({ revenue: s.revenue + r.revenue, costs: s.costs + r.costs }), { revenue: 0, costs: 0 });
-  const totalPct = total.revenue > 0 ? ((total.revenue - total.costs) / total.revenue) * 100 : null;
-  return (
-    <section className="panel dash-wide">
-      <div className="panel-head mchart-head">
-        <h2>Revenue and costs by month</h2>
-        <div className="mchart-tools">
-          {asTable ? null : (
-            <span className="mchart-legend">
-              <span><i className="mkey rev" /> Revenue</span>
-              <span><i className="mkey cost" /> Trip costs</span>
-            </span>
-          )}
-          <button type="button" className="act" onClick={() => setAsTable(!asTable)}>{asTable ? "Chart" : "Table"}</button>
-        </div>
-      </div>
-      <div className="d-sec mchart-total">
-        <span>{m0(total.revenue - total.costs)} margin on {m0(total.revenue)} revenue{totalPct === null ? "" : ` · ${totalPct.toFixed(1)}%`}</span>
-        <span className="r-mono">USD · by month loaded</span>
-      </div>
-      {asTable ? (
-        <div className="mtable-wrap">
-          <table className="mtable">
-            <thead><tr><th>Month</th><th>Trips</th><th>Revenue</th><th>Trip costs</th><th>Margin</th><th>Margin %</th></tr></thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.key}>
-                  <td>{r.label}{r.soFar ? " (to date)" : ""}</td>
-                  <td>{r.trips}</td>
-                  <td>{m0(r.revenue)}</td>
-                  <td>{m0(r.costs)}</td>
-                  <td className={r.margin < 0 ? "neg" : ""}>{m0(r.margin)}</td>
-                  <td className={r.margin < 0 ? "neg" : ""}>{r.marginPct === null ? "—" : `${r.marginPct.toFixed(1)}%`}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="mchart">
-          <div className="mchart-y" aria-hidden="true">
-            {ticks.map((t) => <span key={t} style={{ bottom: pct(t) }}>{short(t)}</span>)}
-          </div>
-          <div className="mchart-plot" style={{ gridTemplateColumns: `repeat(${rows.length}, minmax(0, 1fr))` }}>
-            {ticks.map((t) => <span key={t} className="mgrid" style={{ bottom: pct(t) }} />)}
-            {rows.map((r) => {
-              const label = `${r.label}${r.soFar ? " (to date)" : ""}: revenue ${m0(r.revenue)}, trip costs ${m0(r.costs)}, margin ${m0(r.margin)}${r.marginPct === null ? "" : ` (${r.marginPct.toFixed(1)}%)`}, ${r.trips} trip${r.trips === 1 ? "" : "s"}`;
-              return (
-                <div key={r.key} className="mcol" title={label} aria-label={label} role="img">
-                  {r.revenue > 0 ? <span className="mbar rev" style={{ height: pct(r.revenue) }} /> : <span className="mbar none" />}
-                  {r.costs > 0 ? <span className="mbar cost" style={{ height: pct(r.costs) }} /> : <span className="mbar none" />}
-                </div>
-              );
-            })}
-          </div>
-          <span />
-          <div className="mchart-x" style={{ gridTemplateColumns: `repeat(${rows.length}, minmax(0, 1fr))` }}>
-            {rows.map((r) => (
-              <div key={r.key}>
-                <span className="mx-month">{r.label}{r.soFar ? <span className="mx-sofar"> so far</span> : null}</span>
-                <span className={"mx-margin" + (r.margin < 0 ? " neg" : "")}>{r.marginPct === null ? "—" : `${r.marginPct.toFixed(0)}%`}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </section>
   );
 }
 
@@ -538,21 +428,21 @@ function TruckProfit({ data, running, from, to }: { data: BootstrapPayload; runn
     <section className="panel">
       <div className="panel-head">
         <h2>Profit per truck</h2>
-        <span className="r-min">trip margin less running costs</span>
+        <span className="r-min">trip margin less owning costs</span>
       </div>
       <BarRows
         empty="No trucks yet."
         rows={rows.map((r) => ({
           key: r.truck.id,
           title: `${r.truck.fleet_no} · ${r.truck.horse_reg}`,
-          sub: `${plural(r.trips, "trip")} · ${m0(r.tripMargin)} trip margin · ${m0(r.running)} running`,
+          sub: `${plural(r.trips, "trip")} · ${m0(r.tripMargin)} trip margin · ${m0(r.running)} owning costs`,
           value: r.profit,
           valueText: m0(r.profit),
           href: `/reports?${new URLSearchParams({ truck: r.truck.id, from, to })}`,
         }))}
       />
       <div className="panel-body bar-note">
-        Running costs are maintenance, insurance, tyres and the like; purchase costs are left out (see the truck report&apos;s breakeven).
+        Owning costs are maintenance, insurance, tyres and the like; what the truck cost to buy is left out (see its payback in the truck report).
         {tripsWithoutTruck ? ` ${plural(tripsWithoutTruck, "trip")} with no truck assigned ${tripsWithoutTruck === 1 ? "isn't" : "aren't"} counted.` : ""}
       </div>
     </section>

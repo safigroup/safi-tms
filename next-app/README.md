@@ -61,7 +61,15 @@ Degrades deliberately rather than erroring: fewer than 2 qualifying trips return
 
 It always **inserts** a new row dated today (upserted only against today's own `(org_id, currency, effective_on)` key, same as the manual admin form) and never touches a past row — `trip_costs.fx_rate_to_usd` freezes whatever rate was on file at entry time, so history must never be rewritten.
 
-These are official/interbank rates, which can diverge from real border-town cash rates (ZMW and CDF especially) — the manual admin form still works and always wins if someone enters a same-day rate after the cron ran. `Nav.tsx`'s 14-day staleness warning (a note at the top of every page and an amber count on Admin in the sidebar) is the safety net if a run is ever missed.
+These are official/interbank rates, which can diverge from real border-town cash rates (ZMW and CDF especially) — the manual admin form still works and always wins if someone enters a same-day rate after the cron ran.
+
+**When a run is missed** (it happened again on 2026-11-18, and Vercel keeps Hobby logs for about an hour, so there's no telling why), people see it and can put it right themselves:
+
+- **Admin → Exchange rates** opens with a status: how old the rates are and when the next update is due; "due today" with the hour the job runs, in company time; or, once that hour has passed with the rate still old, a warning that names the late currencies and says that costs entered now convert at the old rate. Each rate in use shows its age, plus a *late* tag.
+- **Get today's rates** (owner, admin, finance — the roles that can edit rates) calls `POST /api/admin/fx-rates/refresh`. That does what the cron does, for the signed-in org only, on demand: every currency it tracks gets a row dated today (company time) whether due or not, sourced `open.er-api.com (on request)`. A currency already dated today is left alone, so a same-day manual rate is never overwritten. If the feed fails, the page says why (`lib/fx/feed.ts` turns HTTP errors, error answers and timeouts into words). It also names any currency the feed doesn't cover, so that one can be entered by hand.
+- `Nav.tsx`'s banner at the top of every other page, and the amber count on Admin in the sidebar, use the same rule (`fxStatus` in `lib/fx/schedule.ts`), so they appear only once a run has actually been missed, not on the morning a rate falls due. New rates (by the button or the form) call `reloadNav()`, so the sidebar updates without a page reload.
+
+The 14 days, the run hour and the late rule live in `lib/fx/schedule.ts`, shared by the cron and the page, so what the page promises is what the job does.
 
 **Auth**: `CRON_SECRET` env var — Vercel sends it automatically as `Authorization: Bearer <value>` on every cron invocation once it's set in the project's environment variables.
 

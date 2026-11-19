@@ -8,6 +8,8 @@ import { Spinner } from "@/lib/components/Spinner";
 import { PageBand } from "@/lib/components/PageBand";
 import type { BootstrapPayload, Customer, Route, FxRate, RouteBorderPath, PaymentMilestone, RouteCostTemplateLine } from "@/lib/types";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
+import { reloadNav } from "@/lib/components/Nav";
+import { FX_FEED, REFRESH_AFTER_DAYS, agoLabel, andList, fxStatus, runWindow, shortDay } from "@/lib/fx/schedule";
 
 // Mirrors lib/estimates/validateCostTemplate.ts's ESTIMATE_CATEGORIES --
 // duplicated client-side the same way the Cost Docket's own CATS list is
@@ -192,6 +194,13 @@ export default function AdminPage() {
     setLoadError(payload.fetchErrors.length ? `Couldn't load ${payload.fetchErrors.join(", ")}.` : null);
   }
 
+  // New exchange rates: this page's list and the sidebar's late-rates
+  // badge and banner both need a fresh look.
+  async function ratesChanged() {
+    await load();
+    reloadNav();
+  }
+
   async function loadTeam() {
     const res = await fetch("/api/admin/users");
     if (!res.ok) {
@@ -264,7 +273,10 @@ export default function AdminPage() {
             <h2>{VIEW_LABELS[view]}</h2>
           </div>
           {view === "fx" ? (
-            <FxList fx={data.fx} />
+            <>
+              <FxStatusPanel fx={data.fx} canEdit={canEdit} onRefreshed={ratesChanged} />
+              <FxList fx={data.fx} />
+            </>
           ) : view === "team" ? (
             teamError ? (
               <div className="panel-body"><div className="note bad">{teamError}</div></div>
@@ -295,7 +307,7 @@ export default function AdminPage() {
           <div className="panel-head"><h2>{view === "fx" ? "Add a rate" : view === "team" ? (creating ? "Invite" : "Team member") : view === "payment_schedule" ? "Default schedule" : view === "api_keys" ? "New key" : selected ? "Edit" : creating ? "New" : "Detail"}</h2></div>
           <div className="panel-body">
             {view === "fx" ? (
-              canEdit ? <FxForm onSaved={load} /> : <div className="empty">You have read-only access to exchange rates.</div>
+              canEdit ? <FxForm onSaved={ratesChanged} /> : <div className="empty">You have read-only access to exchange rates.</div>
             ) : view === "payment_schedule" ? (
               <PaymentScheduleEditor canEdit={canEdit} />
             ) : view === "api_keys" ? (
@@ -627,14 +639,104 @@ function TeamDetail({ member, canReset }: { member: TeamMember; canReset: boolea
   );
 }
 
+// How current the rates are, in words: when they were last updated, when
+// the automatic update is next due, and -- since Vercel's scheduled runs
+// are best effort -- a warning when one is late, with a button to fetch
+// today's rates there and then.
+function FxStatusPanel({ fx, canEdit, onRefreshed }: { fx: FxRate[]; canEdit: boolean; onRefreshed: () => Promise<void> }) {
+  const timeZone = useCompanyTimeZone();
+  const todayIso = today(timeZone);
+  const s = fxStatus(fx, todayIso);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  async function refresh() {
+    setBusy(true);
+    setProblem(null);
+    const res = await fetch("/api/admin/fx-rates/refresh", { method: "POST" }).catch(() => null);
+    const body = res ? await res.json().catch(() => ({})) : {};
+    setBusy(false);
+    if (!res || !res.ok) {
+      return setProblem(`${body.error || "Couldn't get today's rates."} Try again in a while, or enter rates by hand on the right.`);
+    }
+    const updated: string[] = (body.updated ?? []).map((u: { currency: string }) => u.currency);
+    const missing: string[] = body.missing ?? [];
+    if (updated.length) toast.success(`${andList(updated)} updated to today's rates`);
+    else if (!missing.length) toast.success("Every rate is already dated today");
+    if (missing.length) {
+      setProblem(`${FX_FEED} has no rate for ${andList(missing)}. Enter ${missing.length === 1 ? "it" : "them"} by hand on the right.`);
+    }
+    await onRefreshed();
+  }
+
+  if (s.state === "none") {
+    return (
+      <div className="fx-status">
+        <div className="fx-status-lead">No currencies to update yet.</div>
+        <div className="fx-status-text">
+          Add a rate for each currency you pay costs in. From then on, each one is updated automatically every {REFRESH_AFTER_DAYS} days.
+        </div>
+      </div>
+    );
+  }
+
+  const oldest = s.oldest!;
+  const n = s.currencies.length;
+  const last = s.currencies.every((c) => c.effectiveOn === oldest.effectiveOn)
+    ? `${n === 1 ? `${oldest.currency} was` : `All ${n} rates were`} last updated on ${shortDay(oldest.effectiveOn, todayIso)} (${agoLabel(oldest.age)}).`
+    : `The oldest, ${oldest.currency}, was last updated on ${shortDay(oldest.effectiveOn, todayIso)} (${agoLabel(oldest.age)}).`;
+
+  let lead: string;
+  let text: string;
+  if (s.state === "late") {
+    const late = s.late;
+    const names = andList(late.map((c) => c.currency));
+    lead = late.every((c) => c.age === late[0].age)
+      ? `${names} ${late.length === 1 ? "is" : "are"} ${late[0].age} days old.`
+      : `${names} ${late.length === 1 ? "is" : "are"} out of date.`;
+    text = `The automatic update was due on ${shortDay(late[0].dueOn, todayIso)} and hasn't come through, so costs entered now convert at the old ${late.length === 1 ? "rate" : "rates"}.`;
+  } else if (s.state === "due") {
+    lead = "New rates are due today.";
+    text = `The automatic update runs between ${runWindow(timeZone, todayIso)}. ${last}`;
+  } else {
+    lead = "Rates are up to date.";
+    text = `${last} The next automatic update is due on ${shortDay(s.nextDue!, todayIso)}.`;
+  }
+
+  return (
+    <div className={`fx-status ${s.state}`} role={s.state === "late" ? "alert" : undefined}>
+      <div className="fx-status-lead">{lead}</div>
+      <div className="fx-status-text">{text}</div>
+      {canEdit ? (
+        <div className="fx-status-act">
+          <button type="button" className={s.state === "ok" ? "ghost" : "primary"} onClick={refresh} disabled={busy}>
+            {busy ? "Getting today's rates…" : "Get today's rates"}
+          </button>
+          <span className="fx-status-hint">
+            From {FX_FEED}, for {andList(s.currencies.map((c) => c.currency).sort())}. Costs already entered keep their rate.
+          </span>
+        </div>
+      ) : s.state === "late" ? (
+        <div className="fx-status-text">Ask an owner, an admin or someone in finance to update them.</div>
+      ) : null}
+      {problem ? <div className="note bad fx-status-problem">{problem}</div> : null}
+    </div>
+  );
+}
+
 function FxList({ fx }: { fx: FxRate[] }) {
+  const todayIso = today(useCompanyTimeZone());
   const latest: Record<string, FxRate> = {};
   fx.forEach((r) => { if (!latest[r.currency] || r.effective_on > latest[r.currency].effective_on) latest[r.currency] = r; });
+  const status = new Map(fxStatus(fx, todayIso).currencies.map((c) => [c.currency, c]));
 
   return (
     <ul className="list">
       {fx.length ? fx.map((r) => {
         const per = Number(r.rate_to_usd) > 0 ? 1 / Number(r.rate_to_usd) : 0;
+        // The rate costs convert at today, with its age (a future-dated rate isn't one yet).
+        const current = status.get(r.currency.trim());
+        const inForce = current?.effectiveOn === r.effective_on ? current : null;
         return (
           <li key={r.id}>
             <div>
@@ -642,11 +744,15 @@ function FxList({ fx }: { fx: FxRate[] }) {
               <div className="r-mono">1 {r.currency} = {Number(r.rate_to_usd).toFixed(8)} USD</div>
               <div className="r-tags">
                 {latest[r.currency]?.id === r.id ? <span className="pill good">in use</span> : <span className="pill grey">superseded</span>}
+                {inForce?.late ? <span className="pill warn">late</span> : null}
               </div>
             </div>
             <div className="r-right">
               <div className="r-amt" style={{ fontSize: 13 }}>{r.currency === "USD" ? "—" : num(per) + " / USD"}</div>
-              <div className="r-min">{r.effective_on}</div>
+              <div className="r-min">
+                {r.effective_on}
+                {inForce ? ` · ${agoLabel(inForce.age)}` : ""}
+              </div>
             </div>
           </li>
         );

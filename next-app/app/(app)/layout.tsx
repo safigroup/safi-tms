@@ -34,8 +34,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="app-body">
       <div className="wrap">
-        <Nav orgTitle={orgTitle} orgId={ctx.orgId} email={ctx.email} role={ctx.role} isPlatformAdmin={ctx.isPlatformAdmin} signOutAction={signOut} />
-        <CompanyTimeZoneProvider timeZone={ctx.timeZone}>{children}</CompanyTimeZoneProvider>
+        <CompanyTimeZoneProvider timeZone={ctx.timeZone}>
+          <Nav orgTitle={orgTitle} orgId={ctx.orgId} email={ctx.email} role={ctx.role} isPlatformAdmin={ctx.isPlatformAdmin} signOutAction={signOut} />
+          {children}
+        </CompanyTimeZoneProvider>
       </div>
     </div>
   );

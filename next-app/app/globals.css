@@ -5078,3 +5078,68 @@ ul.list.board-list li .track {
     display: none
   }
 }
+
+/* Exchange rates: how current they are, above the list (Admin). */
+.fx-status {
+  display: grid;
+  gap: 5px;
+  padding: 14px 18px 16px 15px;
+  border-bottom: 1px solid var(--rule);
+  border-left: 3px solid var(--settled)
+}
+
+.fx-status.none {
+  border-left-color: var(--rule)
+}
+
+.fx-status.due {
+  border-left-color: var(--stamp);
+  background: var(--stamp-wash)
+}
+
+.fx-status.late {
+  border-left-color: var(--waiting);
+  background: var(--pill-warn-bg)
+}
+
+.fx-status-lead {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--ink);
+  text-wrap: balance
+}
+
+.fx-status-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  max-width: 62ch
+}
+
+.fx-status-act {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 8px
+}
+
+.fx-status-act button.primary,
+.fx-status-act button.ghost {
+  width: auto;
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 13.5px
+}
+
+.fx-status-hint {
+  flex: 1 1 220px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink-soft)
+}
+
+.fx-status .fx-status-problem {
+  margin: 6px 0 0
+}

@@ -8,6 +8,9 @@ import { ThemeToggle } from "@/lib/components/ThemeToggle";
 import { NavIcon, type IconName } from "@/lib/components/NavIcons";
 import { setActiveOrg } from "@/app/(app)/actions";
 import type { BootstrapPayload, Organization } from "@/lib/types";
+import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
+import { dayIn } from "@/lib/format";
+import { andList, fxStatus, shortDay } from "@/lib/fx/schedule";
 
 // Mirrors CAN_USE_CASHBOOK (lib/auth/permissions.ts) -- the link is only
 // a convenience; every /api/cashbook route enforces it.
@@ -55,6 +58,11 @@ const ROLE_LABEL: Record<string, string> = {
   viewer: "View only",
 };
 
+const RELOAD = "safi:nav-reload";
+
+// Tells the sidebar to fetch its counts again (see the bootstrap effect).
+export const reloadNav = () => window.dispatchEvent(new Event(RELOAD));
+
 const NAV_KEY = "safi:nav";
 
 // Two letters for the account's avatar, from the email's name part.
@@ -89,6 +97,7 @@ export function Nav({
   const pathname = usePathname();
   const [data, setData] = useState<BootstrapPayload | null>(null);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
+  const timeZone = useCompanyTimeZone();
   const [menuOpen, setMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [orgs, setOrgs] = useState<Organization[] | null>(null);
@@ -97,12 +106,19 @@ export function Nav({
   const wasOpen = useRef(false);
 
   useEffect(() => {
-    fetch("/api/bootstrap")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((payload: BootstrapPayload | null) => {
-        setData(payload);
-        setFetchedAt(Date.now());
-      });
+    const load = () =>
+      fetch("/api/bootstrap")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((payload: BootstrapPayload | null) => {
+          setData(payload);
+          setFetchedAt(Date.now());
+        });
+    load();
+    // A page that changes what the badges and banner count (new exchange
+    // rates) asks for a fresh look with reloadNav(); otherwise they'd stay
+    // as they were until the next full page load.
+    window.addEventListener(RELOAD, load);
+    return () => window.removeEventListener(RELOAD, load);
   }, []);
 
   useEffect(() => {
@@ -188,14 +204,11 @@ export function Nav({
   const isOn = (href: string) => pathname === href || pathname.startsWith(href + "/");
   const current = groups.flatMap((g) => g.views).find((v) => isOn(v.href));
 
-  // Most recent fx_rates row per non-USD currency, flagged if over 14 days old.
-  const latest: Record<string, string> = {};
-  (data?.fx ?? []).forEach((r) => {
-    if (r.currency === "USD") return;
-    if (!latest[r.currency] || r.effective_on > latest[r.currency]) latest[r.currency] = r.effective_on;
-  });
-  const staleDays = (d: string) => ((fetchedAt ?? 0) - new Date(d).getTime()) / 86_400_000;
-  const stale = fetchedAt ? Object.entries(latest).filter(([, d]) => staleDays(d) > 14) : [];
+  // Exchange rates whose automatic update has been missed -- the same rule
+  // as the status on Admin -> Exchange rates (lib/fx/schedule.ts), as of
+  // when the data was fetched.
+  const fx = fetchedAt ? fxStatus(data?.fx ?? [], dayIn(timeZone)(fetchedAt), fetchedAt) : null;
+  const stale = fx?.late ?? [];
 
   const rolling = data?.board.filter((t) => ["loading", "in_transit", "at_border"].includes(t.status)).length ?? 0;
   const pod = data?.board.filter((t) => t.status === "delivered" && !t.pod_in_hand).length ?? 0;
@@ -312,10 +325,11 @@ export function Nav({
         </div>
       </aside>
 
-      {stale.length ? (
+      {stale.length && !isOn("/admin") ? (
         <div className="note warn">
-          Exchange rates for {stale.map(([c]) => c).join(", ")} are more than two weeks old. Every cost entered
-          today converts at those rates. <Link href="/admin" style={{ color: "inherit" }}>Update them</Link>.
+          Exchange rates for {andList(stale.map((c) => c.currency))} are out of date: the automatic update was due on{" "}
+          {shortDay(stale[0].dueOn, dayIn(timeZone)(fetchedAt!))} and hasn&apos;t come through. Every cost entered today converts
+          at the old {stale.length === 1 ? "rate" : "rates"}. <Link href="/admin" style={{ color: "inherit" }}>Update them</Link>.
         </div>
       ) : null}
     </>

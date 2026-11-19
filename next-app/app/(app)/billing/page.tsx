@@ -41,7 +41,8 @@ type InvoiceDetail = {
     customers: { name: string; country: string | null; tpin: string | null; contact_email: string | null; payment_terms: string | null } | null;
   };
   lines: { description: string; quantity: number; unit_price: number; line_total: number }[];
-  payments: { amount: number; currency: string; received_on: string; method: string | null; reference: string | null }[];
+  payments: { id: string; amount: number; currency: string; received_on: string; method: string | null; reference: string | null; cash_account_id: string | null }[];
+  removedPayments: { payment: string | null; reason: string | null; by: string; at: string }[];
 };
 
 export default function BillingPage() {
@@ -205,6 +206,7 @@ export default function BillingPage() {
             />
           ) : tab === "inv" && selected ? (
             <InvoiceDetailPanel
+              key={selected}
               invoiceId={selected}
               ar={data.ar}
               onChanged={load}
@@ -347,13 +349,27 @@ function InvoiceDetailPanel({
   const [payNote, setPayNote] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   const [payments, setPayments] = useState<InvoiceDetail["payments"] | null>(null);
+  const [removed, setRemoved] = useState<InvoiceDetail["removedPayments"]>([]);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removeReason, setRemoveReason] = useState("");
+  const [removeNote, setRemoveNote] = useState<string | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
   const [printLang, setPrintLang] = useState<PrintLang>("en");
   const cashAccount = useCashAccountChoice("in", i?.currency ?? "USD");
+
+  // The amount box follows what's outstanding, so after a payment is
+  // recorded or removed it offers the new balance rather than the old one.
+  const [amtFor, setAmtFor] = useState(i?.outstanding);
+  if (i && i.outstanding !== amtFor) {
+    setAmtFor(i.outstanding);
+    setPayAmt(Number(i.outstanding).toFixed(2));
+  }
 
   async function loadPayments() {
     const res = await fetch(`/api/invoices/${invoiceId}`);
     const body: InvoiceDetail | null = res.ok ? await res.json() : null;
     setPayments(body?.payments ?? []);
+    setRemoved(body?.removedPayments ?? []);
     // Defaults to French for a DRC customer (country "CD") -- still just
     // a default, overridable with the EN/FR toggle before printing.
     setPrintLang(body?.invoice.customers?.country === "CD" ? "fr" : "en");
@@ -411,6 +427,35 @@ function InvoiceDetailPanel({
     await loadPayments();
   }
 
+  function askRemove(paymentId: string) {
+    setRemovingId(paymentId);
+    setRemoveReason("");
+    setRemoveNote(null);
+  }
+
+  async function confirmRemove() {
+    if (!removingId) return;
+    if (!removeReason.trim()) return setRemoveNote("A reason is required.");
+    setRemoveBusy(true);
+    setRemoveNote(null);
+    const res = await fetch(`/api/invoices/${invoiceId}/payments/${removingId}/remove`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: removeReason.trim() }),
+    });
+    setRemoveBusy(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return setRemoveNote("Couldn't remove it: " + (body.error || res.statusText));
+    }
+    toast.success("Payment removed");
+    setRemovingId(null);
+    await onChanged();
+    await loadPayments();
+  }
+
+  const toRemove = payments?.find((p) => p.id === removingId) ?? null;
+
   return (
     <>
       <div className="d-head trip-card">
@@ -444,7 +489,10 @@ function InvoiceDetailPanel({
           ) : null}
         </div>
         {!cancelled && paid > 0 ? (
-          <div className="d-hint" style={{ marginTop: 9 }}>Can&apos;t be cancelled — {m2(paid, i.currency)} has already been recorded against it.</div>
+          <div className="d-hint" style={{ marginTop: 9 }}>
+            Can&apos;t be cancelled — {m2(paid, i.currency)} has already been recorded against it.
+            {canWrite ? " If a payment was recorded by mistake, remove it below first." : ""}
+          </div>
         ) : null}
         {showCancel && canWrite ? (
           <div className="panel-body" style={{ background: "#FAEFEC", borderTop: "1px solid var(--alert)", marginTop: 9 }}>
@@ -472,14 +520,19 @@ function InvoiceDetailPanel({
           <div className="d-hint">Loading…</div>
         ) : payments.length ? (
           <ul className="list" style={{ maxHeight: 220 }}>
-            {payments.map((p, idx) => (
-              <li key={idx}>
+            {payments.map((p) => (
+              <li key={p.id} className={p.id === removingId ? "sel" : undefined}>
                 <div>
                   <div className="r-no">{p.method || "—"}</div>
                   <div className="r-mono">{p.received_on}{p.reference ? " · " + p.reference : ""}</div>
                 </div>
                 <div className="r-right">
                   <div className="r-amt pos">{m2(p.amount, p.currency)}</div>
+                  {canWrite && !cancelled ? (
+                    <button type="button" className="act sm bad" style={{ marginTop: 6 }} onClick={() => askRemove(p.id)} aria-label={`Remove the ${m2(p.amount, p.currency)} payment received ${p.received_on}`}>
+                      Remove
+                    </button>
+                  ) : null}
                 </div>
               </li>
             ))}
@@ -487,7 +540,34 @@ function InvoiceDetailPanel({
         ) : (
           <div className="d-hint">No payments recorded yet.</div>
         )}
+        {toRemove && canWrite ? (
+          <div className="panel-body" style={{ background: "#FAEFEC", borderTop: "1px solid var(--alert)", marginTop: 9 }}>
+            {removeNote ? <div className="note bad">{removeNote}</div> : null}
+            <div className="d-hint" style={{ marginBottom: 9 }}>
+              Remove the {m2(toRemove.amount, toRemove.currency)} payment received {toRemove.received_on}? The invoice goes back to owing it
+              {toRemove.cash_account_id ? ", and it comes off the cashbook account it was received into" : ""}. Record it again afterwards if the money did come in, with the right amount and date.
+            </div>
+            <div className="field">
+              <label htmlFor="rmReason">Reason for removing</label>
+              <input id="rmReason" type="text" placeholder="e.g. wrong date — re-entering as two payments" value={removeReason} onChange={(e) => setRemoveReason(e.target.value)} />
+            </div>
+            <button className="primary" style={{ background: "var(--alert)" }} disabled={removeBusy} onClick={confirmRemove}>
+              {removeBusy ? "Removing…" : "Remove payment"}
+            </button>
+            <button className="ghost" onClick={() => setRemovingId(null)}>Never mind</button>
+          </div>
+        ) : null}
       </div>
+      {removed.length ? (
+        <div className="d-sec">
+          <h3>Removed payments</h3>
+          {removed.map((r, idx) => (
+            <div key={idx} className="d-hint" style={{ marginTop: idx ? 7 : 0 }}>
+              {r.payment || "A payment"} — removed {dayIn(timeZone)(r.at)} by {r.by}: {r.reason || "no reason recorded"}
+            </div>
+          ))}
+        </div>
+      ) : null}
       {!settled && canWrite ? (
         <form className="panel-body" onSubmit={recordPayment}>
           {payNote ? <div className="note bad">{payNote}</div> : null}

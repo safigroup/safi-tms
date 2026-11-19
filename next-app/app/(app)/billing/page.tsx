@@ -194,6 +194,7 @@ export default function BillingPage() {
           <div className="panel-head"><h2>Detail</h2></div>
           {tab === "bill" && selected ? (
             <RaiseInvoicePanel
+              key={selected}
               trip={data.billable.find((t) => t.trip_id === selected)!}
               onRaised={async (invoiceId) => {
                 await load();
@@ -231,6 +232,12 @@ function RaiseInvoicePanel({
 }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // Defaults to the company's today, the date the invoice would get anyway;
+  // set an earlier one when raising an invoice late. The server refuses a
+  // future date or one before the stage being billed (loading / POD).
+  const timeZone = useCompanyTimeZone();
+  const todayLocal = today(timeZone);
+  const [issuedOn, setIssuedOn] = useState(todayLocal);
   // setBusy(true) doesn't disable the buttons until the next render commits,
   // leaving a brief window where a second click (a different milestone's
   // button, or an impatient double-click) could fire its own request before
@@ -239,6 +246,7 @@ function RaiseInvoicePanel({
 
   async function raise(seq: number) {
     if (raisingRef.current) return;
+    if (!issuedOn) return setNote("Pick the invoice's issue date.");
     raisingRef.current = true;
     setBusy(true);
     setNote(null);
@@ -246,7 +254,7 @@ function RaiseInvoicePanel({
       const res = await fetch("/api/invoices/raise", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tripId: trip.trip_id, seq }),
+        body: JSON.stringify({ tripId: trip.trip_id, seq, issuedOn }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -280,6 +288,13 @@ function RaiseInvoicePanel({
         {note ? <div className="note bad">{note}</div> : null}
         {canWrite ? (
           <>
+            <div className="field">
+              <label htmlFor="rIssued">Issue date</label>
+              <input id="rIssued" type="date" max={todayLocal} value={issuedOn} onChange={(e) => setIssuedOn(e.target.value)} />
+              {issuedOn && issuedOn !== todayLocal ? (
+                <div className="hint">Dated {issuedOn}; due date counts from it.</div>
+              ) : null}
+            </div>
             <div className="acts">
               {trip.milestones_due.map((m) => (
                 <button

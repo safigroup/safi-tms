@@ -6,7 +6,9 @@ import { CAN_MANAGE_BILLING } from "@/lib/auth/permissions";
 // (cumulative-percent-per-milestone, rounding-drift self-correction, the
 // per-milestone POD gate) live entirely in the database function; this
 // route just authenticates and forwards which milestone (by seq, from the
-// customer's resolved payment schedule) to raise.
+// customer's resolved payment schedule) to raise. issuedOn is optional
+// (YYYY-MM-DD); omitted, the RPC dates the invoice the company's today, and
+// it refuses a future date or one before the stage being billed.
 export async function POST(request: Request) {
   const ctx = await getAuthedOrgContext();
   if (!ctx.ok) {
@@ -16,13 +18,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "not permitted" }, { status: 403 });
   }
 
-  const { tripId, seq } = await request.json();
+  const { tripId, seq, issuedOn } = await request.json();
+  if (issuedOn != null && !/^\d{4}-\d{2}-\d{2}$/.test(issuedOn)) {
+    return NextResponse.json({ error: "Pick a valid issue date." }, { status: 400 });
+  }
 
   const { data, error } = await ctx.admin.rpc("raise_invoice", {
     p_trip: tripId,
     p_seq: seq,
     p_org: ctx.orgId,
     p_user: ctx.userId,
+    p_issued_on: issuedOn || null,
   });
 
   if (error) {

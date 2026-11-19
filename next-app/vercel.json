@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/fx-rates",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/demo-reset",
+      "schedule": "30 22 * * *"
     }
   ]
 }

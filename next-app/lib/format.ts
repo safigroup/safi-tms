@@ -10,6 +10,10 @@ export const m2 = (n: number | string | null | undefined, c = "USD") =>
 export const m0 = (n: number | string | null | undefined, c = "USD") =>
   c + " " + Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
 
+// The figure alone, with cents -- for columns whose header already names the currency.
+export const n2 = (n: number | string | null | undefined) =>
+  Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 export const num = (n: number | string | null | undefined) =>
   Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 2 });
 

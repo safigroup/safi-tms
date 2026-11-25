@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { m2, today } from "@/lib/format";
+import { m2, n2, today } from "@/lib/format";
 import { COMPANY } from "@/lib/company";
 import { Spinner } from "@/lib/components/Spinner";
 import { PageBand } from "@/lib/components/PageBand";
@@ -243,8 +243,8 @@ export default function CashbookPage() {
                   </button>
                 </div>
               </div>
-              <div className="stmt-wrap">
-                <table className="stmt">
+              <div className="stmt-wrap cb-stmt-wrap">
+                <table className="stmt cb-stmt">
                   <thead>
                     <tr>
                       <th className="rec-col">
@@ -257,22 +257,25 @@ export default function CashbookPage() {
                           title="Reconciled with the account's own statement"
                         />
                       </th>
-                      <th>Date</th>
-                      <th>Description</th>
-                      <th className="num">Money in (Dr)</th>
-                      <th className="num">Money out (Cr)</th>
-                      <th className="num">Balance</th>
-                      <th aria-label="Actions" />
+                      <th className="date-col">Date</th>
+                      <th className="desc">Description</th>
+                      <th className="num">Money in (Dr)<span className="cur">{account.currency}</span></th>
+                      <th className="num">Money out (Cr)<span className="cur">{account.currency}</span></th>
+                      <th className="num">Balance<span className="cur">{account.currency}</span></th>
+                      <th className="act-col" aria-label="Actions" />
                     </tr>
                   </thead>
                   <tbody>
                     <tr className="bf">
                       <td />
-                      <td className="mono">{statement.from}</td>
-                      <td>{statement.from === account.opening_date ? "Opening balance" : "Balance brought forward"}</td>
+                      <td className="mono date-col">{statement.from}</td>
+                      <td className="desc">
+                        <span className="when">{statement.from}</span>
+                        {statement.from === account.opening_date ? "Opening balance" : "Balance brought forward"}
+                      </td>
                       <td className="num" />
                       <td className="num" />
-                      <td className={"num" + (statement.openingBalance < 0 ? " neg" : "")}>{m2(statement.openingBalance, account.currency)}</td>
+                      <td className={"num" + (statement.openingBalance < 0 ? " neg" : "")}>{n2(statement.openingBalance)}</td>
                       <td />
                     </tr>
                     {shownRows.map((r) => (
@@ -286,8 +289,9 @@ export default function CashbookPage() {
                             title="Reconciled with the account's own statement"
                           />
                         </td>
-                        <td className="mono">{r.tx.occurred_on}</td>
-                        <td>
+                        <td className="mono date-col">{r.tx.occurred_on}</td>
+                        <td className="desc">
+                          <span className="when">{r.tx.occurred_on}</span>
                           <span className={"pill " + pillTone(r.tx)}>{entryLabel(r.tx, "en")}</span>{" "}
                           {r.tx.source === "manual" ? (
                             <>
@@ -299,10 +303,10 @@ export default function CashbookPage() {
                           )}
                           {r.tx.reference ? <div className="r-mono">{r.tx.reference}</div> : null}
                         </td>
-                        <td className="num">{r.moneyIn ? m2(r.moneyIn, account.currency) : ""}</td>
-                        <td className="num">{r.moneyOut ? m2(r.moneyOut, account.currency) : ""}</td>
-                        <td className={"num" + (r.balance < 0 ? " neg" : "")}>{m2(r.balance, account.currency)}</td>
-                        <td>
+                        <td className="num">{r.moneyIn ? n2(r.moneyIn) : ""}</td>
+                        <td className="num">{r.moneyOut ? n2(r.moneyOut) : ""}</td>
+                        <td className={"num" + (r.balance < 0 ? " neg" : "")}>{n2(r.balance)}</td>
+                        <td className="act-col">
                           {r.tx.source === "manual" ? (
                             <button className="x" type="button" title="Remove this entry" onClick={() => handleDelete(r.tx)}>✕</button>
                           ) : (
@@ -314,11 +318,13 @@ export default function CashbookPage() {
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colSpan={3}>Totals</td>
-                      <td className="num">{m2(statement.totalIn, account.currency)}</td>
-                      <td className="num">{m2(statement.totalOut, account.currency)}</td>
-                      <td className={"num" + (statement.closingBalance < 0 ? " neg" : "")}>{m2(statement.closingBalance, account.currency)}</td>
                       <td />
+                      <td className="date-col" />
+                      <td className="desc">Totals</td>
+                      <td className="num">{n2(statement.totalIn)}</td>
+                      <td className="num">{n2(statement.totalOut)}</td>
+                      <td className={"num" + (statement.closingBalance < 0 ? " neg" : "")}>{n2(statement.closingBalance)}</td>
+                      <td className="act-col" />
                     </tr>
                   </tfoot>
                 </table>

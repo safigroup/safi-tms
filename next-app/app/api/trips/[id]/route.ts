@@ -7,7 +7,7 @@ import { diffFields, writeAuditLog, getAuditLog } from "@/lib/auditLog";
 const EDITABLE_FIELDS = [
   "customer_id", "route_id", "truck_id", "driver_id",
   "commodity", "tonnage", "volume_cbm", "container_no", "seal_no", "borders", "agent_name",
-  "revenue_amount", "planned_eta",
+  "revenue_amount", "planned_eta", "trailer_reg",
 ];
 // The load date and delivery time are corrected with the trip's other
 // milestone times, through ./times, which keeps the trip's history in step.
@@ -71,7 +71,28 @@ export async function PATCH(
     return NextResponse.json({ error: "driver does not belong to this organisation" }, { status: 400 });
   }
 
+  // The trailer plate, written the way Start loading writes it.
+  if ("trailer_reg" in body) {
+    if (body.trailer_reg !== null && typeof body.trailer_reg !== "string") {
+      return NextResponse.json({ error: "The trailer plate must be text." }, { status: 400 });
+    }
+    body.trailer_reg = (body.trailer_reg ?? "").trim().replace(/\s+/g, " ").toUpperCase() || null;
+    if (body.trailer_reg && body.trailer_reg.length > 40) {
+      return NextResponse.json({ error: "That trailer plate is too long." }, { status: 400 });
+    }
+  }
+
   const changed = diffFields(current, body, EDITABLE_FIELDS);
+  // A loaded trip moved to another truck takes that truck's current
+  // trailer, unless the same edit names the trailer itself -- so the
+  // change shows in the trip's history.
+  if ("truck_id" in changed && current.actual_load_date && !("trailer_reg" in changed)) {
+    const { data: truck } = changed.truck_id
+      ? await ctx.admin.from("trucks").select("trailer_reg").eq("id", changed.truck_id as string).eq("org_id", ctx.orgId).maybeSingle()
+      : { data: null };
+    const next = truck?.trailer_reg ?? null;
+    if ((next ?? null) !== (current.trailer_reg ?? null)) changed.trailer_reg = next;
+  }
   if (!Object.keys(changed).length) {
     return NextResponse.json({ ok: true, changed: 0 });
   }

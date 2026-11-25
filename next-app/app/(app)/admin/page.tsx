@@ -81,7 +81,7 @@ const ENT_UI: Record<string, { label: string; permission: "fleet" | "commercial"
       { k: "truck_type", label: "Type", type: "select", opts: ["flatbed", "tanker", "tipper", "other"], def: "flatbed", half: true },
       { k: "make_model", label: "Make / model", type: "text", def: "SHACMAN X3000", half: true },
       { k: "horse_reg", label: "Horse registration", type: "text", req: true, half: true },
-      { k: "trailer_reg", label: "Trailer registration", type: "text", half: true },
+      { k: "trailer_reg", label: "Current trailer", type: "text", half: true, hint: "The trailer on this truck now. Each trip records the one it loads with, and starting a load with a different trailer updates this." },
       { k: "tank_capacity_l", label: "Tank capacity (litres)", type: "number" },
       { k: "purchase_date", label: "Purchase date", type: "date", hint: "Anchors the breakeven projection on the Reports page." },
       { k: "is_active", label: "Active", type: "bool", def: true },

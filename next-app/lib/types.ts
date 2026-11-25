@@ -84,6 +84,12 @@ export type BoardTrip = {
   // From the New trip form. actual_load_date stays empty until the trip
   // starts loading.
   planned_load_date: string | null;
+  // The trailer that went on this trip, recorded when it started loading
+  // (null before then, and for trips loaded before trailers were recorded).
+  trailer_reg: string | null;
+  // The route's two ends, for "From -> To".
+  origin: string;
+  destination: string;
 };
 
 // One row of a trip's history: a status change (logged by the database
@@ -142,6 +148,8 @@ export type Truck = {
   id: string;
   fleet_no: string;
   horse_reg: string;
+  // The trailer the truck has now; each trip records its own (BoardTrip.trailer_reg).
+  trailer_reg: string | null;
   is_active: boolean;
   purchase_date: string | null;
   truck_type: string;

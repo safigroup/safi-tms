@@ -97,6 +97,18 @@ Every printout — invoices, truck reports, trip ledgers, cashbook statements an
 
 When printing, the whole screen page (`.app-body`, not just `.wrap`) is hidden. Its full-viewport `min-height` otherwise put a blank page ahead of every printout.
 
+## Trailers
+
+Trailers move between trucks, so each trip records its own (`trips.trailer_reg`, migration `20261126100000_trip_trailer.sql`); the truck's plate in Admin → Fleet is only its **current** trailer.
+
+- **Start loading** on the Board asks which trailer is going, filled in with the truck's current one. Whoever starts loading confirms or changes it (`/api/trips/[id]/advance`, `trailerReg`). A different trailer is saved on the trip and becomes the truck's current trailer, so the next trip starts from it.
+- The `trips_capture_trailer` trigger is the backstop. A trip that starts loading by another path, or is inserted already loaded (the demo company's rebuild), takes its truck's current trailer when none is given.
+- **Edit trip** (owners, admins) corrects it once the trip has loaded. Moving a loaded trip to another truck takes that truck's trailer, unless the same edit names one (`/api/trips/[id]`), and it shows in the trip's history.
+- Trips that loaded before 26 Nov 2026 have none recorded ("Not recorded"), since the truck's trailer today would only be a guess. The demo company's trips were filled in.
+- Plates are stored trimmed and in capitals. The trip's trailer prints on its ledger, under the truck, and the Board's search finds trips by it.
+
+`trip_board` also carries the route's `origin` and `destination` for the printed reports' "From → To".
+
 ## Truck report
 
 `/reports` is one truck's report for a period, written so it can be read without an accounting background. `GET /api/reports/trucks/[id]` returns the period's figures plus what they're compared with; the page and its printout only arrange them.

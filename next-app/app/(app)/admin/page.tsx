@@ -9,6 +9,9 @@ import { PageBand } from "@/lib/components/PageBand";
 import type { BootstrapPayload, Customer, Route, FxRate, RouteBorderPath, PaymentMilestone, RouteCostTemplateLine } from "@/lib/types";
 import { useCompanyTimeZone } from "@/lib/components/CompanyTimeZone";
 import { reloadNav } from "@/lib/components/Nav";
+import { Letterhead, useCompany } from "@/lib/components/Company";
+import { COMPANY_MAX, splitLines, type CompanyDetails, type CompanyField } from "@/lib/company";
+import { dayLabel } from "@/lib/reports/periods";
 import { FX_FEED, REFRESH_AFTER_DAYS, agoLabel, andList, fxStatus, runWindow, shortDay } from "@/lib/fx/schedule";
 
 // Mirrors lib/estimates/validateCostTemplate.ts's ESTIMATE_CATEGORIES --
@@ -144,16 +147,17 @@ const ENT_UI: Record<string, { label: string; permission: "fleet" | "commercial"
   },
 };
 
-const VIEWS = ["fx", "team", "customers", "trucks", "drivers", "routes", "rate_cards", "payment_schedule", "api_keys"] as const;
+const VIEWS = ["fx", "company", "team", "customers", "trucks", "drivers", "routes", "rate_cards", "payment_schedule", "api_keys"] as const;
 type ViewKey = (typeof VIEWS)[number];
 const VIEW_LABELS: Record<ViewKey, string> = {
-  fx: "Exchange rates", team: "Team", customers: "Customers", trucks: "Trucks", drivers: "Drivers", routes: "Routes", rate_cards: "Rate cards",
+  fx: "Exchange rates", company: "Company", team: "Team", customers: "Customers", trucks: "Trucks", drivers: "Drivers", routes: "Routes", rate_cards: "Rate cards",
   payment_schedule: "Payment schedule", api_keys: "API keys",
 };
 
 // The line under each section's name in the band.
 const VIEW_SUB: Record<ViewKey, string> = {
   fx: "What each currency is worth in dollars. Every cost converts at the rate in force on its date.",
+  company: "Your company as customers see it: the details at the top of every invoice, report and statement.",
   team: "Who can sign in, and what each person can do.",
   customers: "Who you haul for: tax IDs, contacts and payment terms.",
   trucks: "Your fleet, truck by truck.",
@@ -178,6 +182,8 @@ export default function AdminPage() {
   const [viewerRole, setViewerRole] = useState<string | null>(null);
   const [teamError, setTeamError] = useState<string | null>(null);
   const [apiKeys, setApiKeys] = useState<ApiKey[] | null>(null);
+  // What's being typed in Admin -> Company, for the preview beside it.
+  const [companyDraft, setCompanyDraft] = useState<CompanyDetails | null>(null);
 
   async function load() {
     const res = await fetch("/api/bootstrap");
@@ -232,7 +238,7 @@ export default function AdminPage() {
   };
 
   const canEditView = (v: ViewKey): boolean => {
-    if (v === "team" || v === "api_keys") return false;
+    if (v === "team" || v === "api_keys" || v === "company") return false;
     const permission = v === "fx" || v === "payment_schedule" ? "commercial" : ENT_UI[v].permission;
     return (permission === "fleet" ? CAN_EDIT_FLEET : CAN_EDIT_COMMERCIAL).includes(data.role);
   };
@@ -255,17 +261,17 @@ export default function AdminPage() {
             <button type="button" className="ops-cta" onClick={() => setCreating(true)}>+ New key</button>
           ) : null
         }
-        tabs={VIEWS.filter((v) => (v !== "team" && v !== "api_keys") || canManageKeys).map((v) => ({
+        tabs={VIEWS.filter((v) => (v !== "team" && v !== "api_keys" && v !== "company") || canManageKeys).map((v) => ({
           key: v,
           label: VIEW_LABELS[v],
-          count: v === "payment_schedule"
+          count: v === "payment_schedule" || v === "company"
             ? undefined
             : v === "api_keys"
               ? apiKeys?.length ? apiKeys.filter((k) => !k.revoked_at).length : undefined
               : v === "fx" ? data.fx.length : v === "team" ? team?.length ?? 0 : masters[v].length,
         }))}
         tab={view}
-        onTab={(v) => { setView(v as ViewKey); setSelected(null); setCreating(false); }}
+        onTab={(v) => { setView(v as ViewKey); setSelected(null); setCreating(false); setCompanyDraft(null); }}
       />
       <div className="grid">
         <div className="panel">
@@ -277,6 +283,8 @@ export default function AdminPage() {
               <FxStatusPanel fx={data.fx} canEdit={canEdit} onRefreshed={ratesChanged} />
               <FxList fx={data.fx} />
             </>
+          ) : view === "company" ? (
+            <CompanyPreview draft={companyDraft} />
           ) : view === "team" ? (
             teamError ? (
               <div className="panel-body"><div className="note bad">{teamError}</div></div>
@@ -304,10 +312,12 @@ export default function AdminPage() {
           )}
         </div>
         <div className="panel">
-          <div className="panel-head"><h2>{view === "fx" ? "Add a rate" : view === "team" ? (creating ? "Invite" : "Team member") : view === "payment_schedule" ? "Default schedule" : view === "api_keys" ? "New key" : selected ? "Edit" : creating ? "New" : "Detail"}</h2></div>
+          <div className="panel-head"><h2>{view === "fx" ? "Add a rate" : view === "company" ? "Details" : view === "team" ? (creating ? "Invite" : "Team member") : view === "payment_schedule" ? "Default schedule" : view === "api_keys" ? "New key" : selected ? "Edit" : creating ? "New" : "Detail"}</h2></div>
           <div className="panel-body">
             {view === "fx" ? (
               canEdit ? <FxForm onSaved={ratesChanged} /> : <div className="empty">You have read-only access to exchange rates.</div>
+            ) : view === "company" ? (
+              <CompanyForm onDraft={setCompanyDraft} onSaved={() => router.refresh()} />
             ) : view === "payment_schedule" ? (
               <PaymentScheduleEditor canEdit={canEdit} />
             ) : view === "api_keys" ? (
@@ -636,6 +646,122 @@ function TeamDetail({ member, canReset }: { member: TeamMember; canReset: boolea
         </div>
       ) : null}
     </>
+  );
+}
+
+// Admin -> Company: the top of a printed invoice as it will come out --
+// the details being typed, else the saved ones -- on white "paper" in
+// either theme, using the print sheet's own header styles.
+function CompanyPreview({ draft }: { draft: CompanyDetails | null }) {
+  const saved = useCompany();
+  const issued = dayLabel(today(useCompanyTimeZone()));
+  const c = draft ?? saved;
+  const bank = splitLines(c.bank_details);
+  return (
+    <div className="panel-body">
+      <div className="lh-preview" aria-label="How the letterhead prints">
+        <div className="ih">
+          <Letterhead company={c} />
+          <div className="im">
+            <div className="big">Invoice</div>
+            Sample<br />Issued {issued}
+          </div>
+        </div>
+        <div className="terms">
+          <b>Remit to</b>
+          <br />
+          {bank.length ? bank.map((line, i) => <span key={i}>{line}<br /></span>) : <span className="lh-missing">No bank details yet: invoices print without this part.</span>}
+        </div>
+      </div>
+      <div className="hint" style={{ marginTop: 12 }}>
+        The same details head every invoice, truck report, trip ledger, cashbook statement and estimate. Bank details print on invoices only.
+      </div>
+    </div>
+  );
+}
+
+type CompanyFieldUi = { k: CompanyField; label: string; hint?: string; lines?: number; placeholder?: string };
+
+const COMPANY_UI: (CompanyFieldUi | [CompanyFieldUi, CompanyFieldUi])[] = [
+  { k: "legal_name", label: "Company name", placeholder: "Safi Transport and Logistics Limited", hint: "As it should print. Left empty, the company's name in the app is used." },
+  { k: "registration_no", label: "Registration", placeholder: "PACRA Reg. No. 120261044060", hint: "With its label, the way it should print: PACRA Reg. No., BRELA Reg. No., RCCM…" },
+  { k: "tax_id", label: "Tax number", placeholder: "TPIN 2004440854", hint: "With its label too: TPIN, TIN, NIF…" },
+  { k: "address", label: "Address", lines: 2, placeholder: "Plot, street, area, city, country" },
+  [
+    { k: "contact_phone", label: "Phone", placeholder: "+260 …" },
+    { k: "contact_email", label: "Email", placeholder: "accounts@…" },
+  ],
+  {
+    k: "bank_details", label: "Bank details", lines: 4,
+    placeholder: "Bank name\nAccount name\nUSD account number\nSWIFT",
+    hint: "Printed under “Remit to” on invoices, line by line. Left empty, invoices print without it.",
+  },
+];
+
+function CompanyForm({ onDraft, onSaved }: { onDraft: (c: CompanyDetails) => void; onSaved: () => void }) {
+  const saved = useCompany();
+  const [v, setV] = useState<Record<CompanyField, string>>({
+    legal_name: saved.name,
+    registration_no: saved.registration_no ?? "",
+    tax_id: saved.tax_id ?? "",
+    address: saved.address ?? "",
+    contact_phone: saved.contact_phone ?? "",
+    contact_email: saved.contact_email ?? "",
+    bank_details: saved.bank_details ?? "",
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  function change(k: CompanyField, value: string) {
+    const next = { ...v, [k]: value };
+    setV(next);
+    onDraft({
+      name: next.legal_name.trim() || saved.name,
+      registration_no: next.registration_no,
+      tax_id: next.tax_id,
+      address: next.address,
+      contact_phone: next.contact_phone,
+      contact_email: next.contact_email,
+      bank_details: next.bank_details,
+    });
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    const res = await fetch("/api/admin/company", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(v),
+    }).catch(() => null);
+    setSaving(false);
+    if (!res || !res.ok) {
+      const body = res ? await res.json().catch(() => ({})) : {};
+      return setError(body.error || "Couldn't save. Try again.");
+    }
+    toast.success("Company details saved");
+    onSaved();
+  }
+
+  const field = (f: CompanyFieldUi) => (
+    <div className="field" key={f.k}>
+      <label htmlFor={"co-" + f.k}>{f.label}</label>
+      {f.lines ? (
+        <textarea id={"co-" + f.k} rows={f.lines} maxLength={COMPANY_MAX[f.k]} placeholder={f.placeholder} value={v[f.k]} onChange={(e) => change(f.k, e.target.value)} />
+      ) : (
+        <input id={"co-" + f.k} type={f.k === "contact_email" ? "email" : "text"} maxLength={COMPANY_MAX[f.k]} placeholder={f.placeholder} value={v[f.k]} onChange={(e) => change(f.k, e.target.value)} />
+      )}
+      {f.hint ? <div className="hint">{f.hint}</div> : null}
+    </div>
+  );
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {error ? <div className="note bad">{error}</div> : null}
+      {COMPANY_UI.map((f, i) => (Array.isArray(f) ? <div className="row" key={i}>{f.map(field)}</div> : field(f)))}
+      <button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save details"}</button>
+    </form>
   );
 }
 

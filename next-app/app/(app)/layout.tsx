@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { getAuthedOrgContext } from "@/lib/auth/getAuthedOrgContext";
 import { CompanyTimeZoneProvider } from "@/lib/components/CompanyTimeZone";
+import { CompanyProvider } from "@/lib/components/Company";
+import { COMPANY_FIELDS, type CompanyDetails } from "@/lib/company";
 import { Nav } from "@/lib/components/Nav";
 import { OrganizationsPicker } from "@/lib/components/OrganizationsPicker";
 import { signOut } from "./actions";
@@ -28,15 +30,36 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
 
   const orgTitle = ctx.orgName.replace(/ Limited$/, "");
 
+  // The letterhead every printout carries. Should the columns be missing
+  // (code deployed ahead of its migration), documents still print with the
+  // company's name rather than the page failing.
+  const { data: org } = await ctx.admin
+    .from("organizations")
+    .select(COMPANY_FIELDS.join(", "))
+    .eq("id", ctx.orgId)
+    .maybeSingle<Record<(typeof COMPANY_FIELDS)[number], string | null>>();
+  const company: CompanyDetails = {
+    name: org?.legal_name?.trim() || ctx.orgName,
+    registration_no: org?.registration_no ?? null,
+    tax_id: org?.tax_id ?? null,
+    address: org?.address ?? null,
+    contact_phone: org?.contact_phone ?? null,
+    contact_email: org?.contact_email ?? null,
+    bank_details: org?.bank_details ?? null,
+  };
+
   // The sidebar is fixed to the left; .app-body leaves room for it (see
   // --sidebar-w in globals.css) and the page column stays centred in what's
-  // left. Everything sits inside .wrap so printing still hides all of it.
+  // left. Printing hides all of .app-body (print sheets are portalled into
+  // <body> beside it), so nothing on screen reaches the paper.
   return (
     <div className="app-body">
       <div className="wrap">
         <CompanyTimeZoneProvider timeZone={ctx.timeZone}>
-          <Nav orgTitle={orgTitle} orgId={ctx.orgId} email={ctx.email} role={ctx.role} isPlatformAdmin={ctx.isPlatformAdmin} signOutAction={signOut} />
-          {children}
+          <CompanyProvider company={company}>
+            <Nav orgTitle={orgTitle} orgId={ctx.orgId} email={ctx.email} role={ctx.role} isPlatformAdmin={ctx.isPlatformAdmin} signOutAction={signOut} />
+            {children}
+          </CompanyProvider>
         </CompanyTimeZoneProvider>
       </div>
     </div>

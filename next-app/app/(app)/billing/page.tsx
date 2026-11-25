@@ -5,7 +5,8 @@ import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { dayIn, m0, m2, lab, today } from "@/lib/format";
-import { COMPANY } from "@/lib/company";
+import { splitLines } from "@/lib/company";
+import { Letterhead, useCompany } from "@/lib/components/Company";
 import { Spinner } from "@/lib/components/Spinner";
 import { PageBand } from "@/lib/components/PageBand";
 import { t, invoiceTypeLabel, type PrintLang } from "@/lib/print/translations";
@@ -337,6 +338,7 @@ function InvoiceDetailPanel({
   canWrite: boolean;
 }) {
   const i = ar.find((x) => x.id === invoiceId);
+  const hasBank = !!useCompany().bank_details?.trim();
   const [showCancel, setShowCancel] = useState(false);
   const [reason, setReason] = useState("");
   const [cancelNote, setCancelNote] = useState<string | null>(null);
@@ -488,6 +490,11 @@ function InvoiceDetailPanel({
             </button>
           ) : null}
         </div>
+        {!hasBank ? (
+          <div className="d-hint" style={{ marginTop: 9 }}>
+            Your bank details aren&apos;t set, so this invoice prints without them. An owner or admin can add them in Admin → Company.
+          </div>
+        ) : null}
         {!cancelled && paid > 0 ? (
           <div className="d-hint" style={{ marginTop: 9 }}>
             Can&apos;t be cancelled — {m2(paid, i.currency)} has already been recorded against it.
@@ -593,6 +600,7 @@ function InvoiceDetailPanel({
 }
 
 function PrintSheet({ detail, lang, onDone }: { detail: InvoiceDetail; lang: PrintLang; onDone: () => void }) {
+  const bank = splitLines(useCompany().bank_details);
   useEffect(() => {
     const handler = () => onDone();
     window.addEventListener("afterprint", handler);
@@ -609,10 +617,7 @@ function PrintSheet({ detail, lang, onDone }: { detail: InvoiceDetail; lang: Pri
   return createPortal(
     <div id="sheet">
       <div className="ih">
-        <div className="co">
-          <h1>{COMPANY.name}</h1>
-          <p>{COMPANY.reg}<br />TPIN {COMPANY.tpin}<br />{COMPANY.address}<br />{COMPANY.phone} · {COMPANY.email}</p>
-        </div>
+        <Letterhead />
         <div className="im">
           <div className="big">{t(lang, "invoice")}</div>
           {inv.invoice_no}<br />{t(lang, "issued")} {inv.issued_on}<br />{t(lang, "due")} {inv.due_on}
@@ -652,8 +657,14 @@ function PrintSheet({ detail, lang, onDone }: { detail: InvoiceDetail; lang: Pri
         <div className="due"><span>{t(lang, "amount_due")}</span><span>{m2(Number(inv.total_due) - rec, inv.currency)}</span></div>
       </div>
       <div className="terms">
-        <b>{t(lang, "payment_terms")}</b><br />{c?.payment_terms || defaultTerms}<br /><br />
-        <b>{t(lang, "remit_to")}</b><br />{COMPANY.bank.map((line, idx) => <span key={idx}>{line}<br /></span>)}
+        <b>{t(lang, "payment_terms")}</b><br />{c?.payment_terms || defaultTerms}
+        {/* Left off until the company's bank details are entered (Admin -> Company). */}
+        {bank.length ? (
+          <>
+            <br /><br />
+            <b>{t(lang, "remit_to")}</b><br />{bank.map((line, idx) => <span key={idx}>{line}<br /></span>)}
+          </>
+        ) : null}
       </div>
     </div>,
     document.body,

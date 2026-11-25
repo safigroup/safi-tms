@@ -64,7 +64,7 @@ function podHeldUsd(data: BootstrapPayload, tripId: string) {
 }
 
 function matchesSearch(t: BoardTrip, q: string) {
-  return [t.trip_no, t.customer, t.route, t.fleet_no, t.horse_reg, t.driver, t.container_no, t.commodity]
+  return [t.trip_no, t.customer, t.route, t.fleet_no, t.horse_reg, t.trailer_reg, t.driver, t.container_no, t.commodity]
     .some((v) => v && v.toLowerCase().includes(q));
 }
 
@@ -183,7 +183,7 @@ export default function BoardPage() {
             <input
               type="search"
               aria-label="Search trips"
-              placeholder="Search trip, customer, truck, driver, container…"
+              placeholder="Search trip, customer, truck, trailer, driver, container…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -301,6 +301,11 @@ function TripDetail({
   // Bumped after a time correction, which changes the history without
   // moving the trip on.
   const [historyVersion, setHistoryVersion] = useState(0);
+  // The trailer going when the trip starts loading: the truck's current
+  // one until someone types over it.
+  const truckTrailer = data.trucks.find((t) => t.id === trip.truck_id)?.trailer_reg ?? "";
+  const [trailerTyped, setTrailerTyped] = useState<string | null>(null);
+  const trailer = trailerTyped ?? truckTrailer;
   const canOverride = CAN_OVERRIDE_RECORDS.includes(data.role);
   const nexts = NEXT[trip.status] || [];
   const canBorder = ["in_transit", "at_border"].includes(trip.status);
@@ -318,13 +323,13 @@ function TripDetail({
     ? stops.filter((s) => s.kind === "border" && s.state !== "done").map((s) => s.location!)
     : borders;
 
-  async function advance(status: TripStatus, allocation?: { truckId: string; driverId: string }) {
+  async function advance(status: TripStatus, extra?: { truckId: string; driverId: string } | { trailerReg: string }) {
     setNote(null);
     await run(async () => {
       const res = await fetch(`/api/trips/${trip.trip_id}/advance`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, ...allocation }),
+        body: JSON.stringify({ status, ...extra }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -414,13 +419,24 @@ function TripDetail({
       ) : nexts.length && canWrite ? (
         <div className="d-sec">
           <h3>Next step</h3>
+          {trip.status === "allocated" ? (
+            <div className="field">
+              <label htmlFor="ldTrailer">Trailer going</label>
+              <input id="ldTrailer" type="text" maxLength={40} placeholder="Trailer plate" value={trailer} onChange={(e) => setTrailerTyped(e.target.value)} />
+              <div className="hint">
+                {truckTrailer
+                  ? `${trip.fleet_no}'s current trailer. If a different one is going, enter it: it's saved on this trip and becomes ${trip.fleet_no}'s current trailer.`
+                  : `No trailer on file for ${trip.fleet_no ?? "this truck"}. Enter the one that's going, or leave it empty if there's none.`}
+              </div>
+            </div>
+          ) : null}
           <div className="acts">
             {nexts.map(([status, label]) => (
               <button
                 key={status}
                 className={"act" + (status === "delivered" ? " go" : "")}
                 disabled={busy}
-                onClick={() => advance(status)}
+                onClick={() => advance(status, status === "loading" ? { trailerReg: trailer } : undefined)}
               >
                 {label}
               </button>
@@ -474,6 +490,10 @@ function TripDetail({
       <div className="d-sec">
         <h3>Assignment</h3>
         <div className="d-kv"><span>Truck</span><span>{trip.fleet_no || "—"}{trip.horse_reg ? " · " + trip.horse_reg : ""}</span></div>
+        <div className="d-kv">
+          <span>Trailer</span>
+          <span>{trip.trailer_reg || (trip.actual_load_date ? "Not recorded" : "Recorded when loading starts")}</span>
+        </div>
         <div className="d-kv"><span>Driver</span><span>{trip.driver || "—"}</span></div>
         <div className="d-kv"><span>Cargo</span><span>{trip.commodity || "—"}{trip.tonnage ? " · " + trip.tonnage + " t" : ""}{trip.volume_cbm ? " · " + trip.volume_cbm + " m³" : ""}</span></div>
         <div className="d-kv"><span>Container</span><span>{trip.container_no || "—"}</span></div>
@@ -842,6 +862,9 @@ function TripEditForm({
   );
   const [truckId, setTruckId] = useState(trip.truck_id ?? "");
   const [driverId, setDriverId] = useState(trip.driver_id ?? "");
+  // Only once the trip has loaded: before that it's set by Start loading.
+  const loaded = !!trip.actual_load_date;
+  const [trailerReg, setTrailerReg] = useState(trip.trailer_reg ?? "");
   const [commodity, setCommodity] = useState(trip.commodity ?? "");
   const [tonnage, setTonnage] = useState(trip.tonnage != null ? String(trip.tonnage) : "");
   const [volumeCbm, setVolumeCbm] = useState(trip.volume_cbm != null ? String(trip.volume_cbm) : "");
@@ -883,6 +906,8 @@ function TripEditForm({
         route_id: routeId,
         truck_id: truckId || null,
         driver_id: driverId || null,
+        // Only when it's been changed, so an untouched plate never shows up as an edit.
+        ...(loaded && trailerReg.trim() !== (trip.trailer_reg ?? "").trim() ? { trailer_reg: trailerReg.trim() || null } : {}),
         commodity: commodity.trim() || null,
         tonnage: tonnage ? Number(tonnage) : null,
         volume_cbm: volumeCbm ? Number(volumeCbm) : null,
@@ -933,7 +958,15 @@ function TripEditForm({
         <div className="row">
           <div className="field">
             <label htmlFor="eTruck">Truck</label>
-            <select id="eTruck" value={truckId} onChange={(e) => setTruckId(e.target.value)}>
+            <select
+              id="eTruck"
+              value={truckId}
+              onChange={(e) => {
+                setTruckId(e.target.value);
+                // A loaded trip moved to another truck takes that truck's trailer.
+                if (loaded) setTrailerReg(data.trucks.find((t) => t.id === e.target.value)?.trailer_reg ?? "");
+              }}
+            >
               <option value="">—</option>
               {activeTrucks.map((t) => <option key={t.id} value={t.id}>{t.fleet_no}</option>)}
             </select>
@@ -946,6 +979,13 @@ function TripEditForm({
             </select>
           </div>
         </div>
+        {loaded ? (
+          <div className="field">
+            <label htmlFor="eTrailer">Trailer</label>
+            <input id="eTrailer" type="text" maxLength={40} placeholder="Trailer plate" value={trailerReg} onChange={(e) => setTrailerReg(e.target.value)} />
+            <div className="hint">The trailer that went on this trip. Choosing another truck fills in that truck&apos;s current trailer.</div>
+          </div>
+        ) : null}
         <div className="field">
           <label htmlFor="eComm">Commodity</label>
           <input id="eComm" type="text" value={commodity} onChange={(e) => setCommodity(e.target.value)} />

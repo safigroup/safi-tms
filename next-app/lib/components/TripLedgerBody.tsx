@@ -44,6 +44,7 @@ export function TripLedgerBody({
           <div style={{ fontSize: 12, color: "#333" }}>
             {trip.route}<br />
             {trip.fleet_no ? <>{t(lang, "truck")} {trip.fleet_no}{trip.horse_reg ? " · " + trip.horse_reg : ""}<br /></> : null}
+            {trip.trailer_reg ? <>{t(lang, "trailer")} {trip.trailer_reg}<br /></> : null}
             {trip.driver ? <>{t(lang, "driver")} {trip.driver}<br /></> : null}
             {trip.commodity ? <>{trip.commodity}{trip.tonnage ? " · " + trip.tonnage + " t" : ""}{trip.volume_cbm ? " · " + trip.volume_cbm + " m³" : ""}<br /></> : null}
             {trip.container_no ? <>{t(lang, "container")} {trip.container_no}<br /></> : null}

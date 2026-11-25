@@ -25,6 +25,7 @@ const STRINGS: Record<string, { en: string; fr: string }> = {
   route: { en: "Route", fr: "Itinéraire" },
   customer: { en: "Customer", fr: "Client" },
   truck: { en: "Truck", fr: "Camion" },
+  trailer: { en: "Trailer", fr: "Remorque" },
   driver: { en: "Driver", fr: "Chauffeur" },
   container: { en: "Container", fr: "Conteneur" },
   agent: { en: "Agent", fr: "Agent" },

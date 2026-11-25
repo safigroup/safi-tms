@@ -17,7 +17,7 @@ export async function POST(
 
   const { data: trip } = await ctx.admin
     .from("trips")
-    .select("status")
+    .select("status, truck_id")
     .eq("id", id)
     .eq("org_id", ctx.orgId)
     .maybeSingle();
@@ -33,6 +33,21 @@ export async function POST(
   const allowed = isReopen ? CAN_OVERRIDE_RECORDS : CAN_MANAGE_TRIPS;
   if (!allowed.has(ctx.role)) {
     return NextResponse.json({ error: "not permitted" }, { status: 403 });
+  }
+
+  // Starting to load records the trailer that's going (trailers move
+  // between trucks). The Board sends what the loader confirmed, filled in
+  // with the truck's current trailer; without it the trips_capture_trailer
+  // trigger takes the truck's. Checked before anything changes.
+  let trailer: string | null | undefined;
+  if (status === "loading" && "trailerReg" in body) {
+    if (body.trailerReg !== null && typeof body.trailerReg !== "string") {
+      return NextResponse.json({ error: "The trailer plate must be text." }, { status: 400 });
+    }
+    trailer = (body.trailerReg ?? "").trim().replace(/\s+/g, " ").toUpperCase() || null;
+    if (trailer && trailer.length > 40) {
+      return NextResponse.json({ error: "That trailer plate is too long." }, { status: 400 });
+    }
   }
 
   // Allocating names the truck and driver in the same step -- a trip
@@ -62,6 +77,26 @@ export async function POST(
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  if (trailer !== undefined) {
+    const { error: trailerError } = await ctx.admin
+      .from("trips")
+      .update({ trailer_reg: trailer })
+      .eq("id", id)
+      .eq("org_id", ctx.orgId);
+    if (trailerError) {
+      return NextResponse.json({ error: `Loading started, but the trailer wasn't saved: ${trailerError.message}` }, { status: 400 });
+    }
+    // A different trailer on the truck is now its current one (Admin ->
+    // Fleet), so the next trip starts from it.
+    if (trailer && trip.truck_id) {
+      await ctx.admin
+        .from("trucks")
+        .update({ trailer_reg: trailer })
+        .eq("id", trip.truck_id)
+        .eq("org_id", ctx.orgId);
+    }
   }
 
   return NextResponse.json({ ok: true });

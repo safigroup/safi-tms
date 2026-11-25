@@ -1,5 +1,5 @@
 import { dayIn, m2, today } from "@/lib/format";
-import { COMPANY } from "@/lib/company";
+import { Letterhead } from "@/lib/components/Company";
 import { t, catLabel, statusLabel, type PrintLang } from "@/lib/print/translations";
 import type { BoardTrip, TripAllocation, TripCost } from "@/lib/types";
 import { buildTripStatement } from "@/lib/tripStatement";
@@ -31,10 +31,7 @@ export function TripLedgerBody({
   return (
     <>
       <div className="ih">
-        <div className="co">
-          <h1>{COMPANY.name}</h1>
-          <p>{COMPANY.reg}<br />TPIN {COMPANY.tpin}<br />{COMPANY.address}<br />{COMPANY.phone} · {COMPANY.email}</p>
-        </div>
+        <Letterhead />
         <div className="im">
           <div className="big">{t(lang, "trip_ledger")}</div>
           {trip.trip_no}<br />{t(lang, "printed")} {today(timeZone)}

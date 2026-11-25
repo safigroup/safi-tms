@@ -2715,7 +2715,8 @@ fieldset.times-group {
 }
 
 input:not([type="checkbox"]):not([type="radio"]),
-select {
+select,
+.field textarea {
   width: 100%;
   font-family: var(--sans);
   font-size: 15px;
@@ -3379,6 +3380,10 @@ table.sum-table tr.sum-total td {
     background: #fff
   }
 
+  /* The whole screen page, not just its content: .app-body keeps a
+     full-viewport min-height, which on paper became a blank first page
+     ahead of every printout. */
+  .app-body,
   .wrap {
     display: none !important
   }
@@ -3393,7 +3398,8 @@ table.sum-table tr.sum-total td {
   }
 }
 
-#sheet .ih {
+#sheet .ih,
+.lh-preview .ih {
   display: flex;
   justify-content: space-between;
   gap: 24px;
@@ -3401,7 +3407,8 @@ table.sum-table tr.sum-total td {
   padding-bottom: 12px
 }
 
-#sheet .co h1 {
+#sheet .co h1,
+.lh-preview .co h1 {
   font-family: var(--cond);
   font-size: 22px;
   letter-spacing: .05em;
@@ -3409,19 +3416,22 @@ table.sum-table tr.sum-total td {
   font-weight: 700
 }
 
-#sheet .co p {
+#sheet .co p,
+.lh-preview .co p {
   font-size: 11.5px;
   color: #333;
   line-height: 1.6
 }
 
-#sheet .im {
+#sheet .im,
+.lh-preview .im {
   text-align: right;
   font-family: var(--mono);
   font-size: 11.5px
 }
 
-#sheet .im .big {
+#sheet .im .big,
+.lh-preview .im .big {
   font-family: var(--cond);
   font-size: 20px;
   letter-spacing: .14em;
@@ -3510,7 +3520,8 @@ table.sum-table tr.sum-total td {
   padding-top: 8px
 }
 
-#sheet .terms {
+#sheet .terms,
+.lh-preview .terms {
   margin-top: 26px;
   border-top: 1px solid #ddd;
   padding-top: 12px;
@@ -3519,7 +3530,8 @@ table.sum-table tr.sum-total td {
   line-height: 1.6
 }
 
-#sheet .terms b {
+#sheet .terms b,
+.lh-preview .terms b {
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 600;
@@ -5206,4 +5218,33 @@ ul.list.board-list li .track {
 
 .fx-status .fx-status-problem {
   margin: 6px 0 0
+}
+
+/* Admin -> Company: the letterhead as it prints, on white paper in either
+   theme (its header rules are shared with #sheet above). */
+.lh-preview {
+  background: #fff;
+  color: #141E19;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card);
+  padding: 26px 24px 20px;
+  overflow-x: auto
+}
+
+.lh-preview .ih {
+  flex-wrap: wrap
+}
+
+.lh-preview .co {
+  min-width: 0
+}
+
+.lh-preview .lh-missing {
+  color: #8a6d1a
+}
+
+.field textarea {
+  resize: vertical;
+  line-height: 1.45
 }

@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { m2, n2, today } from "@/lib/format";
-import { COMPANY } from "@/lib/company";
+import { Letterhead } from "@/lib/components/Company";
 import { Spinner } from "@/lib/components/Spinner";
 import { PageBand } from "@/lib/components/PageBand";
 import { t, type PrintLang } from "@/lib/print/translations";
@@ -1003,10 +1003,7 @@ function StatementPrintSheet({
   return createPortal(
     <div id="sheet">
       <div className="ih">
-        <div className="co">
-          <h1>{COMPANY.name}</h1>
-          <p>{COMPANY.reg}<br />TPIN {COMPANY.tpin}<br />{COMPANY.address}<br />{COMPANY.phone} · {COMPANY.email}</p>
-        </div>
+        <Letterhead />
         <div className="im">
           <div className="big">{t(lang, "account_statement")}</div>
           {account.name}<br />{t(lang, "printed")} {today(timeZone)}

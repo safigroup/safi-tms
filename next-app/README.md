@@ -89,6 +89,14 @@ The product previews (`app/_landing/previews.tsx`) are pictures of the real scre
 
 `/overview` is the home page after sign-in. Its figures come from `lib/dashboard/summary.ts` (pure functions over `/api/bootstrap`'s data): this month so far against the same days of last month, trips by stage (each linking to the matching Board filter via `/board?filter=`), trips needing attention (late, waiting at a border 24h+, delivered 3+ days without POD, on the road with no costs, documents still pending after delivery — each linking to `/board?trip=`), what Billing can invoice now, and receivables by age with the customers who owe most. Revenue and costs land in the month a trip loaded, the same rule as truck reports. Owner/admin/finance (`CAN_SEE_FINANCE_OVERVIEW`) see the money sections; cash collected comes from `GET /api/dashboard/collections`, which converts each payment at the rate on file the day it arrived. Operations and viewers see the operational figures only.
 
+## Company letterhead
+
+Every printout — invoices, truck reports, trip ledgers, cashbook statements and estimates — is headed by the signed-in company's own letterhead (`<Letterhead />` in `lib/components/Company.tsx`). Its details live on the organization (`legal_name`, `registration_no`, `tax_id`, `address`, `contact_phone`, `contact_email`, `bank_details`; migration `20261125100000_company_letterhead.sql`) and are edited by owners and admins in **Admin → Company**, which shows the top of an invoice as it will print while they type (`PATCH /api/admin/company`). Registration and tax lines are stored as they should print, label included, since the label differs by country (PACRA, BRELA, RCCM; TPIN, TIN, NIF). Empty fields are left off; the name falls back to the organization's. Bank details print under "Remit to" on invoices only, and when they're empty the invoice leaves that part out and the Billing screen says so.
+
+`app/(app)/layout.tsx` reads these once per page load and hands them down with `<CompanyProvider>`, so print sheets (portalled into `<body>`) get them through context; a save in Admin calls `router.refresh()` so the next printout has them.
+
+When printing, the whole screen page (`.app-body`, not just `.wrap`) is hidden. Its full-viewport `min-height` otherwise put a blank page ahead of every printout.
+
 ## Truck report
 
 `/reports` is one truck's report for a period, written so it can be read without an accounting background. `GET /api/reports/trucks/[id]` returns the period's figures plus what they're compared with; the page and its printout only arrange them.

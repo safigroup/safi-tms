@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { m2, lab, today } from "@/lib/format";
-import { COMPANY } from "@/lib/company";
+import { Letterhead } from "@/lib/components/Company";
 import { Spinner } from "@/lib/components/Spinner";
 import { PageBand } from "@/lib/components/PageBand";
 import { estimateTripCost, type CostTemplateLine, type CostEstimate } from "@/lib/estimates/estimateTripCost";
@@ -374,10 +374,7 @@ function EstimatePrintSheet({
   return createPortal(
     <div id="sheet">
       <div className="ih">
-        <div className="co">
-          <h1>{COMPANY.name}</h1>
-          <p>{COMPANY.reg}<br />{COMPANY.address}<br />{COMPANY.phone} · {COMPANY.email}</p>
-        </div>
+        <Letterhead />
         <div className="im">
           <div className="big">{t(lang, "cost_estimate")}</div>
           {route.name}<br />{t(lang, "printed")} {today(timeZone)}

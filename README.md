@@ -88,5 +88,5 @@ The original single-file, client-side app that this Next.js app replaced has bee
 ## Known gaps / roadmap
 
 - **No automated tests** — FX conversion, invoice-splitting, margin, and breakeven-projection logic have zero test coverage.
-- **Company letterhead is still placeholder data** (`next-app/lib/company.ts`) — address, phone, email, and bank details printed on every invoice/report need replacing with real ones before those documents go out to customers.
+- **Safi's letterhead needs checking** — each company now keeps its own (Admin → Company). Safi's was carried over from the old `lib/company.ts` as it printed, including its address, phone and email, which were never confirmed as real; its bank details were placeholders and weren't carried over, so Safi's invoices print without "Remit to" until they're entered.
 - **No cross-org audit trail** — creating an organization or switching a platform admin's active org isn't logged anywhere beyond Supabase's own request logs, unlike the field-level audit log that already covers trip/ledger overrides.
